@@ -33,18 +33,17 @@ export default function Login() {
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/auth/login", data);
+      await apiRequest("/api/auth/login", {
+        method: "POST",
+        data
+      });
       
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Successfully logged in",
-          variant: "default",
-        });
-        setLocation("/master-data");
-      } else {
-        throw new Error("Login failed");
-      }
+      toast({
+        title: "Success",
+        description: "Successfully logged in",
+        variant: "default",
+      });
+      setLocation("/dashboard");
     } catch (error) {
       toast({
         title: "Error",

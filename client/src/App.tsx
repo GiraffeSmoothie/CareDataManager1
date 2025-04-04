@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import MasterData from "@/pages/master-data";
 import PersonInfo from "@/pages/person-info";
+import Dashboard from "@/pages/dashboard";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -51,7 +52,10 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/">
-        <Redirect to="/master-data" />
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route path="/dashboard">
+        <PrivateRoute component={Dashboard} />
       </Route>
       <Route path="/master-data">
         <PrivateRoute component={MasterData} />
