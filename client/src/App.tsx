@@ -8,6 +8,7 @@ import MasterData from "@/pages/master-data";
 import PersonInfo from "@/pages/person-info";
 import Dashboard from "@/pages/dashboard";
 import MemberAssignment from "@/pages/member-assignment";
+import CaseNotes from "@/pages/case-notes";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -66,6 +67,9 @@ function Router() {
       </Route>
       <Route path="/member-assignment">
         <PrivateRoute component={MemberAssignment} />
+      </Route>
+      <Route path="/case-notes">
+        <PrivateRoute component={CaseNotes} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage } from "./storage";
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertCaseNoteSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -306,6 +306,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Send the file
     res.sendFile(filePath);
+  });
+
+  // Case Notes routes
+  app.post("/api/case-notes", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertCaseNoteSchema.parse(req.body);
+      
+      // Check if member exists
+      const memberId = validatedData.memberId;
+      const member = await dbStorage.getPersonInfoById(memberId);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      // Add the current user as the creator
+      const caseNoteWithUser = {
+        ...validatedData,
+        createdBy: req.session.user!.id,
+      };
+      
+      const createdNote = await dbStorage.createCaseNote(caseNoteWithUser);
+      return res.status(201).json(createdNote);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating case note:", error);
+      return res.status(500).json({ message: "Failed to create case note" });
+    }
+  });
+
+  app.get("/api/case-notes/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const memberId = parseInt(req.params.memberId);
+      if (isNaN(memberId)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      // Check if member exists
+      const member = await dbStorage.getPersonInfoById(memberId);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      const caseNotes = await dbStorage.getCaseNotesByMemberId(memberId);
+      return res.status(200).json(caseNotes);
+    } catch (error) {
+      console.error("Error fetching case notes for member:", error);
+      return res.status(500).json({ message: "Failed to fetch case notes for member" });
+    }
   });
 
   const httpServer = createServer(app);

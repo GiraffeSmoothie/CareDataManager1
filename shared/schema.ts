@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, jsonb, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, jsonb, date, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -31,6 +31,14 @@ export const masterData = pgTable("master_data", {
   createdBy: integer("created_by").references(() => users.id),
 });
 
+export const caseNotes = pgTable("case_notes", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => personInfo.id).notNull(),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: integer("created_by").references(() => users.id),
+});
+
 // User schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -49,6 +57,13 @@ export const insertPersonInfoSchema = createInsertSchema(personInfo).omit({
   createdBy: true,
 });
 
+// Case notes schema
+export const insertCaseNoteSchema = createInsertSchema(caseNotes).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -57,6 +72,9 @@ export type MasterData = typeof masterData.$inferSelect;
 
 export type InsertPersonInfo = z.infer<typeof insertPersonInfoSchema>;
 export type PersonInfo = typeof personInfo.$inferSelect;
+
+export type InsertCaseNote = z.infer<typeof insertCaseNoteSchema>;
+export type CaseNote = typeof caseNotes.$inferSelect;
 
 // Login session type
 export interface Session {
