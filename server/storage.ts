@@ -7,6 +7,7 @@ export interface IStorage {
   createMasterData(data: InsertMasterData & { createdBy: number }): Promise<MasterData>;
   getAllMasterData(): Promise<MasterData[]>;
   getMasterDataById(id: number): Promise<MasterData | undefined>;
+  getMasterDataByMemberId(memberId: number): Promise<MasterData[]>;
   createPersonInfo(data: InsertPersonInfo & { createdBy: number }): Promise<PersonInfo>;
   getAllPersonInfo(): Promise<PersonInfo[]>;
   getPersonInfoById(id: number): Promise<PersonInfo | undefined>;
@@ -52,7 +53,9 @@ export class MemStorage implements IStorage {
       ...data, 
       id,
       description: data.description || null,
-      active: data.active ?? true
+      notes: data.notes || null,
+      active: data.active ?? true,
+      memberId: data.memberId || null
     };
     this.masterData.set(id, newMasterData);
     return newMasterData;
@@ -64,6 +67,12 @@ export class MemStorage implements IStorage {
 
   async getMasterDataById(id: number): Promise<MasterData | undefined> {
     return this.masterData.get(id);
+  }
+
+  async getMasterDataByMemberId(memberId: number): Promise<MasterData[]> {
+    return Array.from(this.masterData.values()).filter(
+      (data) => data.memberId === memberId
+    );
   }
 
   async createPersonInfo(data: InsertPersonInfo & { createdBy: number }): Promise<PersonInfo> {

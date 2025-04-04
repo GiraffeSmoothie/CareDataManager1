@@ -49,9 +49,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (personData && masterData) {
       const combinedData = personData.map(person => {
-        // Find matching master data (in a real app you'd have a proper relationship)
-        // This is just a simple example assuming masterDataId would exist
-        const careDetails = masterData.length > 0 ? masterData[0] : undefined;
+        // Find matching master data for this person
+        const careDetails = masterData.find(md => md.memberId === person.id);
         
         return {
           ...person,

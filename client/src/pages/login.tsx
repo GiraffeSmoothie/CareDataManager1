@@ -33,10 +33,7 @@ export default function Login() {
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     try {
-      await apiRequest("/api/auth/login", {
-        method: "POST",
-        data
-      });
+      await apiRequest("POST", "/api/auth/login", data);
       
       toast({
         title: "Success",

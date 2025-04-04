@@ -56,8 +56,10 @@ export default function MasterData() {
 
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: (data: MasterDataFormValues) =>
-      apiRequest("POST", "/api/master-data", data),
+    mutationFn: async (data: MasterDataFormValues) => {
+      const response = await apiRequest("POST", "/api/master-data", data);
+      return await response.json();
+    },
     onSuccess: () => {
       toast({
         title: "Success",

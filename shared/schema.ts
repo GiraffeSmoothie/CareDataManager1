@@ -8,15 +8,6 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
-export const masterData = pgTable("master_data", {
-  id: serial("id").primaryKey(),
-  careCategory: text("care_category").notNull(),
-  careType: text("care_type").notNull(),
-  description: text("description"),
-  active: boolean("active").notNull().default(true),
-  createdBy: integer("created_by").references(() => users.id),
-});
-
 export const personInfo = pgTable("person_info", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -26,6 +17,17 @@ export const personInfo = pgTable("person_info", {
   email: text("email").notNull(),
   contactNumber: text("contact_number").notNull(),
   address: text("address").notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+});
+
+export const masterData = pgTable("master_data", {
+  id: serial("id").primaryKey(),
+  careCategory: text("care_category").notNull(),
+  careType: text("care_type").notNull(),
+  description: text("description"),
+  notes: text("notes").default(""),
+  active: boolean("active").notNull().default(true),
+  memberId: integer("member_id").references(() => personInfo.id),
   createdBy: integer("created_by").references(() => users.id),
 });
 

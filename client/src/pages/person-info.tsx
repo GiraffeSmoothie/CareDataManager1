@@ -75,11 +75,10 @@ export default function PersonInfo() {
   });
 
   const mutation = useMutation({
-    mutationFn: (data: PersonInfoFormValues) =>
-      apiRequest<{ id: number }>("/api/person-info", {
-        method: "POST",
-        data
-      }),
+    mutationFn: async (data: PersonInfoFormValues) => {
+      const response = await apiRequest("POST", "/api/person-info", data);
+      return await response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
       toast({

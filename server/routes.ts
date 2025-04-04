@@ -1,11 +1,14 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage as dbStorage } from "./storage";
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import crypto from "crypto";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 declare module "express-session" {
   interface SessionData {
@@ -18,10 +21,10 @@ declare module "express-session" {
 
 // Initialize users if none exist
 async function initializeUsers() {
-  const admin = await storage.getUserByUsername("admin");
+  const admin = await dbStorage.getUserByUsername("admin");
   if (!admin) {
     // Create default admin user
-    await storage.createUser({
+    await dbStorage.createUser({
       username: "admin",
       password: hashPassword("password"),
     });
@@ -60,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username and password are required" });
       }
       
-      const user = await storage.getUserByUsername(username);
+      const user = await dbStorage.getUserByUsername(username);
       
       if (!user || user.password !== hashPassword(password)) {
         return res.status(401).json({ message: "Invalid username or password" });
@@ -103,6 +106,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     next();
   };
+  
+  // Setup file upload
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  
+  // Create uploads directory if it doesn't exist
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  
+  // Configure multer for file uploads
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, uploadsDir);
+    },
+    filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname);
+      cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+    },
+  });
+  
+  const upload = multer({ 
+    storage: storage,
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: function (req, file, cb) {
+      const allowedTypes = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"];
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (allowedTypes.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Invalid file type. Only PDF, DOC, DOCX, JPG, JPEG, and PNG files are allowed."));
+      }
+    }
+  });
 
   // Master data routes
   app.post("/api/master-data", authMiddleware, async (req: Request, res: Response) => {
@@ -115,7 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.session.user!.id,
       };
       
-      const createdData = await storage.createMasterData(masterDataWithUser);
+      const createdData = await dbStorage.createMasterData(masterDataWithUser);
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -129,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/master-data", authMiddleware, async (req: Request, res: Response) => {
     try {
-      const masterData = await storage.getAllMasterData();
+      const masterData = await dbStorage.getAllMasterData();
       return res.status(200).json(masterData);
     } catch (error) {
       console.error("Error fetching master data:", error);
@@ -148,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.session.user!.id,
       };
       
-      const createdData = await storage.createPersonInfo(personInfoWithUser);
+      const createdData = await dbStorage.createPersonInfo(personInfoWithUser);
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -162,7 +201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/person-info", authMiddleware, async (req: Request, res: Response) => {
     try {
-      const personInfo = await storage.getAllPersonInfo();
+      const personInfo = await dbStorage.getAllPersonInfo();
       return res.status(200).json(personInfo);
     } catch (error) {
       console.error("Error fetching person info:", error);
@@ -177,7 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid ID format" });
       }
       
-      const personInfo = await storage.getPersonInfoById(id);
+      const personInfo = await dbStorage.getPersonInfoById(id);
       if (!personInfo) {
         return res.status(404).json({ message: "Person info not found" });
       }
@@ -187,6 +226,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching person info:", error);
       return res.status(500).json({ message: "Failed to fetch person info" });
     }
+  });
+  
+  // Member Assignment route with file upload
+  app.post("/api/member-assignment", authMiddleware, upload.single("document"), async (req: Request, res: Response) => {
+    try {
+      const { memberId, careCategory, careType, notes } = req.body;
+      
+      // Validation
+      if (!memberId || !careCategory || !careType) {
+        return res.status(400).json({ message: "Member ID, care category, and care type are required" });
+      }
+      
+      // Check if member exists
+      const memberIdNum = parseInt(memberId);
+      if (isNaN(memberIdNum)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      const member = await dbStorage.getPersonInfoById(memberIdNum);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      // Create master data entry for this member
+      const masterDataEntry = {
+        careCategory,
+        careType,
+        active: true,
+        notes: notes || "",
+        memberId: memberIdNum,
+        createdBy: req.session.user!.id,
+      };
+      
+      // Add document info if uploaded
+      let documentPath = "";
+      if (req.file) {
+        documentPath = req.file.path;
+        masterDataEntry.notes += `\nDocument: ${req.file.originalname}`;
+      }
+      
+      const createdData = await dbStorage.createMasterData(masterDataEntry);
+      
+      return res.status(201).json({
+        ...createdData,
+        documentUploaded: !!req.file,
+      });
+    } catch (error) {
+      console.error("Error creating member assignment:", error);
+      return res.status(500).json({ message: "Failed to create member assignment" });
+    }
+  });
+  
+  // Endpoint to get master data by member ID
+  app.get("/api/master-data/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const memberId = parseInt(req.params.memberId);
+      if (isNaN(memberId)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      const masterData = await dbStorage.getMasterDataByMemberId(memberId);
+      return res.status(200).json(masterData);
+    } catch (error) {
+      console.error("Error fetching master data for member:", error);
+      return res.status(500).json({ message: "Failed to fetch master data for member" });
+    }
+  });
+
+  // Endpoint to serve uploaded files
+  app.get("/api/documents/:filename", authMiddleware, (req: Request, res: Response) => {
+    const { filename } = req.params;
+    const filePath = path.join(uploadsDir, filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    
+    // Send the file
+    res.sendFile(filePath);
   });
 
   const httpServer = createServer(app);
