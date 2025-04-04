@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertMasterDataSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -134,6 +134,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching master data:", error);
       return res.status(500).json({ message: "Failed to fetch master data" });
+    }
+  });
+
+  // Person Info routes
+  app.post("/api/person-info", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertPersonInfoSchema.parse(req.body);
+      
+      // Add the current user as the creator
+      const personInfoWithUser = {
+        ...validatedData,
+        createdBy: req.session.user!.id,
+      };
+      
+      const createdData = await storage.createPersonInfo(personInfoWithUser);
+      return res.status(201).json(createdData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating person info:", error);
+      return res.status(500).json({ message: "Failed to create person info" });
+    }
+  });
+
+  app.get("/api/person-info", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const personInfo = await storage.getAllPersonInfo();
+      return res.status(200).json(personInfo);
+    } catch (error) {
+      console.error("Error fetching person info:", error);
+      return res.status(500).json({ message: "Failed to fetch person info" });
+    }
+  });
+
+  app.get("/api/person-info/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+      
+      const personInfo = await storage.getPersonInfoById(id);
+      if (!personInfo) {
+        return res.status(404).json({ message: "Person info not found" });
+      }
+      
+      return res.status(200).json(personInfo);
+    } catch (error) {
+      console.error("Error fetching person info:", error);
+      return res.status(500).json({ message: "Failed to fetch person info" });
     }
   });
 

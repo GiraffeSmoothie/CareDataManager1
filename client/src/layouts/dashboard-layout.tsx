@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
-import { useLocation } from "wouter";
-import { Heart } from "lucide-react";
+import { useLocation, Link } from "wouter";
+import { Heart, Database, Users } from "lucide-react";
 import UserNav from "@/components/user-nav";
+import { cn } from "../lib/utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -23,6 +24,36 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <UserNav />
         </div>
       </header>
+
+      {/* Navigation */}
+      <nav className="bg-white border-b">
+        <div className="container mx-auto px-4 md:px-6 lg:px-8">
+          <div className="flex space-x-4 overflow-x-auto">
+            <Link href="/master-data">
+              <a className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors hover:text-primary",
+                location === "/master-data" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <Database className="h-4 w-4" />
+                <span>Master Data</span>
+              </a>
+            </Link>
+            <Link href="/person-info">
+              <a className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors hover:text-primary",
+                location === "/person-info" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <Users className="h-4 w-4" />
+                <span>Personal Information</span>
+              </a>
+            </Link>
+          </div>
+        </div>
+      </nav>
       
       {/* Main Content */}
       <main className="flex-1 bg-gray-50">

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import MasterData from "@/pages/master-data";
+import PersonInfo from "@/pages/person-info";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -54,6 +55,9 @@ function Router() {
       </Route>
       <Route path="/master-data">
         <PrivateRoute component={MasterData} />
+      </Route>
+      <Route path="/person-info">
+        <PrivateRoute component={PersonInfo} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />
