@@ -107,12 +107,7 @@ export default function CaseNotes() {
         description: "The case note has been added successfully.",
       });
       // Reset form and refresh case notes
-      if (selectedMemberId) {
-        form.reset({ 
-          memberId: selectedMemberId as unknown as undefined, 
-          note: "" 
-        });
-      }
+      form.setValue("note", "");
       queryClient.invalidateQueries({ queryKey: ["/api/case-notes/member", selectedMemberId] });
       refetchCaseNotes();
     },
@@ -144,7 +139,7 @@ export default function CaseNotes() {
             <CardContent>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <FormLabel>Member</FormLabel>
+                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Member</label>
                   <Select
                     value={selectedMemberId?.toString() || ""}
                     onValueChange={(value) => setSelectedMemberId(parseInt(value))}
