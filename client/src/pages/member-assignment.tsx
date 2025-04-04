@@ -62,9 +62,7 @@ export default function MemberAssignment() {
     if (watchedCategory) {
       setSelectedCategory(watchedCategory);
       const types = getCareTypesByCategory(watchedCategory);
-      // Extract the values for the care types
-      const careTypeValues = types.map(type => type.value);
-      setCareTypes(careTypeValues);
+      setCareTypes(types.map(type => type.value));
       
       // Reset care type when category changes
       form.setValue("careType", "");
