@@ -1,38 +1,44 @@
 // Care Categories
 export const careCategories = [
-  { value: "medical", label: "Medical Care" },
-  { value: "mental", label: "Mental Health" },
-  { value: "physical", label: "Physical Therapy" },
-  { value: "preventive", label: "Preventive Care" },
-  { value: "home", label: "Home Health" },
+  { value: "cleaning", label: "Cleaning Services" },
+  { value: "gardening", label: "Gardening Services" },
+  { value: "meals", label: "Meal Preparation" },
+  { value: "exercise", label: "Exercise and Rehabilitation Support" },
+  { value: "maintenance", label: "Home Maintenance" },
+  { value: "transport", label: "Transport Services" },
 ];
 
 // Care Types by Category
 const careCategoryTypes = {
-  medical: [
-    { value: "primary", label: "Primary Care" },
-    { value: "specialty", label: "Specialty Care" },
-    { value: "emergency", label: "Emergency Care" },
+  cleaning: [
+    { value: "regular", label: "Regular Cleaning" },
+    { value: "deep", label: "Deep Cleaning" },
+    { value: "specialized", label: "Specialized Cleaning" },
   ],
-  mental: [
-    { value: "counseling", label: "Counseling" },
-    { value: "psychiatry", label: "Psychiatry" },
-    { value: "therapy", label: "Therapy" },
+  gardening: [
+    { value: "lawn", label: "Lawn Care" },
+    { value: "planting", label: "Planting & Cultivation" },
+    { value: "maintenance", label: "Garden Maintenance" },
   ],
-  physical: [
-    { value: "rehabilitation", label: "Rehabilitation" },
-    { value: "sports", label: "Sports Therapy" },
-    { value: "occupational", label: "Occupational Therapy" },
+  meals: [
+    { value: "daily", label: "Daily Meal Preparation" },
+    { value: "special", label: "Special Diet Meals" },
+    { value: "bulk", label: "Bulk Meal Preparation" },
   ],
-  preventive: [
-    { value: "screenings", label: "Health Screenings" },
-    { value: "immunizations", label: "Immunizations" },
-    { value: "wellness", label: "Wellness Programs" },
+  exercise: [
+    { value: "physical", label: "Physical Therapy" },
+    { value: "fitness", label: "Fitness Programs" },
+    { value: "mobility", label: "Mobility Assistance" },
   ],
-  home: [
-    { value: "nursing", label: "Home Nursing" },
-    { value: "assistance", label: "Personal Assistance" },
-    { value: "hospice", label: "Hospice Care" },
+  maintenance: [
+    { value: "repairs", label: "General Repairs" },
+    { value: "plumbing", label: "Plumbing Services" },
+    { value: "electrical", label: "Electrical Services" },
+  ],
+  transport: [
+    { value: "medical", label: "Medical Appointments" },
+    { value: "shopping", label: "Shopping Trips" },
+    { value: "social", label: "Social Activities" },
   ],
 };
 
