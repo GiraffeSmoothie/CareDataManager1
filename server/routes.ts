@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage } from "./storage";
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertCaseNoteSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertCaseNoteSchema, insertDocumentSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -356,6 +356,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching case notes for member:", error);
       return res.status(500).json({ message: "Failed to fetch case notes for member" });
+    }
+  });
+
+  // Document management routes
+  app.post("/api/documents", authMiddleware, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const { memberId, documentName, documentType } = req.body;
+      
+      // Validation
+      if (!memberId || !documentName || !documentType) {
+        return res.status(400).json({ message: "Member ID, document name, and document type are required" });
+      }
+      
+      // Check if member exists
+      const memberIdNum = parseInt(memberId);
+      if (isNaN(memberIdNum)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      const member = await dbStorage.getPersonInfoById(memberIdNum);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      // Create document entry
+      const documentData = {
+        memberId: memberIdNum,
+        documentName,
+        documentType,
+        createdBy: req.session.user!.id,
+        filename: req.file.filename
+      };
+      
+      const createdDocument = await dbStorage.createDocument(documentData);
+      
+      return res.status(201).json(createdDocument);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error uploading document:", error);
+      return res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  app.get("/api/documents/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const memberId = parseInt(req.params.memberId);
+      if (isNaN(memberId)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      // Check if member exists
+      const member = await dbStorage.getPersonInfoById(memberId);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      const documents = await dbStorage.getDocumentsByMemberId(memberId);
+      return res.status(200).json(documents);
+    } catch (error) {
+      console.error("Error fetching documents for member:", error);
+      return res.status(500).json({ message: "Failed to fetch documents for member" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { users, type User, type InsertUser, masterData, type MasterData, type InsertMasterData, personInfo, type PersonInfo, type InsertPersonInfo, caseNotes, type CaseNote, type InsertCaseNote } from "@shared/schema";
+import { users, type User, type InsertUser, masterData, type MasterData, type InsertMasterData, personInfo, type PersonInfo, type InsertPersonInfo, caseNotes, type CaseNote, type InsertCaseNote, documents, type Document, type InsertDocument } from "@shared/schema";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -13,6 +13,9 @@ export interface IStorage {
   getPersonInfoById(id: number): Promise<PersonInfo | undefined>;
   createCaseNote(data: InsertCaseNote & { createdBy: number }): Promise<CaseNote>;
   getCaseNotesByMemberId(memberId: number): Promise<CaseNote[]>;
+  createDocument(data: InsertDocument & { createdBy: number, filename: string }): Promise<Document>;
+  getDocumentsByMemberId(memberId: number): Promise<Document[]>;
+  getDocumentById(id: number): Promise<Document | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -20,20 +23,24 @@ export class MemStorage implements IStorage {
   private masterData: Map<number, MasterData>;
   private personInfo: Map<number, PersonInfo>;
   private caseNotes: Map<number, CaseNote>;
+  private documents: Map<number, Document>;
   userCurrentId: number;
   masterDataCurrentId: number;
   personInfoCurrentId: number;
   caseNoteCurrentId: number;
+  documentCurrentId: number;
 
   constructor() {
     this.users = new Map();
     this.masterData = new Map();
     this.personInfo = new Map();
     this.caseNotes = new Map();
+    this.documents = new Map();
     this.userCurrentId = 1;
     this.masterDataCurrentId = 1;
     this.personInfoCurrentId = 1;
     this.caseNoteCurrentId = 1;
+    this.documentCurrentId = 1;
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -118,6 +125,33 @@ export class MemStorage implements IStorage {
         }
         return 0;
       });
+  }
+
+  async createDocument(data: InsertDocument & { createdBy: number, filename: string }): Promise<Document> {
+    const id = this.documentCurrentId++;
+    const newDocument: Document = {
+      ...data,
+      id,
+      uploadedAt: new Date()
+    };
+    this.documents.set(id, newDocument);
+    return newDocument;
+  }
+
+  async getDocumentsByMemberId(memberId: number): Promise<Document[]> {
+    return Array.from(this.documents.values())
+      .filter(doc => doc.memberId === memberId)
+      .sort((a, b) => {
+        // Sort by newest first
+        if (a.uploadedAt && b.uploadedAt) {
+          return b.uploadedAt.getTime() - a.uploadedAt.getTime();
+        }
+        return 0;
+      });
+  }
+
+  async getDocumentById(id: number): Promise<Document | undefined> {
+    return this.documents.get(id);
   }
 }
 

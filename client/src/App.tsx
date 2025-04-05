@@ -9,6 +9,7 @@ import PersonInfo from "@/pages/person-info";
 import Dashboard from "@/pages/dashboard";
 import MemberAssignment from "@/pages/member-assignment";
 import CaseNotes from "@/pages/case-notes";
+import DocumentUpload from "@/pages/document-upload";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -70,6 +71,9 @@ function Router() {
       </Route>
       <Route path="/case-notes">
         <PrivateRoute component={CaseNotes} />
+      </Route>
+      <Route path="/document-upload">
+        <PrivateRoute component={DocumentUpload} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

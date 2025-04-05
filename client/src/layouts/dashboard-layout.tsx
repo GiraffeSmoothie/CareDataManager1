@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useLocation, Link } from "wouter";
-import { Heart, Database, Users, LayoutDashboard, Link2, BookOpen } from "lucide-react";
+import { Heart, Database, Users, LayoutDashboard, Link2, BookOpen, FileText } from "lucide-react";
 import UserNav from "@/components/user-nav";
 import { cn } from "../lib/utils";
 
@@ -82,6 +82,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               )}>
                 <BookOpen className="h-4 w-4" />
                 <span>Case Notes</span>
+              </div>
+            </Link>
+            <Link href="/document-upload">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/document-upload" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <FileText className="h-4 w-4" />
+                <span>Documents</span>
               </div>
             </Link>
           </div>
