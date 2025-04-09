@@ -182,7 +182,7 @@ export default function Dashboard() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No member data available yet. Add members through the Person Info page.
+                      No member data available yet. Add members through the Add Client page.
                     </TableCell>
                   </TableRow>
                 )}

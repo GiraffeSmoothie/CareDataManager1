@@ -143,7 +143,7 @@ export default function PersonInfo() {
       queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
       toast({
         title: "Success",
-        description: "Personal information saved successfully",
+        description: "New client added successfully",
       });
       form.reset();
       setFilePreview(null);
@@ -152,7 +152,7 @@ export default function PersonInfo() {
       setUploading(false);
       toast({
         title: "Error",
-        description: error.message || "Failed to save personal information",
+        description: error.message || "Failed to add new client",
         variant: "destructive",
       });
     },
@@ -167,14 +167,14 @@ export default function PersonInfo() {
       queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
       toast({
         title: "Success",
-        description: "Personal information saved successfully",
+        description: "New client added successfully",
       });
       form.reset();
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to save personal information",
+        description: error.message || "Failed to add new client",
         variant: "destructive",
       });
     },
@@ -225,9 +225,9 @@ export default function PersonInfo() {
       <div className="container py-10">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle>Personal Information</CardTitle>
+            <CardTitle>Add New Client</CardTitle>
             <CardDescription>
-              Enter the personal details of the individual.
+              Enter the personal details of the new client.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -478,7 +478,7 @@ export default function PersonInfo() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       <span>Processing...</span>
                     </div>
-                  ) : "Save Information"}
+                  ) : "Add Client"}
                 </Button>
               </form>
             </Form>
