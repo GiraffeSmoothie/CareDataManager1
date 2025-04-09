@@ -48,7 +48,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Database className="h-4 w-4" />
-                <span>Master Data</span>
+                <span>HCP Master Data</span>
               </div>
             </Link>
             <Link href="/person-info">

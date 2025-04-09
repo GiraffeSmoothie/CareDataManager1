@@ -103,8 +103,8 @@ export default function MasterData() {
   return (
     <DashboardLayout>
       <div className="mb-8 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Master Data Entry</h1>
-        <p className="text-sm text-muted-foreground">Manage care categories and types in the system</p>
+        <h1 className="text-2xl font-semibold tracking-tight">HCP Master Data Entry</h1>
+        <p className="text-sm text-muted-foreground">Manage home care package categories and types in the system</p>
       </div>
       
       <Card className="bg-white shadow-sm border max-w-2xl">
