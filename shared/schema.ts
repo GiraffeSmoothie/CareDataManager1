@@ -12,6 +12,7 @@ export const personInfo = pgTable("person_info", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   firstName: text("first_name").notNull(),
+  middleName: text("middle_name").default(""),
   lastName: text("last_name").notNull(),
   dateOfBirth: text("date_of_birth").notNull(),
   email: text("email").notNull(),
