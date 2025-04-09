@@ -24,6 +24,7 @@ import { careCategories, getCareTypesByCategory } from "@/lib/data";
 const masterDataSchema = z.object({
   careCategory: z.string({ required_error: "Please select a care category" }),
   careType: z.string({ required_error: "Please select a care type" }),
+  serviceProvider: z.string().optional(),
   description: z.string().optional(),
   active: z.boolean().default(true),
 });
@@ -40,6 +41,7 @@ export default function MasterData() {
     defaultValues: {
       careCategory: "",
       careType: "",
+      serviceProvider: "",
       description: "",
       active: true,
     },
@@ -70,6 +72,7 @@ export default function MasterData() {
       form.reset({
         careCategory: "",
         careType: "",
+        serviceProvider: "",
         description: "",
         active: true,
       });
@@ -94,6 +97,7 @@ export default function MasterData() {
     form.reset({
       careCategory: "",
       careType: "",
+      serviceProvider: "",
       description: "",
       active: true,
     });
@@ -107,108 +111,146 @@ export default function MasterData() {
         <p className="text-sm text-muted-foreground">Manage home care package categories and types in the system</p>
       </div>
       
-      <Card className="bg-white shadow-sm border max-w-2xl">
+      <Card className="bg-white shadow-sm border w-full">
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="careCategory"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Care Category <span className="text-destructive">*</span></FormLabel>
-                    <Select
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        handleCategoryChange(value);
-                      }}
-                      value={field.value}
-                      disabled={saveMutation.isPending}
-                    >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Column 1: Care Category */}
+                <div className="space-y-6">
+                  <h3 className="text-lg font-medium border-b pb-2">Care Category</h3>
+                  <FormField
+                    control={form.control}
+                    name="careCategory"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Care Category <span className="text-destructive">*</span></FormLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleCategoryChange(value);
+                          }}
+                          value={field.value}
+                          disabled={saveMutation.isPending}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {careCategories.map((category) => (
+                              <SelectItem key={category.value} value={category.value}>
+                                {category.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Column 2: Care Type */}
+                <div className="space-y-6">
+                  <h3 className="text-lg font-medium border-b pb-2">Care Type</h3>
+                  <FormField
+                    control={form.control}
+                    name="careType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Care Type <span className="text-destructive">*</span></FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={!selectedCategory || saveMutation.isPending}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={selectedCategory ? "Select a care type" : "Select a category first"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {careTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Column 3: Service Provider */}
+                <div className="space-y-6">
+                  <h3 className="text-lg font-medium border-b pb-2">Carer/Service Provider</h3>
+                  <FormField
+                    control={form.control}
+                    name="serviceProvider"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Carer/Service Provider</FormLabel>
+                        <FormControl>
+                          <input
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="Enter service provider name"
+                            {...field}
+                            disabled={saveMutation.isPending}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* Description and Active status below the grid */}
+              <div className="pt-4 border-t mt-6">
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
+                        <Textarea 
+                          placeholder="Enter a description" 
+                          className="min-h-[80px]" 
+                          {...field}
+                          disabled={saveMutation.isPending}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {careCategories.map((category) => (
-                          <SelectItem key={category.value} value={category.value}>
-                            {category.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="careType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Care Type <span className="text-destructive">*</span></FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={!selectedCategory || saveMutation.isPending}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={selectedCategory ? "Select a care type" : "Select a category first"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {careTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Enter a description" 
-                        className="min-h-[80px]" 
-                        {...field}
-                        disabled={saveMutation.isPending}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="active"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        disabled={saveMutation.isPending}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Active</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
-              />
+                <div className="mt-4">
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={saveMutation.isPending}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Active</FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
 
               <div className="flex gap-2 pt-4">
                 <Button type="submit" disabled={saveMutation.isPending}>

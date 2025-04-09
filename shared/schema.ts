@@ -44,6 +44,7 @@ export const masterData = pgTable("master_data", {
   id: serial("id").primaryKey(),
   careCategory: text("care_category").notNull(),
   careType: text("care_type").notNull(),
+  serviceProvider: text("service_provider").default(""),
   description: text("description"),
   notes: text("notes").default(""),
   active: boolean("active").notNull().default(true),

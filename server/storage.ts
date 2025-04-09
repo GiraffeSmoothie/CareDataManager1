@@ -66,6 +66,7 @@ export class MemStorage implements IStorage {
       ...data, 
       id,
       description: data.description || null,
+      serviceProvider: data.serviceProvider || "",
       notes: data.notes || null,
       active: data.active ?? true,
       memberId: data.memberId || null
@@ -90,7 +91,27 @@ export class MemStorage implements IStorage {
 
   async createPersonInfo(data: InsertPersonInfo & { createdBy: number }): Promise<PersonInfo> {
     const id = this.personInfoCurrentId++;
-    const newPersonInfo: PersonInfo = { ...data, id };
+    const newPersonInfo: PersonInfo = { 
+      ...data, 
+      id,
+      middleName: data.middleName || null,
+      homePhone: data.homePhone || null,
+      addressLine2: data.addressLine2 || null,
+      addressLine3: data.addressLine3 || null,
+      useMailingAddress: data.useMailingAddress ?? false,
+      mailingAddressLine1: data.mailingAddressLine1 || null,
+      mailingAddressLine2: data.mailingAddressLine2 || null,
+      mailingAddressLine3: data.mailingAddressLine3 || null,
+      mailingPostCode: data.mailingPostCode || null,
+      nokName: data.nokName || null,
+      nokRelationship: data.nokRelationship || null,
+      nokPhone: data.nokPhone || null,
+      nokEmail: data.nokEmail || null,
+      nokAddress: data.nokAddress || null,
+      hcpLevel: data.hcpLevel || null,
+      hcpStartDate: data.hcpStartDate || null,
+      hcpEndDate: data.hcpEndDate || null
+    };
     this.personInfo.set(id, newPersonInfo);
     return newPersonInfo;
   }
