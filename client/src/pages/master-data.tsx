@@ -32,7 +32,6 @@ const masterDataSchema = z.object({
   careCategory: z.string({ required_error: "Please select a care category" }),
   careType: z.string({ required_error: "Please select a care type" }),
   serviceProvider: z.string().optional(),
-  description: z.string().optional(),
   active: z.boolean().default(true),
 });
 
@@ -56,7 +55,6 @@ export default function MasterData() {
       careCategory: "",
       careType: "",
       serviceProvider: "",
-      description: "",
       active: true,
     },
   });
@@ -87,7 +85,6 @@ export default function MasterData() {
         careCategory: "",
         careType: "",
         serviceProvider: "",
-        description: "",
         active: true,
       });
       setSelectedCategory(null);
@@ -112,7 +109,6 @@ export default function MasterData() {
       careCategory: "",
       careType: "",
       serviceProvider: "",
-      description: "",
       active: true,
     });
     setSelectedCategory(null);
@@ -230,34 +226,8 @@ export default function MasterData() {
           </div>
         </div>
 
-        {/* Description */}
+        {/* Active Status */}
         <div className="pt-4 border-t mt-6">
-          <div className="flex items-start gap-4 mt-4">
-            <div className="w-1/4 pt-2">
-              <h3 className="text-base font-medium">Description:</h3>
-            </div>
-            <div className="flex-1">
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem className="w-full">
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Enter a description" 
-                        className="min-h-[80px]" 
-                        {...field}
-                        disabled={saveMutation.isPending}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </div>
-
-          {/* Active Status */}
           <div className="flex items-center gap-4 mt-4">
             <div className="w-1/4">
               <h3 className="text-base font-medium">Status:</h3>
@@ -312,7 +282,6 @@ export default function MasterData() {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Category</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Type</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Provider</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
@@ -322,7 +291,6 @@ export default function MasterData() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.careCategory}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.careType}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{item.description || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {item.active ? 'Active' : 'Inactive'}
