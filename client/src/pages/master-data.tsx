@@ -115,137 +115,161 @@ export default function MasterData() {
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-6 max-w-md">
+              <div className="space-y-4 w-full">
                 {/* Care Category */}
-                <div>
-                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Category</h3>
-                  <FormField
-                    control={form.control}
-                    name="careCategory"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleCategoryChange(value);
-                          }}
-                          value={field.value}
-                          disabled={saveMutation.isPending}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {careCategories.map((category) => (
-                              <SelectItem key={category.value} value={category.value}>
-                                {category.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="flex items-center gap-4">
+                  <div className="w-1/4">
+                    <h3 className="text-base font-medium">Care Category:</h3>
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="careCategory"
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <Select
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              handleCategoryChange(value);
+                            }}
+                            value={field.value}
+                            disabled={saveMutation.isPending}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {careCategories.map((category) => (
+                                <SelectItem key={category.value} value={category.value}>
+                                  {category.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
 
                 {/* Care Type */}
-                <div>
-                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Type</h3>
-                  <FormField
-                    control={form.control}
-                    name="careType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={!selectedCategory || saveMutation.isPending}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={selectedCategory ? "Select a care type" : "Select a category first"} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {careTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="flex items-center gap-4">
+                  <div className="w-1/4">
+                    <h3 className="text-base font-medium">Care Type:</h3>
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="careType"
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!selectedCategory || saveMutation.isPending}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={selectedCategory ? "Select a care type" : "Select a category first"} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {careTypes.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
 
                 {/* Care Provider */}
-                <div>
-                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Provider</h3>
-                  <FormField
-                    control={form.control}
-                    name="serviceProvider"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <input
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Enter care provider name"
-                            {...field}
-                            disabled={saveMutation.isPending}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="flex items-center gap-4">
+                  <div className="w-1/4">
+                    <h3 className="text-base font-medium">Care Provider:</h3>
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="serviceProvider"
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <FormControl>
+                            <input
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              placeholder="Enter care provider name"
+                              {...field}
+                              disabled={saveMutation.isPending}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Description and Active status below the grid */}
+              {/* Description */}
               <div className="pt-4 border-t mt-6">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Enter a description" 
-                          className="min-h-[80px]" 
-                          {...field}
-                          disabled={saveMutation.isPending}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="flex items-start gap-4 mt-4">
+                  <div className="w-1/4 pt-2">
+                    <h3 className="text-base font-medium">Description:</h3>
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem className="w-full">
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Enter a description" 
+                              className="min-h-[80px]" 
+                              {...field}
+                              disabled={saveMutation.isPending}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
 
-                <div className="mt-4">
-                  <FormField
-                    control={form.control}
-                    name="active"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={saveMutation.isPending}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Active</FormLabel>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                {/* Active Status */}
+                <div className="flex items-center gap-4 mt-4">
+                  <div className="w-1/4">
+                    <h3 className="text-base font-medium">Status:</h3>
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="active"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={saveMutation.isPending}
+                            />
+                          </FormControl>
+                          <div className="space-y-0 leading-none">
+                            <span>Active</span>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
 
