@@ -16,8 +16,27 @@ export const personInfo = pgTable("person_info", {
   lastName: text("last_name").notNull(),
   dateOfBirth: text("date_of_birth").notNull(),
   email: text("email").notNull(),
-  contactNumber: text("contact_number").notNull(),
-  address: text("address").notNull(),
+  homePhone: text("home_phone").default(""),
+  mobilePhone: text("mobile_phone").notNull(),
+  // Home Address
+  addressLine1: text("address_line1").notNull(),
+  addressLine2: text("address_line2").default(""),
+  addressLine3: text("address_line3").default(""),
+  postCode: text("post_code").notNull(),
+  // Mailing Address
+  mailingAddressLine1: text("mailing_address_line1").default(""),
+  mailingAddressLine2: text("mailing_address_line2").default(""),
+  mailingAddressLine3: text("mailing_address_line3").default(""),
+  mailingPostCode: text("mailing_post_code").default(""),
+  useHomeAddress: boolean("use_home_address").default(true),
+  // Next of Kin Information
+  nextOfKinName: text("next_of_kin_name").default(""),
+  nextOfKinAddress: text("next_of_kin_address").default(""),
+  nextOfKinEmail: text("next_of_kin_email").default(""),
+  nextOfKinPhone: text("next_of_kin_phone").default(""),
+  // HCP Information
+  hcpLevel: text("hcp_level").default(""),
+  hcpEndDate: text("hcp_end_date").default(""),
   createdBy: integer("created_by").references(() => users.id),
 });
 

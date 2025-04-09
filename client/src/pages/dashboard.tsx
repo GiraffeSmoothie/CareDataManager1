@@ -164,7 +164,7 @@ export default function Dashboard() {
                       <TableCell>
                         <div className="flex flex-col">
                           <span>{member.email}</span>
-                          <span className="text-muted-foreground">{member.contactNumber}</span>
+                          <span className="text-muted-foreground">{member.mobilePhone}</span>
                         </div>
                       </TableCell>
                       <TableCell>{new Date(member.dateOfBirth).toLocaleDateString()}</TableCell>
