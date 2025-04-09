@@ -115,16 +115,22 @@ export default function MasterData() {
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Column 1: Care Category */}
-                <div className="space-y-6">
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Column headers */}
                   <h3 className="text-lg font-medium border-b pb-2">Care Category</h3>
+                  <h3 className="text-lg font-medium border-b pb-2">Care Type</h3>
+                  <h3 className="text-lg font-medium border-b pb-2">Carer/Service Provider</h3>
+                </div>
+
+                {/* Row 1 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Column 1: Care Category */}
                   <FormField
                     control={form.control}
                     name="careCategory"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Care Category <span className="text-destructive">*</span></FormLabel>
                         <Select
                           onValueChange={(value) => {
                             field.onChange(value);
@@ -150,17 +156,13 @@ export default function MasterData() {
                       </FormItem>
                     )}
                   />
-                </div>
 
-                {/* Column 2: Care Type */}
-                <div className="space-y-6">
-                  <h3 className="text-lg font-medium border-b pb-2">Care Type</h3>
+                  {/* Column 2: Care Type */}
                   <FormField
                     control={form.control}
                     name="careType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Care Type <span className="text-destructive">*</span></FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           value={field.value}
@@ -183,17 +185,13 @@ export default function MasterData() {
                       </FormItem>
                     )}
                   />
-                </div>
 
-                {/* Column 3: Service Provider */}
-                <div className="space-y-6">
-                  <h3 className="text-lg font-medium border-b pb-2">Carer/Service Provider</h3>
+                  {/* Column 3: Service Provider */}
                   <FormField
                     control={form.control}
                     name="serviceProvider"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Carer/Service Provider</FormLabel>
                         <FormControl>
                           <input
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
