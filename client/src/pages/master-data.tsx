@@ -107,25 +107,18 @@ export default function MasterData() {
   return (
     <DashboardLayout>
       <div className="mb-8 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">HCP Master Data Entry</h1>
-        <p className="text-sm text-muted-foreground">Manage home care package categories and types in the system</p>
+        <h1 className="text-2xl font-semibold tracking-tight">HCP Data Entry</h1>
+        <p className="text-sm text-muted-foreground">Manage home care package categories, types, and providers in the system</p>
       </div>
       
       <Card className="bg-white shadow-sm border w-full">
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Column headers */}
-                  <h3 className="text-lg font-medium border-b pb-2">Care Category</h3>
-                  <h3 className="text-lg font-medium border-b pb-2">Care Type</h3>
-                  <h3 className="text-lg font-medium border-b pb-2">Carer/Service Provider</h3>
-                </div>
-
-                {/* Row 1 */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Column 1: Care Category */}
+              <div className="space-y-6 max-w-md">
+                {/* Care Category */}
+                <div>
+                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Category</h3>
                   <FormField
                     control={form.control}
                     name="careCategory"
@@ -156,8 +149,11 @@ export default function MasterData() {
                       </FormItem>
                     )}
                   />
+                </div>
 
-                  {/* Column 2: Care Type */}
+                {/* Care Type */}
+                <div>
+                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Type</h3>
                   <FormField
                     control={form.control}
                     name="careType"
@@ -185,8 +181,11 @@ export default function MasterData() {
                       </FormItem>
                     )}
                   />
+                </div>
 
-                  {/* Column 3: Service Provider */}
+                {/* Care Provider */}
+                <div>
+                  <h3 className="text-lg font-medium border-b pb-2 mb-3">Care Provider</h3>
                   <FormField
                     control={form.control}
                     name="serviceProvider"
@@ -195,7 +194,7 @@ export default function MasterData() {
                         <FormControl>
                           <input
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Enter service provider name"
+                            placeholder="Enter care provider name"
                             {...field}
                             disabled={saveMutation.isPending}
                           />
