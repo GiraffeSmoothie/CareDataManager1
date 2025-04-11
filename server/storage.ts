@@ -1,179 +1,93 @@
-import { users, type User, type InsertUser, masterData, type MasterData, type InsertMasterData, personInfo, type PersonInfo, type InsertPersonInfo, caseNotes, type CaseNote, type InsertCaseNote, documents, type Document, type InsertDocument } from "@shared/schema";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { 
+  users, personInfo, masterData, caseNotes, documents,
+  type User, type PersonInfo, type MasterData, type CaseNote, type Document, type InsertUser, type InsertMasterData, type InsertPersonInfo, type InsertCaseNote, type InsertDocument
+} from "@shared/schema";
+import { eq } from "drizzle-orm";
 
-export interface IStorage {
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  createMasterData(data: InsertMasterData & { createdBy: number }): Promise<MasterData>;
-  getAllMasterData(): Promise<MasterData[]>;
-  getMasterDataById(id: number): Promise<MasterData | undefined>;
-  getMasterDataByMemberId(memberId: number): Promise<MasterData[]>;
-  createPersonInfo(data: InsertPersonInfo & { createdBy: number }): Promise<PersonInfo>;
-  getAllPersonInfo(): Promise<PersonInfo[]>;
-  getPersonInfoById(id: number): Promise<PersonInfo | undefined>;
-  createCaseNote(data: InsertCaseNote & { createdBy: number }): Promise<CaseNote>;
-  getCaseNotesByMemberId(memberId: number): Promise<CaseNote[]>;
-  createDocument(data: InsertDocument & { createdBy: number, filename: string }): Promise<Document>;
-  getDocumentsByMemberId(memberId: number): Promise<Document[]>;
-  getDocumentById(id: number): Promise<Document | undefined>;
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is required");
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private masterData: Map<number, MasterData>;
-  private personInfo: Map<number, PersonInfo>;
-  private caseNotes: Map<number, CaseNote>;
-  private documents: Map<number, Document>;
-  userCurrentId: number;
-  masterDataCurrentId: number;
-  personInfoCurrentId: number;
-  caseNoteCurrentId: number;
-  documentCurrentId: number;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-  constructor() {
-    this.users = new Map();
-    this.masterData = new Map();
-    this.personInfo = new Map();
-    this.caseNotes = new Map();
-    this.documents = new Map();
-    this.userCurrentId = 1;
-    this.masterDataCurrentId = 1;
-    this.personInfoCurrentId = 1;
-    this.caseNoteCurrentId = 1;
-    this.documentCurrentId = 1;
-  }
+const db = drizzle(pool);
+
+export const storage = {
+  // User operations
+  async createUser(user: { username: string; password: string }): Promise<User> {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  },
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  },
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db.select().from(users).where(eq(users.username, username));
     return user;
-  }
+  },
 
-  async createMasterData(data: InsertMasterData & { createdBy: number }): Promise<MasterData> {
-    const id = this.masterDataCurrentId++;
-    const newMasterData: MasterData = { 
-      ...data, 
-      id,
-      description: data.description || null,
-      serviceProvider: data.serviceProvider || "",
-      notes: data.notes || null,
-      active: data.active ?? true,
-      memberId: data.memberId || null
-    };
-    this.masterData.set(id, newMasterData);
-    return newMasterData;
-  }
-
-  async getAllMasterData(): Promise<MasterData[]> {
-    return Array.from(this.masterData.values());
-  }
-
-  async getMasterDataById(id: number): Promise<MasterData | undefined> {
-    return this.masterData.get(id);
-  }
-
-  async getMasterDataByMemberId(memberId: number): Promise<MasterData[]> {
-    return Array.from(this.masterData.values()).filter(
-      (data) => data.memberId === memberId
-    );
-  }
-
-  async createPersonInfo(data: InsertPersonInfo & { createdBy: number }): Promise<PersonInfo> {
-    const id = this.personInfoCurrentId++;
-    const newPersonInfo: PersonInfo = { 
-      ...data, 
-      id,
-      middleName: data.middleName || null,
-      homePhone: data.homePhone || null,
-      addressLine2: data.addressLine2 || null,
-      addressLine3: data.addressLine3 || null,
-      useMailingAddress: data.useMailingAddress ?? false,
-      mailingAddressLine1: data.mailingAddressLine1 || null,
-      mailingAddressLine2: data.mailingAddressLine2 || null,
-      mailingAddressLine3: data.mailingAddressLine3 || null,
-      mailingPostCode: data.mailingPostCode || null,
-      nokName: data.nokName || null,
-      nokRelationship: data.nokRelationship || null,
-      nokPhone: data.nokPhone || null,
-      nokEmail: data.nokEmail || null,
-      nokAddress: data.nokAddress || null,
-      hcpLevel: data.hcpLevel || null,
-      hcpStartDate: data.hcpStartDate || null,
-      hcpEndDate: data.hcpEndDate || null
-    };
-    this.personInfo.set(id, newPersonInfo);
-    return newPersonInfo;
-  }
+  // Person info operations
+  async createPersonInfo(info: Omit<PersonInfo, "id">): Promise<PersonInfo> {
+    const [created] = await db.insert(personInfo).values(info).returning();
+    return created;
+  },
 
   async getAllPersonInfo(): Promise<PersonInfo[]> {
-    return Array.from(this.personInfo.values());
-  }
+    return await db.select().from(personInfo);
+  },
 
   async getPersonInfoById(id: number): Promise<PersonInfo | undefined> {
-    return this.personInfo.get(id);
-  }
+    const [person] = await db.select().from(personInfo).where(eq(personInfo.id, id));
+    return person;
+  },
 
-  async createCaseNote(data: InsertCaseNote & { createdBy: number }): Promise<CaseNote> {
-    const id = this.caseNoteCurrentId++;
-    // Create with current timestamp
-    const newCaseNote: CaseNote = {
-      ...data,
-      id,
-      createdAt: new Date()
-    };
-    this.caseNotes.set(id, newCaseNote);
-    return newCaseNote;
-  }
+  // Master data operations
+  async createMasterData(data: Omit<MasterData, "id">): Promise<MasterData> {
+    const [created] = await db.insert(masterData).values(data).returning();
+    return created;
+  },
+
+  async getAllMasterData(): Promise<MasterData[]> {
+    return await db.select().from(masterData);
+  },
+
+  async getMasterDataById(id: number): Promise<MasterData | undefined> {
+    const [data] = await db.select().from(masterData).where(eq(masterData.id, id));
+    return data;
+  },
+
+  async getMasterDataByMemberId(memberId: number): Promise<MasterData[]> {
+    return await db.select().from(masterData).where(eq(masterData.memberId, memberId));
+  },
+
+  // Case notes operations
+  async createCaseNote(note: Omit<CaseNote, "id" | "createdAt">): Promise<CaseNote> {
+    const [created] = await db.insert(caseNotes).values(note).returning();
+    return created;
+  },
 
   async getCaseNotesByMemberId(memberId: number): Promise<CaseNote[]> {
-    return Array.from(this.caseNotes.values())
-      .filter(note => note.memberId === memberId)
-      .sort((a, b) => {
-        // Sort by newest first
-        if (a.createdAt && b.createdAt) {
-          return b.createdAt.getTime() - a.createdAt.getTime();
-        }
-        return 0;
-      });
-  }
+    return await db.select().from(caseNotes).where(eq(caseNotes.memberId, memberId));
+  },
 
-  async createDocument(data: InsertDocument & { createdBy: number, filename: string }): Promise<Document> {
-    const id = this.documentCurrentId++;
-    const newDocument: Document = {
-      ...data,
-      id,
-      uploadedAt: new Date()
-    };
-    this.documents.set(id, newDocument);
-    return newDocument;
-  }
+  // Document operations
+  async createDocument(doc: Omit<Document, "id" | "uploadedAt">): Promise<Document> {
+    const [created] = await db.insert(documents).values(doc).returning();
+    return created;
+  },
 
   async getDocumentsByMemberId(memberId: number): Promise<Document[]> {
-    return Array.from(this.documents.values())
-      .filter(doc => doc.memberId === memberId)
-      .sort((a, b) => {
-        // Sort by newest first
-        if (a.uploadedAt && b.uploadedAt) {
-          return b.uploadedAt.getTime() - a.uploadedAt.getTime();
-        }
-        return 0;
-      });
-  }
-
+    return await db.select().from(documents).where(eq(documents.memberId, memberId));
+  },
   async getDocumentById(id: number): Promise<Document | undefined> {
-    return this.documents.get(id);
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+    return doc;
   }
-}
-
-export const storage = new MemStorage();
+};
