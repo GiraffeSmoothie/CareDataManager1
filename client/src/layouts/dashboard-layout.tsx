@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <ChevronDown className="h-4 w-4 ml-1" />
               </div>
               
-              <div className="absolute hidden group-hover:block w-48 bg-white border rounded-md shadow-lg py-1 z-50">
+              <div className="absolute hidden group-hover:block w-48 bg-white border rounded-md shadow-lg py-1 z-50" style={{ position: 'fixed', marginTop: '60px' }}>
                 <Link href="/person-info">
                   <div className={cn(
                     "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100",
