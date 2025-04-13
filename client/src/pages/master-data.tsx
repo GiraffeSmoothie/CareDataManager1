@@ -160,7 +160,10 @@ export default function MasterData() {
                         <FormControl>
                           <Input
                             value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
+                            onChange={(e) => {
+                              field.onChange(e.target.value);
+                              setSelectedCategory(e.target.value);
+                            }}
                             placeholder="Or enter custom category"
                             className="flex-1"
                           />

@@ -232,11 +232,13 @@ export default function MemberAssignment() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {serviceCategories.map((category) => (
-                                    <SelectItem key={category.value} value={category.value}>
-                                      {category.label}
-                                    </SelectItem>
-                                  ))}
+                                  {Array.from(new Set(masterDataList.map(item => item.serviceCategory)))
+                                    .filter(category => category)
+                                    .map((category) => (
+                                      <SelectItem key={category} value={category}>
+                                        {category}
+                                      </SelectItem>
+                                    ))}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
