@@ -108,8 +108,10 @@ export default function MemberAssignment() {
       const filtered = members.filter(member => 
         `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
       );
-      setShowDropdown(true);
+      setFilteredMembers(filtered);
+      setShowDropdown(filtered.length > 0);
     } else {
+      setFilteredMembers([]);
       setShowDropdown(false);
     }
   }, [searchTerm, members]);

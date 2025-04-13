@@ -69,15 +69,17 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     .min(5, { message: "Post code is required" }),
   hcpEndDate: z.string().optional(),
   nextOfKinEmail: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal('')),
-  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), // Added status field
-  title: z.string().min(1, {message: "Title is required"}), // Added required validation
-  firstName: z.string().min(1, {message: "First Name is required"}), // Added required validation
-  lastName: z.string().min(1, {message: "Last Name is required"}), // Added required validation
-  dateOfBirth: z.string().min(1, {message: "Date of Birth is required"}), // Added required validation
-  email: z.string().min(1, {message: "Email is required"}), // Added required validation
-  mobilePhone: z.string().min(10, {message: "Mobile Phone is required"}), // Added required validation
-  nextOfKinName: z.string().min(1, {message: "Next of Kin Name is required"}), // Added required validation
-  nextOfKinAddress: z.string().min(1, {message: "Next of Kin Address is required"}), // Added required validation
+  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), 
+  title: z.string().min(1, {message: "Title is required"}), 
+  firstName: z.string().min(1, {message: "First Name is required"}), 
+  lastName: z.string().min(1, {message: "Last Name is required"}), 
+  middleName: z.string().optional(),
+  dateOfBirth: z.string(), 
+  email: z.string().email().optional(),
+  homePhone: z.string().optional(),
+  mobilePhone: z.string().optional(),
+  nextOfKinName: z.string().optional(),
+  nextOfKinAddress: z.string().optional(),
 
 });
 
@@ -90,7 +92,7 @@ export default function ManageClient() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [buttonLabel, setButtonLabel] = useState("Add client"); // Added state for button label
+  const [buttonLabel, setButtonLabel] = useState("Add client"); 
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -124,7 +126,7 @@ export default function ManageClient() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpEndDate: "",
-      status: "Created", // Added status field to default values
+      status: "Created", 
     },
   });
 
@@ -139,7 +141,7 @@ export default function ManageClient() {
     setSelectedMember(member);
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
-    setButtonLabel("Update client"); // Change button label on member selection
+    setButtonLabel("Update client"); 
 
     // Populate form with member data
     Object.entries(member).forEach(([key, value]) => {
@@ -743,7 +745,7 @@ export default function ManageClient() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         <span>Processing...</span>
                       </div>
-                    ) : buttonLabel} {/* Use buttonLabel state */}
+                    ) : buttonLabel} 
                   </Button>
                 </div>
               </form>
