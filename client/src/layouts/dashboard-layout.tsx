@@ -95,6 +95,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>Documents</span>
               </div>
             </Link>
+            <Link href="/manage-members">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/manage-members" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <Users className="h-4 w-4" />
+                <span>Manage Members</span>
+              </div>
+            </Link>
           </div>
         </div>
       </nav>
