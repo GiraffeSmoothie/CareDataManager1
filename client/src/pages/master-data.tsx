@@ -148,7 +148,9 @@ export default function MasterData() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {masterDataList.map((item) => (
+                            {masterDataList
+                            .filter(item => item.serviceCategory)
+                            .map((item) => (
                               <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
                                 {item.serviceCategory}
                               </SelectItem>
@@ -192,11 +194,13 @@ export default function MasterData() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {masterDataList.map((item) => (
-                            <SelectItem key={item.serviceType} value={item.serviceType}>
-                              {item.serviceType}
-                            </SelectItem>
-                          ))}
+                          {masterDataList
+                            .filter(item => item.serviceType)
+                            .map((item) => (
+                              <SelectItem key={item.serviceType} value={item.serviceType}>
+                                {item.serviceType}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -230,11 +234,13 @@ export default function MasterData() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {masterDataList.map((item) => (
-                            <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
-                              {item.serviceProvider}
-                            </SelectItem>
-                          ))}
+                          {masterDataList
+                            .filter(item => item.serviceProvider)
+                            .map((item) => (
+                              <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
+                                {item.serviceProvider}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </FormControl>
