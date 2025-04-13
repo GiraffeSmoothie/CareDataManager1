@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -147,7 +146,7 @@ export default function ManageClient() {
         mailingPostCode: form.getValues("postCode"),
         useHomeAddress: true
       };
-      
+
       Object.entries(homeAddress).forEach(([key, value]) => {
         form.setValue(key as any, value);
       });
@@ -160,12 +159,12 @@ export default function ManageClient() {
       if (useHomeAddress && 
          (name === "addressLine1" || name === "addressLine2" || 
           name === "addressLine3" || name === "postCode")) {
-        
+
         const mailingField = name.replace("address", "mailingAddress").replace("postCode", "mailingPostCode");
         form.setValue(mailingField as any, value[name as keyof typeof value] || "");
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form, useHomeAddress]);
 
@@ -255,7 +254,7 @@ export default function ManageClient() {
                     <TabsTrigger value="nextOfKin">Next of Kin</TabsTrigger>
                     <TabsTrigger value="hcp">HCP Information</TabsTrigger>
                   </TabsList>
-                  
+
                   {/* Personal Details Tab */}
                   <TabsContent value="personal" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -413,7 +412,7 @@ export default function ManageClient() {
                           name="addressLine1"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Address Line 1</FormLabel>
+                              <FormLabel>Address Line 1 (mandatory)</FormLabel>
                               <FormControl>
                                 <Input placeholder="Street address" {...field} />
                               </FormControl>
@@ -452,7 +451,7 @@ export default function ManageClient() {
                           name="postCode"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Post Code</FormLabel>
+                              <FormLabel>Post Code (mandatory)</FormLabel>
                               <FormControl>
                                 <Input placeholder="Post code" {...field} />
                               </FormControl>

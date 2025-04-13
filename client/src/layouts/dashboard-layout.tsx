@@ -70,7 +70,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Link2 className="h-4 w-4" />
-                <span>Member Assignment</span>
+                <span>Manage Services</span>
               </div>
             </Link>
             <Link href="/document-upload">
@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <FileText className="h-4 w-4" />
-                <span>Documents</span>
+                <span>Manage Documents</span>
               </div>
             </Link>
           </div>

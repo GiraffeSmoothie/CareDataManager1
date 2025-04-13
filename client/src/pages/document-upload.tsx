@@ -86,6 +86,7 @@ export default function DocumentUpload() {
     setSelectedMember(member);
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
+    setFilteredMembers([]);
     form.setValue("memberId", member.id.toString());
   };
 
