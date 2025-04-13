@@ -39,6 +39,7 @@ export default function MemberAssignment() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [activeTab, setActiveTab] = useState("view");
+  const [serviceProviders, setServiceProviders] = useState<string[]>([]); // Added state for service providers
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -67,6 +68,21 @@ export default function MemberAssignment() {
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!selectedMember,
   });
+
+  // Fetch service providers (replace with your actual API call)
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const response = await apiRequest("GET", "/api/service-providers"); // Replace with your API endpoint
+        const data = await response.json();
+        setServiceProviders(data);
+      } catch (error) {
+        console.error("Error fetching service providers:", error);
+      }
+    };
+    fetchProviders();
+  }, []);
+
 
   // Filter members based on search
   const filteredMembers = members.filter(member => 
@@ -261,9 +277,20 @@ export default function MemberAssignment() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Service Provider</FormLabel>
-                              <FormControl>
-                                <Input {...field} placeholder="Enter service provider" />
-                              </FormControl>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select provider" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {serviceProviders.map((provider) => (
+                                    <SelectItem key={provider} value={provider}>
+                                      {provider}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}

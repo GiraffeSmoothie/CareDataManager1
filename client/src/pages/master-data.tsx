@@ -137,11 +137,24 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Enter service category"
-                        disabled={saveMutation.isPending}
-                      />
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        allowCustomValue
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select or enter service category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {masterDataList.map((item) => (
+                            <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
+                              {item.serviceCategory}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -162,11 +175,24 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Enter service type"
-                        disabled={saveMutation.isPending}
-                      />
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        allowCustomValue
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select or enter service type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {masterDataList.map((item) => (
+                            <SelectItem key={item.serviceType} value={item.serviceType}>
+                              {item.serviceType}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -187,11 +213,24 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Enter service provider"
-                        disabled={saveMutation.isPending}
-                      />
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        allowCustomValue
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select or enter service provider" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {masterDataList.map((item) => (
+                            <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
+                              {item.serviceProvider}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
