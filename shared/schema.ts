@@ -42,10 +42,13 @@ export const personInfo = pgTable("person_info", {
 
 export const masterData = pgTable("master_data", {
   id: serial("id").primaryKey(),
-  careCategory: text("care_category").notNull(),
-  careType: text("care_type").notNull(),
-  serviceProvider: text("service_provider").default(""),
-  notes: text("notes").default(""),
+  serviceCategory: text("service_category").notNull(),
+  serviceType: text("service_type").notNull(),
+  serviceProvider: text("service_provider").notNull(),
+  serviceStartDate: text("service_start_date").notNull(),
+  serviceDays: text("service_days").notNull(),
+  serviceHours: text("service_hours").notNull(),
+  caseNotes: text("case_notes").default(""),
   active: boolean("active").notNull().default(true),
   memberId: integer("member_id").references(() => personInfo.id),
   createdBy: integer("created_by").references(() => users.id),

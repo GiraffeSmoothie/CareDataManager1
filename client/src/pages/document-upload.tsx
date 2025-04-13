@@ -121,8 +121,13 @@ export default function DocumentUpload() {
         fileInput.value = "";
       }
 
+      // Force refresh documents list
       if (selectedMember) {
-        queryClient.invalidateQueries({ queryKey: ["/api/documents/member", selectedMember.id] });
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/documents/member", selectedMember.id],
+          exact: true,
+          refetchType: 'active'
+        });
       }
     },
     onError: (error: Error) => {

@@ -1,48 +1,35 @@
-// Care Categories
-export const careCategories = [
-  { value: "cleaning", label: "Cleaning Services" },
-  { value: "gardening", label: "Gardening Services" },
-  { value: "meals", label: "Meal Preparation" },
-  { value: "exercise", label: "Exercise and Rehabilitation Support" },
-  { value: "maintenance", label: "Home Maintenance" },
-  { value: "transport", label: "Transport Services" },
-];
+import { z } from "zod";
 
-// Care Types by Category
-const careCategoryTypes = {
-  cleaning: [
-    { value: "regular", label: "Regular Cleaning" },
-    { value: "deep", label: "Deep Cleaning" },
-    { value: "specialized", label: "Specialized Cleaning" },
+export const serviceCategories = [
+  { value: "personal-care", label: "Personal Care" },
+  { value: "domestic-assistance", label: "Domestic Assistance" },
+  { value: "nursing", label: "Nursing" },
+  { value: "allied-health", label: "Allied Health" },
+] as const;
+
+export const serviceTypes = {
+  "personal-care": [
+    { value: "showering", label: "Showering" },
+    { value: "dressing", label: "Dressing" },
+    { value: "mobility", label: "Mobility" },
   ],
-  gardening: [
-    { value: "lawn", label: "Lawn Care" },
-    { value: "planting", label: "Planting & Cultivation" },
-    { value: "maintenance", label: "Garden Maintenance" },
+  "domestic-assistance": [
+    { value: "cleaning", label: "Cleaning" },
+    { value: "laundry", label: "Laundry" },
+    { value: "meal-prep", label: "Meal Preparation" },
   ],
-  meals: [
-    { value: "daily", label: "Daily Meal Preparation" },
-    { value: "special", label: "Special Diet Meals" },
-    { value: "bulk", label: "Bulk Meal Preparation" },
+  "nursing": [
+    { value: "medication", label: "Medication Management" },
+    { value: "wound-care", label: "Wound Care" },
+    { value: "health-monitoring", label: "Health Monitoring" },
   ],
-  exercise: [
-    { value: "physical", label: "Physical Therapy" },
-    { value: "fitness", label: "Fitness Programs" },
-    { value: "mobility", label: "Mobility Assistance" },
+  "allied-health": [
+    { value: "physiotherapy", label: "Physiotherapy" },
+    { value: "occupational-therapy", label: "Occupational Therapy" },
+    { value: "podiatry", label: "Podiatry" },
   ],
-  maintenance: [
-    { value: "repairs", label: "General Repairs" },
-    { value: "plumbing", label: "Plumbing Services" },
-    { value: "electrical", label: "Electrical Services" },
-  ],
-  transport: [
-    { value: "medical", label: "Medical Appointments" },
-    { value: "shopping", label: "Shopping Trips" },
-    { value: "social", label: "Social Activities" },
-  ],
+} as const;
+
+export const getServiceTypesByCategory = (category: string) => {
+  return serviceTypes[category as keyof typeof serviceTypes] || [];
 };
-
-// Get care types based on selected category
-export function getCareTypesByCategory(category: string) {
-  return careCategoryTypes[category as keyof typeof careCategoryTypes] || [];
-}

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,23 +7,25 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/layouts/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, Upload } from "lucide-react";
-import { PersonInfo, MasterData } from "@shared/schema";
+import { Loader2, Search } from "lucide-react";
+import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
-import { careCategories, getCareTypesByCategory } from "@/lib/data";
+import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
+import { Editor } from '@tinymce/tinymce-react';
 
-// Create schema for the form
 const memberAssignmentSchema = z.object({
   memberId: z.string().min(1, "Please select a member"),
-  careCategory: z.string().min(1, "Care category is required"),
-  careType: z.string().min(1, "Care type is required"),
-  document: z.instanceof(FileList).optional(),
-  notes: z.string().optional(),
+  serviceCategory: z.string().min(1, "Service category is required"),
+  serviceType: z.string().min(1, "Service type is required"),
+  serviceProvider: z.string().min(1, "Service provider is required"),
+  serviceStartDate: z.string().min(1, "Start date is required"),
+  serviceDays: z.string().min(1, "Service days are required"),
+  serviceHours: z.string().min(1, "Service hours are required"),
+  caseNotes: z.string().optional(),
 });
 
 type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
@@ -30,15 +33,14 @@ type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
 export default function MemberAssignment() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [careTypes, setCareTypes] = useState<string[]>([]);
-  const [documentName, setDocumentName] = useState<string | null>(null);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
 
   // Fetch all members
-  const {
-    data: members = [],
-    isLoading: isLoadingMembers,
-    error: membersError,
-  } = useQuery<PersonInfo[]>({
+  const { data: members = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
@@ -48,57 +50,54 @@ export default function MemberAssignment() {
     resolver: zodResolver(memberAssignmentSchema),
     defaultValues: {
       memberId: "",
-      careCategory: "",
-      careType: "",
-      notes: "",
+      serviceCategory: "",
+      serviceType: "",
+      serviceProvider: "",
+      serviceStartDate: "",
+      serviceDays: "",
+      serviceHours: "",
+      caseNotes: "",
     },
   });
 
-  // Watch for changes in the category field
-  const watchedCategory = form.watch("careCategory");
+  // Handle search input change
+  useEffect(() => {
+    if (searchTerm.length >= 4) {
+      const filtered = members.filter(member => 
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredMembers(filtered);
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  }, [searchTerm, members]);
 
-  // Update care types when category changes
+  // Handle member selection
+  const handleSelectMember = (member: PersonInfo) => {
+    setSelectedMember(member);
+    setSearchTerm(`${member.firstName} ${member.lastName}`);
+    setShowDropdown(false);
+    form.setValue("memberId", member.id.toString());
+  };
+
+  // Watch for changes in the category field
+  const watchedCategory = form.watch("serviceCategory");
+
+  // Update service types when category changes
   useEffect(() => {
     if (watchedCategory) {
       setSelectedCategory(watchedCategory);
-      const types = getCareTypesByCategory(watchedCategory);
-      setCareTypes(types.map(type => type.value));
-      
-      // Reset care type when category changes
-      form.setValue("careType", "");
+      const types = getServiceTypesByCategory(watchedCategory);
+      setServiceTypes(types);
+      form.setValue("serviceType", "");
     }
   }, [watchedCategory, form]);
-
-  // Handle file change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setDocumentName(files[0].name);
-      form.setValue("document", files);
-    } else {
-      setDocumentName(null);
-      form.setValue("document", undefined);
-    }
-  };
 
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: MemberAssignmentFormValues) => {
-      // Create FormData to handle file upload
-      const formData = new FormData();
-      formData.append("memberId", data.memberId);
-      formData.append("careCategory", data.careCategory);
-      formData.append("careType", data.careType);
-      
-      if (data.notes) {
-        formData.append("notes", data.notes);
-      }
-      
-      if (data.document && data.document.length > 0) {
-        formData.append("document", data.document[0]);
-      }
-      
-      const response = await apiRequest("POST", "/api/member-assignment", formData, true);
+      const response = await apiRequest("POST", "/api/member-assignment", data);
       return await response.json();
     },
     onSuccess: () => {
@@ -106,14 +105,10 @@ export default function MemberAssignment() {
         title: "Success",
         description: "Member assignment has been created",
       });
-      
-      // Reset form
       form.reset();
-      setDocumentName(null);
-      
-      // Invalidate queries to refresh data
+      setSelectedMember(null);
+      setSearchTerm("");
       queryClient.invalidateQueries({ queryKey: ["/api/master-data"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
     },
     onError: (error: Error) => {
       toast({
@@ -124,206 +119,216 @@ export default function MemberAssignment() {
     },
   });
 
-  // Form submission handler
-  const onSubmit = (data: MemberAssignmentFormValues) => {
-    createAssignmentMutation.mutate(data);
-  };
-
-  // Handle loading state
-  if (isLoadingMembers) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Handle error state
-  if (membersError) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="text-destructive">Error Loading Data</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>
-                {membersError?.message || "There was an error loading the member data."}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4">
         <Card className="w-full max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle>Member Care Assignment</CardTitle>
+            <CardTitle>Member Service Assignment</CardTitle>
             <CardDescription>
-              Assign care category and type to a member and upload relevant documentation
+              Assign services to a member
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {/* Member Selection */}
-                <FormField
-                  control={form.control}
-                  name="memberId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Member</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a member" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {members.map((member) => (
-                            <SelectItem key={member.id} value={member.id.toString()}>
-                              {member.title} {member.firstName} {member.lastName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Select the member to assign care services
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Care Category Selection */}
-                  <FormField
-                    control={form.control}
-                    name="careCategory"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Care Category</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {careCategories.map((category) => (
-                              <SelectItem key={category.value} value={category.value}>
-                                {category.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Care Type Selection */}
-                  <FormField
-                    control={form.control}
-                    name="careType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Care Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={!selectedCategory}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {careTypes.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>
-                          {!selectedCategory && "Select a care category first"}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+            {/* Search Section */}
+            <div className="mb-6">
+              <div className="relative">
+                <div className="flex items-center border rounded-md">
+                  <Search className="h-4 w-4 ml-2 text-gray-500" />
+                  <Input
+                    type="text"
+                    placeholder="Search member (minimum 4 characters)"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="border-0 focus:ring-0"
                   />
                 </div>
 
-                {/* Notes */}
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Additional notes about this assignment"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {showDropdown && (
+                  <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
+                    {filteredMembers.map((member) => (
+                      <div
+                        key={member.id}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleSelectMember(member)}
+                      >
+                        {member.title} {member.firstName} {member.lastName}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
-                {/* Document Upload */}
-                <div className="space-y-2">
-                  <FormLabel>Upload Document</FormLabel>
-                  <div className="flex items-center gap-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => document.getElementById("document-upload")?.click()}
-                      className="gap-2"
-                    >
-                      <Upload className="h-4 w-4" />
-                      Choose File
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      {documentName || "No file chosen"}
-                    </span>
-                    <input
-                      id="document-upload"
-                      type="file"
-                      className="hidden"
-                      onChange={handleFileChange}
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            {selectedMember && (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(createAssignmentMutation.mutate)} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="memberId"
+                    render={({ field }) => (
+                      <FormItem className="hidden">
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="serviceCategory"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Category</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {serviceCategories.map((category) => (
+                                <SelectItem key={category.value} value={category.value}>
+                                  {category.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="serviceType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Type</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!selectedCategory}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {serviceTypes.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Supported formats: PDF, DOC, DOCX, JPG, JPEG, PNG
-                  </p>
-                </div>
 
-                <Separator className="my-6" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="serviceProvider"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Provider</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Enter service provider" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={createAssignmentMutation.isPending}
-                >
-                  {createAssignmentMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Assign Care & Upload Document
-                </Button>
-              </form>
-            </Form>
+                    <FormField
+                      control={form.control}
+                      name="serviceStartDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Start Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="serviceDays"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Days</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="e.g., Mon, Wed, Fri" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="serviceHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Service Hours</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="e.g., 9:00 AM - 5:00 PM" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="caseNotes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Case Notes</FormLabel>
+                        <FormControl>
+                          <Editor
+                            value={field.value}
+                            onEditorChange={(content) => field.onChange(content)}
+                            init={{
+                              height: 300,
+                              menubar: false,
+                              plugins: ['advlist', 'autolink', 'lists', 'link', 'charmap', 'preview', 'searchreplace',
+                                'visualblocks', 'fullscreen', 'insertdatetime', 'table', 'code', 'help', 'wordcount'
+                              ],
+                              toolbar: 'undo redo | formatselect | bold italic | alignleft aligncenter alignright | bullist numlist outdent indent | help'
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={createAssignmentMutation.isPending}
+                  >
+                    {createAssignmentMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Assign Service
+                  </Button>
+                </form>
+              </Form>
+            )}
           </CardContent>
         </Card>
       </div>
