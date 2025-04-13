@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -45,6 +45,21 @@ export default function DocumentUpload() {
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside search dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -156,7 +171,7 @@ export default function DocumentUpload() {
             <CardTitle>Search Member</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative">
+            <div ref={searchRef} className="relative">
               <div className="flex items-center border rounded-md">
                 <Search className="h-4 w-4 ml-2 text-gray-500" />
                 <Input
