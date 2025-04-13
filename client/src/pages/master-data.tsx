@@ -139,7 +139,10 @@ export default function MasterData() {
                     <FormControl>
                       <div className="flex gap-2">
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            setSelectedCategory(value);
+                          }}
                           value={field.value}
                         >
                           <FormControl>
@@ -159,17 +162,11 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
-                            value={field.value}
                             onChange={(e) => {
                               const value = e.target.value;
                               field.onChange(value);
                               setSelectedCategory(value);
                             }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                            }}
-                            onFocus={(e) => e.stopPropagation()}
                             placeholder="Or enter custom category"
                             className="flex-1"
                           />
@@ -217,16 +214,7 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
-                            value={field.value}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              field.onChange(value);
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                            }}
-                            onFocus={(e) => e.stopPropagation()}
+                            onChange={(e) => field.onChange(e.target.value)}
                             placeholder="Or enter custom type"
                             className="flex-1"
                           />
@@ -274,16 +262,7 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
-                            value={field.value}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              field.onChange(value);
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                            }}
-                            onFocus={(e) => e.stopPropagation()}
+                            onChange={(e) => field.onChange(e.target.value)}
                             placeholder="Or enter custom provider"
                             className="flex-1"
                           />
