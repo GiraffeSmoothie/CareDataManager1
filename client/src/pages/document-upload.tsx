@@ -162,7 +162,7 @@ export default function DocumentUpload() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto py-6 space-y-6 text-base font-sans">
         {/* Search Section */}
         <Card className="max-w-5xl mx-auto">
           <CardHeader>

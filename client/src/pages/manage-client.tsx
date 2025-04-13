@@ -253,7 +253,7 @@ export default function ManageClient() {
 
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
-            <CardTitle>Manage Client Information</CardTitle>
+            <CardTitle>Manage Client Details</CardTitle>
             <CardDescription>
               Update the client's details using the tabs below
             </CardDescription>

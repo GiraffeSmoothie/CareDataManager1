@@ -40,6 +40,9 @@ type MasterDataFormValues = z.infer<typeof masterDataSchema>;
 export default function MasterData() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+const [customCategories, setCustomCategories] = useState<string[]>([]);
+const [customTypes, setCustomTypes] = useState<string[]>([]);
+const [customProviders, setCustomProviders] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("add");
 
   // Fetch all master data for the View tab
@@ -211,12 +214,22 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <input
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        placeholder="Enter service provider name"
-                        {...field}
-                        disabled={saveMutation.isPending}
-                      />
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        allowCustomValue
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select or enter provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...customProviders].map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {provider}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -259,7 +272,7 @@ export default function MasterData() {
 
         <div className="flex gap-2 pt-4">
           <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "Saving..." : "Save"}
+            {saveMutation.isPending ? "Adding..." : "Add"}
           </Button>
           <Button type="button" variant="outline" onClick={handleReset} disabled={saveMutation.isPending}>
             Reset
@@ -294,7 +307,14 @@ export default function MasterData() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.careType}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <Switch
+                      checked={item.active}
+                      onCheckedChange={(checked) => {
+                        const updatedItem = { ...item, active: checked };
+                        saveMutation.mutate(updatedItem);
+                      }}
+                    />
+                    <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {item.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
