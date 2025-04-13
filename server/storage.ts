@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import pg from "pg";
+const { Pool } = pg;
 import { 
   users, personInfo, masterData, caseNotes, documents,
   type User, type PersonInfo, type MasterData, type CaseNote, type Document, type InsertUser, type InsertMasterData, type InsertPersonInfo, type InsertCaseNote, type InsertDocument
