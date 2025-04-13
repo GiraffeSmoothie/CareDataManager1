@@ -22,7 +22,7 @@ const documentTypes = ["Identification", "Consent", "Disclaimer"];
 // Define the document form schema
 const documentFormSchema = z.object({
   memberId: z.string({
-    required_error: "Please select a member"
+    required_error: "Please select a client"
   }),
   documentName: z.string({
     required_error: "Document name is required"
@@ -169,7 +169,7 @@ export default function DocumentUpload() {
             <CardTitle className="text-3xl">Document Upload</CardTitle>
           </CardHeader>
           <CardHeader>
-            <CardTitle>Search Member</CardTitle>
+            <CardTitle>Search Client</CardTitle>
           </CardHeader>
           <CardContent>
             <div ref={searchRef} className="relative">
@@ -177,7 +177,7 @@ export default function DocumentUpload() {
                 <Search className="h-4 w-4 ml-2 text-gray-500" />
                 <Input
                   type="text"
-                  placeholder="Search member (minimum 4 characters)"
+                  placeholder="Search Client (minimum 4 characters)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="border-0 focus:ring-0"

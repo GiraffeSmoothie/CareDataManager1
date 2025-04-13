@@ -163,8 +163,8 @@ export default function MemberAssignment() {
         {/* Search Section */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Search Member</CardTitle>
-            <CardDescription>Select a member to manage their service assignments</CardDescription>
+            <CardTitle>Search Client</CardTitle>
+            <CardDescription>Select a Client to manage their service assignments</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="relative">
@@ -172,7 +172,7 @@ export default function MemberAssignment() {
                 <Search className="h-4 w-4 ml-2 text-gray-500" />
                 <Input
                   type="text"
-                  placeholder="Search member (minimum 4 characters)"
+                  placeholder="Search Client (minimum 4 characters)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
@@ -199,7 +199,7 @@ export default function MemberAssignment() {
         {selectedMember && (
           <Card>
             <CardHeader>
-              <CardTitle>Member Service Management</CardTitle>
+              <CardTitle>Client Service Management</CardTitle>
               <CardDescription>
                 Managing services for {selectedMember.title} {selectedMember.firstName} {selectedMember.lastName}
               </CardDescription>
