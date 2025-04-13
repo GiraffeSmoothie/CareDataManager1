@@ -40,28 +40,26 @@ export default function MemberAssignment() {
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [activeTab, setActiveTab] = useState("view");
 
-  // Get URL parameters
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const memberId = params.get("memberId");
-    const memberName = params.get("name");
-
-    if (memberId && memberName) {
-      setSearchTerm(decodeURIComponent(memberName));
-      if (members && members.length > 0) {
-        const member = members.find(m => m.id === parseInt(memberId));
-        if (member) {
-          handleSelectMember(member);
-        }
-      }
-    }
-  }, [members, handleSelectMember]);
-
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
+  // Get URL parameters after members are fetched
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const memberId = params.get("memberId");
+    const memberName = params.get("name");
+
+    if (memberId && memberName && members.length > 0) {
+      setSearchTerm(decodeURIComponent(memberName));
+      const member = members.find(m => m.id === parseInt(memberId));
+      if (member) {
+        handleSelectMember(member);
+      }
+    }
+  }, [members]);
 
   // Fetch member services
   const { data: memberServices = [] } = useQuery({
@@ -91,18 +89,6 @@ export default function MemberAssignment() {
     },
   });
 
-  // Effect to handle search filtering
-  useEffect(() => {
-    if (searchTerm.length >= 4) {
-      const filtered = members.filter(member => 
-        `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setShowDropdown(true);
-    } else {
-      setShowDropdown(false);
-    }
-  }, [searchTerm, members]);
-
   // Handle member selection
   const handleSelectMember = (member: PersonInfo) => {
     setSelectedMember(member);
@@ -110,6 +96,15 @@ export default function MemberAssignment() {
     setShowDropdown(false);
     form.setValue("memberId", member.id.toString());
   };
+
+  // Effect to handle search filtering
+  useEffect(() => {
+    if (searchTerm.length >= 4) {
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  }, [searchTerm]);
 
   // Watch for changes in the category field
   const watchedCategory = form.watch("serviceCategory");
