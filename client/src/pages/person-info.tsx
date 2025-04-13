@@ -62,12 +62,9 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     }, {
       message: "Please enter a valid date",
     }),
-  email: z.string()
-    .email({ message: "Please enter a valid email address" }),
-  mobilePhone: z.string()
-    .min(10, { message: "Mobile phone must be at least 10 digits" }),
-  postCode: z.string()
-    .min(5, { message: "Post code is required" }),
+  email: z.string().optional(),
+  mobilePhone: z.string().optional(),
+  postCode: z.string().optional(),    
   hcpEndDate: z.string().optional(),
   nextOfKinEmail: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal('')),
 });
@@ -105,6 +102,7 @@ export default function PersonInfo() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpEndDate: "",
+      status: "Created",
     },
   });
 
