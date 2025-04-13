@@ -62,6 +62,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>Add Client</span>
               </div>
             </Link>
+            <Link href="/manage-client">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/manage-client" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <Users className="h-4 w-4" />
+                <span>Manage Client</span>
+              </div>
+            </Link>
             <Link href="/member-assignment">
               <div className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",

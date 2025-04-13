@@ -66,6 +66,9 @@ function Router() {
       <Route path="/person-info">
         <PrivateRoute component={PersonInfo} />
       </Route>
+      <Route path="/manage-client">
+        <PrivateRoute component={ManageClient} />
+      </Route>
       <Route path="/member-assignment">
         <PrivateRoute component={MemberAssignment} />
       </Route>
