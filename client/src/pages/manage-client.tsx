@@ -228,6 +228,7 @@ export default function ManageClient() {
                     setSearchTerm(e.target.value);
                     setShowDropdown(true);
                   }}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                   className="pl-9"
                 />
               </div>

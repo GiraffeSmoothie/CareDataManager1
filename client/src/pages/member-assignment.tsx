@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,7 +45,7 @@ export default function MemberAssignment() {
     const params = new URLSearchParams(window.location.search);
     const memberId = params.get("memberId");
     const memberName = params.get("name");
-    
+
     if (memberId && memberName) {
       setSearchTerm(decodeURIComponent(memberName));
       if (members && members.length > 0) {
@@ -165,6 +164,7 @@ export default function MemberAssignment() {
                   placeholder="Search member (minimum 4 characters)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                   className="border-0 focus:ring-0"
                 />
               </div>
@@ -389,11 +389,11 @@ export default function MemberAssignment() {
                                     await apiRequest("PATCH", `/api/member-assignment/${service.id}`, {
                                       status: value
                                     });
-                                    
+
                                     queryClient.invalidateQueries({ 
                                       queryKey: ["/api/member-assignment", selectedMember?.id]
                                     });
-                                    
+
                                     toast({
                                       title: "Success",
                                       description: "Service status updated",

@@ -40,9 +40,6 @@ type MasterDataFormValues = z.infer<typeof masterDataSchema>;
 export default function MasterData() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-const [customCategories, setCustomCategories] = useState<string[]>([]);
-const [customTypes, setCustomTypes] = useState<string[]>([]);
-const [customProviders, setCustomProviders] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("add");
 
   // Fetch all master data for the View tab
@@ -135,20 +132,18 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="category"
+                name="serviceCategory"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <Select
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        handleCategoryChange(value);
-                      }}
+                      onValueChange={field.onChange}
                       value={field.value}
+                      allowCustomValue
                       disabled={saveMutation.isPending}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a service category" />
+                          <SelectValue placeholder="Select or enter service category" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -174,17 +169,18 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="type"
+                name="serviceType"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
+                      allowCustomValue
                       disabled={!selectedCategory || saveMutation.isPending}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={selectedCategory ? "Select a service type" : "Select a category first"} />
+                          <SelectValue placeholder={selectedCategory ? "Select or enter service type" : "Select a category first"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -213,21 +209,17 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
                 name="serviceProvider"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        allowCustomValue
-                      >
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      allowCustomValue
+                    >
+                      <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select or enter provider" />
                         </SelectTrigger>
                         <SelectContent>
-                          {[...customProviders].map((provider) => (
-                            <SelectItem key={provider} value={provider}>
-                              {provider}
-                            </SelectItem>
-                          ))}
+                          {/*No changes needed here as it already allows custom values */}
                         </SelectContent>
                       </Select>
                     </FormControl>
