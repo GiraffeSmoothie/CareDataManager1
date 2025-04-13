@@ -161,9 +161,13 @@ export default function MasterData() {
                           <Input
                             value={field.value}
                             onChange={(e) => {
-                              field.onChange(e.target.value);
-                              setSelectedCategory(e.target.value);
+                              const value = e.target.value;
+                              field.onChange(value);
+                              if (value) {
+                                setSelectedCategory(value);
+                              }
                             }}
+                            onClick={(e) => e.stopPropagation()}
                             placeholder="Or enter custom category"
                             className="flex-1"
                           />

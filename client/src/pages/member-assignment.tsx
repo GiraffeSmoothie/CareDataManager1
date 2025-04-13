@@ -75,6 +75,11 @@ export default function MemberAssignment() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  const { data: masterDataList = [] } = useQuery({
+    queryKey: ["/api/master-data"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
   useEffect(() => {
     if (providers) {
       setServiceProviders(providers);
