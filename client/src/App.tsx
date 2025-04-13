@@ -10,6 +10,7 @@ import Dashboard from "@/pages/dashboard";
 import MemberAssignment from "@/pages/member-assignment";
 import CaseNotes from "@/pages/case-notes";
 import DocumentUpload from "@/pages/document-upload";
+import ManageClient from "@/pages/manage-client";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
