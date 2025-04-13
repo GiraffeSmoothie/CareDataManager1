@@ -87,6 +87,8 @@ export default function DocumentUpload() {
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
     form.setValue("memberId", member.id.toString());
+    // Ensure search results are hidden
+    setFilteredMembers([]);
   };
 
   // Document upload mutation
@@ -121,8 +123,12 @@ export default function DocumentUpload() {
         fileInput.value = "";
       }
 
+      // Refresh documents list
       if (selectedMember) {
-        queryClient.invalidateQueries({ queryKey: ["/api/documents/member", selectedMember.id] });
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/documents/member", selectedMember.id],
+          exact: true 
+        });
       }
     },
     onError: (error: Error) => {
