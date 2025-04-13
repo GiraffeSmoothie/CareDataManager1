@@ -1,0 +1,13 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\.config\\npm",
+    "\\.config\\npm\\node_global",
+    "\\.config\\npm\\node_global\\lib",
+    "\\client",
+    "\\client\\src",
+    "\\server"
+  ],
+  "SelectedNode": "\\server\\index.ts",
+  "PreviewInSolutionExplorer": false
+}
