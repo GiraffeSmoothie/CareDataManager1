@@ -39,7 +39,22 @@ export default function MemberAssignment() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [activeTab, setActiveTab] = useState("assign");
+  const [activeTab, setActiveTab] = useState("view");
+
+  // Get URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const memberId = params.get("memberId");
+    const memberName = params.get("name");
+    
+    if (memberId && memberName) {
+      setSearchTerm(decodeURIComponent(memberName));
+      const member = members.find(m => m.id === parseInt(memberId));
+      if (member) {
+        handleSelectMember(member);
+      }
+    }
+  }, [members]);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -351,6 +366,7 @@ export default function MemberAssignment() {
                         <TableHead>Start Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Hours</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -363,6 +379,42 @@ export default function MemberAssignment() {
                             <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
                             <TableCell>{service.serviceDays}</TableCell>
                             <TableCell>{service.serviceHours}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={service.status || 'Planned'}
+                                onValueChange={async (value) => {
+                                  try {
+                                    await apiRequest("PATCH", `/api/member-assignment/${service.id}`, {
+                                      status: value
+                                    });
+                                    
+                                    queryClient.invalidateQueries({ 
+                                      queryKey: ["/api/member-assignment", selectedMember?.id]
+                                    });
+                                    
+                                    toast({
+                                      title: "Success",
+                                      description: "Service status updated",
+                                    });
+                                  } catch (error) {
+                                    toast({
+                                      title: "Error",
+                                      description: "Failed to update status",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-[130px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Planned">Planned</SelectItem>
+                                  <SelectItem value="In Progress">In Progress</SelectItem>
+                                  <SelectItem value="Closed">Closed</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
                           </TableRow>
                         ))
                       ) : (

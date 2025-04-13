@@ -228,7 +228,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Member Assignment route with file upload
+  // Update member assignment status
+  app.patch("/api/member-assignment/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = req.body;
+      
+      if (!status || !["Planned", "In Progress", "Closed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+      
+      await dbStorage.updateMasterDataStatus(id, status);
+      return res.status(200).json({ message: "Status updated successfully" });
+    } catch (error) {
+      console.error("Error updating assignment status:", error);
+      return res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // Member Assignment route with file upload  
   app.post("/api/member-assignment", authMiddleware, upload.single("document"), async (req: Request, res: Response) => {
     try {
       const { memberId, careCategory, careType, notes } = req.body;

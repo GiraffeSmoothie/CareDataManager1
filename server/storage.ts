@@ -15,6 +15,13 @@ const store = {
 let nextId = 1;
 
 export const storage = {
+  async updateMasterDataStatus(id: number, status: string) {
+    const result = await db.update(masterData)
+      .set({ status })
+      .where(eq(masterData.id, id))
+      .returning();
+    return result[0];
+  },
   // User operations
   async createUser(user: { username: string; password: string }): Promise<User> {
     const created = { ...user, id: nextId++ } as User;
