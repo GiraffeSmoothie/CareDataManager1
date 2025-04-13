@@ -37,7 +37,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <LayoutDashboard className="h-4 w-4" />
-                <span>Dashboard</span>
+                <span>Client Dashboard</span>
               </div>
             </Link>
             <Link href="/master-data">
@@ -48,7 +48,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Database className="h-4 w-4" />
-                <span>HCP Data</span>
+                <span>Services Master Data</span>
               </div>
             </Link>
             <Link href="/manage-client">
@@ -70,7 +70,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Link2 className="h-4 w-4" />
-                <span>Manage Services</span>
+                <span>Manage Client Services</span>
               </div>
             </Link>
             <Link href="/document-upload">
@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <FileText className="h-4 w-4" />
-                <span>Manage Documents</span>
+                <span>Manage Client Documents</span>
               </div>
             </Link>
           </div>

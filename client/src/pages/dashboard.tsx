@@ -97,15 +97,15 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="container mx-auto p-4 space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Member Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Client Dashboard</h1>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Total Members</CardTitle>
-              <CardDescription>Number of registered members</CardDescription>
+              <CardTitle className="text-lg">Total Clients</CardTitle>
+              <CardDescription>Number of registered clients</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">{personData?.length || 0}</p>
@@ -129,7 +129,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">
-                {new Set(masterData?.map(item => item.careCategory) || []).size}
+                {new Set(masterData?.map(item => item.serviceCategory) || []).size}
               </p>
             </CardContent>
           </Card>
@@ -138,8 +138,8 @@ export default function Dashboard() {
         {/* Member Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Member Details</CardTitle>
-            <CardDescription>Overview of all registered members and their care services</CardDescription>
+            <CardTitle>Client Details</CardTitle>
+            <CardDescription>Overview of all registered clients and their care services</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -149,8 +149,8 @@ export default function Dashboard() {
                   <TableHead>Name</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Date of Birth</TableHead>
-                  <TableHead>Care Category</TableHead>
-                  <TableHead>Care Type</TableHead>
+                  <TableHead>Service Category</TableHead>
+                  <TableHead>Service Type</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -174,8 +174,8 @@ export default function Dashboard() {
                         </div>
                       </TableCell>
                       <TableCell>{new Date(member.dateOfBirth).toLocaleDateString()}</TableCell>
-                      <TableCell>{member.careDetails?.careCategory || 'Not assigned'}</TableCell>
-                      <TableCell>{member.careDetails?.careType || 'Not assigned'}</TableCell>
+                      <TableCell>{member.careDetails?.serviceCategory || 'Not assigned'}</TableCell>
+                      <TableCell>{member.careDetails?.serviceType || 'Not assigned'}</TableCell>
                       <TableCell>
                         {member.careDetails?.active ? (
                           <Badge variant="default" className="bg-green-100 text-green-800">Active</Badge>
@@ -188,7 +188,7 @@ export default function Dashboard() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No member data available yet. Add members through the Add Client page.
+                      No client data available yet. Add clients through the Add Client page.
                     </TableCell>
                   </TableRow>
                 )}

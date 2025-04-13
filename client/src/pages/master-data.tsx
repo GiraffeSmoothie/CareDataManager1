@@ -68,7 +68,7 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
   // Handle category change
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    form.setValue("type", "");
+    form.setValue("serviceType", "");
   };
 
   // Save mutation
@@ -85,9 +85,9 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
       });
       // Reset form
       form.reset({
-        category: "",
-        type: "",
-        provider: "",
+        serviceCategory: "",
+        serviceType: "",
+        serviceProvider: "",
         active: true,
       });
       setSelectedCategory(null);
@@ -109,9 +109,9 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
 
   const handleReset = () => {
     form.reset({
-      category: "",
-      type: "",
-      provider: "",
+      serviceCategory: "",
+      serviceType: "",
+      serviceProvider: "",
       active: true,
     });
     setSelectedCategory(null);
@@ -288,7 +288,7 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
       {isLoading ? (
         <div className="text-center py-4">Loading data...</div>
       ) : masterDataList.length === 0 ? (
-        <div className="text-center py-4">No HCP data found. Add some data using the Add tab.</div>
+        <div className="text-center py-4">No Services master data found. Add some data using the Add tab.</div>
       ) : (
         <div className="border rounded-md">
           <table className="min-w-full divide-y divide-gray-200">
@@ -303,8 +303,8 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
             <tbody className="bg-white divide-y divide-gray-200">
               {masterDataList.map((item) => (
                 <tr key={item.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.careCategory}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.careType}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceCategory}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceType}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <Switch
@@ -330,7 +330,7 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
   return (
     <DashboardLayout>
       <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">HCP Data Entry</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Services Master Data Entry</h1>
         <p className="text-sm text-muted-foreground">Manage home care package categories, types, and providers in the system</p>
       </div>
 

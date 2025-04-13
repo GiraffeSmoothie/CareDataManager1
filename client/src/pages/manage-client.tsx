@@ -61,23 +61,20 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     }, {
       message: "Please enter a valid date",
     }),
-  email: z.string()
-    .email({ message: "Please enter a valid email address" }),
-  mobilePhone: z.string()
-    .min(10, { message: "Mobile phone must be at least 10 digits" }),
-  postCode: z.string()
-    .min(5, { message: "Post code is required" }),
+  email: z.string().optional(),
+  mobilePhone: z.string().optional(),
+  postCode: z.string().optional(),   
   hcpEndDate: z.string().optional(),
-  nextOfKinEmail: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal('')),
+  nextOfKinEmail: z.string().email().optional(),
   status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), // Added status field
-  title: z.string().min(1, {message: "Title is required"}), // Added required validation
-  firstName: z.string().min(1, {message: "First Name is required"}), // Added required validation
-  lastName: z.string().min(1, {message: "Last Name is required"}), // Added required validation
-  dateOfBirth: z.string().min(1, {message: "Date of Birth is required"}), // Added required validation
-  email: z.string().min(1, {message: "Email is required"}), // Added required validation
-  mobilePhone: z.string().min(10, {message: "Mobile Phone is required"}), // Added required validation
-  nextOfKinName: z.string().min(1, {message: "Next of Kin Name is required"}), // Added required validation
-  nextOfKinAddress: z.string().min(1, {message: "Next of Kin Address is required"}), // Added required validation
+  title: z.string().optional(), // Added required validation
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  email: z.string().optional(),
+  mobilePhone: z.string().optional(),
+  nextOfKinName: z.string().optional(),
+  nextOfKinAddress: z.string().optional(),
 
 });
 
