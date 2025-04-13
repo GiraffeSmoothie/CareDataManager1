@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useLocation, Link } from "wouter";
-import { Heart, Database, Users, LayoutDashboard, Link2, BookOpen, FileText } from "lucide-react";
+import { Heart, Database, Users, LayoutDashboard, Link2, BookOpen, FileText, ChevronDown } from "lucide-react";
 import UserNav from "@/components/user-nav";
 import { cn } from "../lib/utils";
 
@@ -51,61 +51,57 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>HCP Data</span>
               </div>
             </Link>
-            <Link href="/person-info">
+            <div className="relative group">
               <div className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/person-info" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Users className="h-4 w-4" />
-                <span>Add Client</span>
-              </div>
-            </Link>
-            <Link href="/member-assignment">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/member-assignment" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Link2 className="h-4 w-4" />
-                <span>Member Assignment</span>
-              </div>
-            </Link>
-            <Link href="/case-notes">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/case-notes" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <BookOpen className="h-4 w-4" />
-                <span>Case Notes</span>
-              </div>
-            </Link>
-            <Link href="/document-upload">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/document-upload" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <FileText className="h-4 w-4" />
-                <span>Documents</span>
-              </div>
-            </Link>
-            <Link href="/manage-members">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/manage-members" 
+                ["/manage-members", "/person-info", "/member-assignment", "/case-notes", "/document-upload"].includes(location)
                   ? "border-primary text-primary" 
                   : "border-transparent text-gray-600"
               )}>
                 <Users className="h-4 w-4" />
                 <span>Manage Members</span>
+                <ChevronDown className="h-4 w-4 ml-1" />
               </div>
-            </Link>
+              
+              <div className="absolute hidden group-hover:block w-48 bg-white border rounded-md shadow-lg py-1 z-50">
+                <Link href="/person-info">
+                  <div className={cn(
+                    "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100",
+                    location === "/person-info" ? "text-primary" : "text-gray-600"
+                  )}>
+                    <Users className="h-4 w-4" />
+                    <span>Add Client</span>
+                  </div>
+                </Link>
+                <Link href="/member-assignment">
+                  <div className={cn(
+                    "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100",
+                    location === "/member-assignment" ? "text-primary" : "text-gray-600"
+                  )}>
+                    <Link2 className="h-4 w-4" />
+                    <span>Member Assignment</span>
+                  </div>
+                </Link>
+                <Link href="/case-notes">
+                  <div className={cn(
+                    "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100",
+                    location === "/case-notes" ? "text-primary" : "text-gray-600"
+                  )}>
+                    <BookOpen className="h-4 w-4" />
+                    <span>Case Notes</span>
+                  </div>
+                </Link>
+                <Link href="/document-upload">
+                  <div className={cn(
+                    "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100",
+                    location === "/document-upload" ? "text-primary" : "text-gray-600"
+                  )}>
+                    <FileText className="h-4 w-4" />
+                    <span>Documents</span>
+                  </div>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </nav>
