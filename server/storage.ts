@@ -1,94 +1,92 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
-const { Pool } = pg;
+
 import { 
-  users, personInfo, masterData, caseNotes, documents,
-  type User, type PersonInfo, type MasterData, type CaseNote, type Document, type InsertUser, type InsertMasterData, type InsertPersonInfo, type InsertCaseNote, type InsertDocument
+  type User, type PersonInfo, type MasterData, type CaseNote, type Document
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is required");
-}
+// In-memory storage
+const store = {
+  users: [] as User[],
+  personInfo: [] as PersonInfo[],
+  masterData: [] as MasterData[],
+  caseNotes: [] as CaseNote[],
+  documents: [] as Document[]
+};
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const db = drizzle(pool);
+let nextId = 1;
 
 export const storage = {
   // User operations
   async createUser(user: { username: string; password: string }): Promise<User> {
-    const [created] = await db.insert(users).values(user).returning();
+    const created = { ...user, id: nextId++ } as User;
+    store.users.push(created);
     return created;
   },
 
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return store.users.find(user => user.id === id);
   },
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return store.users.find(user => user.username === username);
   },
 
   // Person info operations
   async createPersonInfo(info: Omit<PersonInfo, "id">): Promise<PersonInfo> {
-    const [created] = await db.insert(personInfo).values(info).returning();
+    const created = { ...info, id: nextId++ } as PersonInfo;
+    store.personInfo.push(created);
     return created;
   },
 
   async getAllPersonInfo(): Promise<PersonInfo[]> {
-    return await db.select().from(personInfo);
+    return store.personInfo;
   },
 
   async getPersonInfoById(id: number): Promise<PersonInfo | undefined> {
-    const [person] = await db.select().from(personInfo).where(eq(personInfo.id, id));
-    return person;
+    return store.personInfo.find(person => person.id === id);
   },
 
   // Master data operations
   async createMasterData(data: Omit<MasterData, "id">): Promise<MasterData> {
-    const [created] = await db.insert(masterData).values(data).returning();
+    const created = { ...data, id: nextId++ } as MasterData;
+    store.masterData.push(created);
     return created;
   },
 
   async getAllMasterData(): Promise<MasterData[]> {
-    return await db.select().from(masterData);
+    return store.masterData;
   },
 
   async getMasterDataById(id: number): Promise<MasterData | undefined> {
-    const [data] = await db.select().from(masterData).where(eq(masterData.id, id));
-    return data;
+    return store.masterData.find(data => data.id === id);
   },
 
   async getMasterDataByMemberId(memberId: number): Promise<MasterData[]> {
-    return await db.select().from(masterData).where(eq(masterData.memberId, memberId));
+    return store.masterData.filter(data => data.memberId === memberId);
   },
 
   // Case notes operations
   async createCaseNote(note: Omit<CaseNote, "id" | "createdAt">): Promise<CaseNote> {
-    const [created] = await db.insert(caseNotes).values(note).returning();
+    const created = { ...note, id: nextId++, createdAt: new Date() } as CaseNote;
+    store.caseNotes.push(created);
     return created;
   },
 
   async getCaseNotesByMemberId(memberId: number): Promise<CaseNote[]> {
-    return await db.select().from(caseNotes).where(eq(caseNotes.memberId, memberId));
+    return store.caseNotes.filter(note => note.memberId === memberId);
   },
 
   // Document operations
   async createDocument(doc: Omit<Document, "id" | "uploadedAt">): Promise<Document> {
-    const [created] = await db.insert(documents).values(doc).returning();
+    const created = { ...doc, id: nextId++, uploadedAt: new Date() } as Document;
+    store.documents.push(created);
     return created;
   },
 
   async getDocumentsByMemberId(memberId: number): Promise<Document[]> {
-    return await db.select().from(documents).where(eq(documents.memberId, memberId));
+    return store.documents.filter(doc => doc.memberId === memberId);
   },
+
   async getDocumentById(id: number): Promise<Document | undefined> {
-    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
-    return doc;
+    return store.documents.find(doc => doc.id === id);
   }
 };
