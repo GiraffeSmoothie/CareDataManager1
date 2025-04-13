@@ -163,11 +163,13 @@ export default function MasterData() {
                             onChange={(e) => {
                               const value = e.target.value;
                               field.onChange(value);
-                              if (value) {
-                                setSelectedCategory(value);
-                              }
+                              setSelectedCategory(value);
                             }}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                            }}
+                            onFocus={(e) => e.stopPropagation()}
                             placeholder="Or enter custom category"
                             className="flex-1"
                           />
@@ -216,7 +218,15 @@ export default function MasterData() {
                         <FormControl>
                           <Input
                             value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value);
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                            }}
+                            onFocus={(e) => e.stopPropagation()}
                             placeholder="Or enter custom type"
                             className="flex-1"
                           />
@@ -265,7 +275,15 @@ export default function MasterData() {
                         <FormControl>
                           <Input
                             value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value);
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                            }}
+                            onFocus={(e) => e.stopPropagation()}
                             placeholder="Or enter custom provider"
                             className="flex-1"
                           />
