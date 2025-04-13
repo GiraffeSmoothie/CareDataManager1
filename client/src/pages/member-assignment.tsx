@@ -11,11 +11,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Search } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { Editor } from '@tinymce/tinymce-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const memberAssignmentSchema = z.object({
   memberId: z.string().min(1, "Please select a member"),
@@ -35,15 +37,28 @@ export default function MemberAssignment() {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [serviceTypes, setServiceTypes] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
+  const [activeTab, setActiveTab] = useState("assign");
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
+  // Fetch member services
+  const { data: memberServices = [] } = useQuery({
+    queryKey: ["/api/member-assignment", selectedMember?.id],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!selectedMember,
+  });
+
+  // Filter members based on search
+  const filteredMembers = members.filter(member => 
+    searchTerm.length >= 4 && 
+    `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // Form setup
   const form = useForm<MemberAssignmentFormValues>({
@@ -60,32 +75,17 @@ export default function MemberAssignment() {
     },
   });
 
-  // Handle search input change
-  useEffect(() => {
-    if (searchTerm.length >= 4) {
-      const filtered = members.filter(member => 
-        `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredMembers(filtered);
-      setShowDropdown(true);
-    } else {
-      setShowDropdown(false);
-    }
-  }, [searchTerm, members]);
-
   // Handle member selection
   const handleSelectMember = (member: PersonInfo) => {
     setSelectedMember(member);
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
-    setFilteredMembers([]);
     form.setValue("memberId", member.id.toString());
   };
 
   // Watch for changes in the category field
   const watchedCategory = form.watch("serviceCategory");
 
-  // Update service types when category changes
   useEffect(() => {
     if (watchedCategory) {
       setSelectedCategory(watchedCategory);
@@ -107,9 +107,7 @@ export default function MemberAssignment() {
         description: "Member assignment has been created",
       });
       form.reset();
-      setSelectedMember(null);
-      setSearchTerm("");
-      queryClient.invalidateQueries({ queryKey: ["/api/master-data"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/member-assignment", selectedMember?.id] });
     },
     onError: (error: Error) => {
       toast({
@@ -123,215 +121,252 @@ export default function MemberAssignment() {
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4">
-        <Card className="max-w-5xl mx-auto">
+        {/* Search Section */}
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Member Service Assignment</CardTitle>
-            <CardDescription>
-              Assign services to a member
-            </CardDescription>
+            <CardTitle>Search Member</CardTitle>
+            <CardDescription>Select a member to manage their service assignments</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Search Section */}
-            <div className="mb-6">
-              <div className="relative">
-                <div className="flex items-center border rounded-md">
-                  <Search className="h-4 w-4 ml-2 text-gray-500" />
-                  <Input
-                    type="text"
-                    placeholder="Search member (minimum 4 characters)"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="border-0 focus:ring-0"
-                  />
-                </div>
-
-                {showDropdown && (
-                  <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
-                    {filteredMembers.map((member) => (
-                      <div
-                        key={member.id}
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleSelectMember(member)}
-                      >
-                        {member.title} {member.firstName} {member.lastName}
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <div className="relative">
+              <div className="flex items-center border rounded-md">
+                <Search className="h-4 w-4 ml-2 text-gray-500" />
+                <Input
+                  type="text"
+                  placeholder="Search member (minimum 4 characters)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="border-0 focus:ring-0"
+                />
               </div>
+              {showDropdown && filteredMembers.length > 0 && (
+                <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
+                  {filteredMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                      onClick={() => handleSelectMember(member)}
+                    >
+                      {member.title} {member.firstName} {member.lastName}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-
-            {selectedMember && (
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(createAssignmentMutation.mutate)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="memberId"
-                    render={({ field }) => (
-                      <FormItem className="hidden">
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="serviceCategory"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Category</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {serviceCategories.map((category) => (
-                                <SelectItem key={category.value} value={category.value}>
-                                  {category.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="serviceType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Type</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value}
-                            disabled={!selectedCategory}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {serviceTypes.map((type) => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="serviceProvider"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Provider</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Enter service provider" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="serviceStartDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Start Date</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="serviceDays"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Days</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="e.g., Mon, Wed, Fri" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="serviceHours"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Service Hours</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="e.g., 9:00 AM - 5:00 PM" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="note"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Case Notes</FormLabel>
-                        <FormControl>
-                          <Editor
-                            value={field.value}
-                            onEditorChange={(content) => field.onChange(content)}
-                            init={{
-                              height: 300,
-                              menubar: false,
-                              plugins: ['advlist', 'autolink', 'lists', 'link', 'charmap', 'preview', 'searchreplace',
-                                'visualblocks', 'fullscreen', 'insertdatetime', 'table', 'code', 'help', 'wordcount'
-                              ],
-                              toolbar: 'undo redo | formatselect | bold italic | alignleft aligncenter alignright | bullist numlist outdent indent | help'
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={createAssignmentMutation.isPending}
-                  >
-                    {createAssignmentMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Assign Service
-                  </Button>
-                </form>
-              </Form>
-            )}
           </CardContent>
         </Card>
+
+        {selectedMember && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Member Service Management</CardTitle>
+              <CardDescription>
+                Managing services for {selectedMember.title} {selectedMember.firstName} {selectedMember.lastName}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="mb-4">
+                  <TabsTrigger value="assign">Assign Service</TabsTrigger>
+                  <TabsTrigger value="view">View Services</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="assign">
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(createAssignmentMutation.mutate)} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={form.control}
+                          name="serviceCategory"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Service Category</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select category" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {serviceCategories.map((category) => (
+                                    <SelectItem key={category.value} value={category.value}>
+                                      {category.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="serviceType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Service Type</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                disabled={!selectedCategory}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {serviceTypes.map((type) => (
+                                    <SelectItem key={type.value} value={type.value}>
+                                      {type.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={form.control}
+                          name="serviceProvider"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Service Provider</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="Enter service provider" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="serviceStartDate"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Start Date</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={form.control}
+                          name="serviceDays"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Service Days</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="e.g., Mon, Wed, Fri" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="serviceHours"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Service Hours</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="e.g., 9:00 AM - 5:00 PM" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="note"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Notes</FormLabel>
+                            <FormControl>
+                              <Editor
+                                value={field.value}
+                                onEditorChange={(content) => field.onChange(content)}
+                                init={{
+                                  height: 300,
+                                  menubar: false,
+                                  plugins: ['advlist', 'autolink', 'lists', 'link', 'charmap', 'preview', 'searchreplace',
+                                    'visualblocks', 'fullscreen', 'insertdatetime', 'table', 'code', 'help', 'wordcount'
+                                  ],
+                                  toolbar: 'undo redo | formatselect | bold italic | alignleft aligncenter alignright | bullist numlist outdent indent | help'
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={createAssignmentMutation.isPending}
+                      >
+                        {createAssignmentMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Assign Service
+                      </Button>
+                    </form>
+                  </Form>
+                </TabsContent>
+
+                <TabsContent value="view">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Start Date</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Hours</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {memberServices.length > 0 ? (
+                        memberServices.map((service: any) => (
+                          <TableRow key={service.id}>
+                            <TableCell>{service.serviceCategory}</TableCell>
+                            <TableCell>{service.serviceType}</TableCell>
+                            <TableCell>{service.serviceProvider}</TableCell>
+                            <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
+                            <TableCell>{service.serviceDays}</TableCell>
+                            <TableCell>{service.serviceHours}</TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-4">
+                            No services assigned yet
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );
