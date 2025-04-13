@@ -135,25 +135,13 @@ export default function MasterData() {
                 name="serviceCategory"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      allowCustomValue
-                      disabled={saveMutation.isPending}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select or enter service category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {serviceCategories.map((category) => (
-                          <SelectItem key={category.value} value={category.value}>
-                            {category.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Enter service category"
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -172,25 +160,13 @@ export default function MasterData() {
                 name="serviceType"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      allowCustomValue
-                      disabled={!selectedCategory || saveMutation.isPending}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={selectedCategory ? "Select or enter service type" : "Select a category first"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {serviceTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Enter service type"
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -209,21 +185,13 @@ export default function MasterData() {
                 name="serviceProvider"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      allowCustomValue
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select or enter provider" />
-                        </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {/*No changes needed here as it already allows custom values */}
-                        </SelectContent>
-                      </Select>
-                    
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Enter service provider"
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
