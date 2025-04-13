@@ -75,6 +75,18 @@ export default function MemberAssignment() {
     },
   });
 
+  // Effect to handle search filtering
+  useEffect(() => {
+    if (searchTerm.length >= 4) {
+      const filtered = members.filter(member => 
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  }, [searchTerm, members]);
+
   // Handle member selection
   const handleSelectMember = (member: PersonInfo) => {
     setSelectedMember(member);
