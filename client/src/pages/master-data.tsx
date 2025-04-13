@@ -29,9 +29,9 @@ import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { MasterData as MasterDataType } from "@shared/schema";
 
 const masterDataSchema = z.object({
-  careCategory: z.string({ required_error: "Please select a care category" }),
-  careType: z.string({ required_error: "Please select a care type" }),
-  serviceProvider: z.string().optional(),
+  category: z.string({ required_error: "Please select a care category" }),
+  type: z.string({ required_error: "Please select a care type" }),
+  provider: z.string().optional(),
   active: z.boolean().default(true),
 });
 
@@ -41,20 +41,20 @@ export default function MasterData() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("add");
-  
+
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading } = useQuery<MasterDataType[]>({
     queryKey: ["/api/master-data"],
     enabled: activeTab === "view", // Only fetch when View tab is active
   });
-  
+
   // Initialize form with default values
   const form = useForm<MasterDataFormValues>({
     resolver: zodResolver(masterDataSchema),
     defaultValues: {
-      careCategory: "",
-      careType: "",
-      serviceProvider: "",
+      category: "",
+      type: "",
+      provider: "",
       active: true,
     },
   });
@@ -65,7 +65,7 @@ export default function MasterData() {
   // Handle category change
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    form.setValue("careType", "");
+    form.setValue("type", "");
   };
 
   // Save mutation
@@ -82,9 +82,9 @@ export default function MasterData() {
       });
       // Reset form
       form.reset({
-        careCategory: "",
-        careType: "",
-        serviceProvider: "",
+        category: "",
+        type: "",
+        provider: "",
         active: true,
       });
       setSelectedCategory(null);
@@ -106,9 +106,9 @@ export default function MasterData() {
 
   const handleReset = () => {
     form.reset({
-      careCategory: "",
-      careType: "",
-      serviceProvider: "",
+      category: "",
+      type: "",
+      provider: "",
       active: true,
     });
     setSelectedCategory(null);
@@ -132,7 +132,7 @@ export default function MasterData() {
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="careCategory"
+                name="category"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <Select
@@ -171,7 +171,7 @@ export default function MasterData() {
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="careType"
+                name="type"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <Select
@@ -207,7 +207,7 @@ export default function MasterData() {
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="serviceProvider"
+                name="provider"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
@@ -311,19 +311,19 @@ export default function MasterData() {
         <h1 className="text-2xl font-semibold tracking-tight">HCP Data Entry</h1>
         <p className="text-sm text-muted-foreground">Manage home care package categories, types, and providers in the system</p>
       </div>
-      
+
       <Tabs defaultValue="add" value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="add">Add</TabsTrigger>
           <TabsTrigger value="view">View</TabsTrigger>
         </TabsList>
-        
+
         <Card className="bg-white shadow-sm border w-full">
           <CardContent className="p-6">
             <TabsContent value="add">
               {renderAddForm()}
             </TabsContent>
-            
+
             <TabsContent value="view">
               {renderViewTable()}
             </TabsContent>

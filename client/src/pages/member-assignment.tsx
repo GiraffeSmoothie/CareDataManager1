@@ -25,7 +25,7 @@ const memberAssignmentSchema = z.object({
   serviceStartDate: z.string().min(1, "Start date is required"),
   serviceDays: z.string().min(1, "Service days are required"),
   serviceHours: z.string().min(1, "Service hours are required"),
-  caseNotes: z.string().optional(),
+  note: z.string().optional(),
 });
 
 type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
@@ -56,7 +56,7 @@ export default function MemberAssignment() {
       serviceStartDate: "",
       serviceDays: "",
       serviceHours: "",
-      caseNotes: "",
+      note: "",
     },
   });
 
@@ -294,7 +294,7 @@ export default function MemberAssignment() {
 
                   <FormField
                     control={form.control}
-                    name="caseNotes"
+                    name="note"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Case Notes</FormLabel>
