@@ -72,10 +72,14 @@ export default function MasterData() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: MasterDataFormValues) => {
+      // Ensure non-empty values are saved
+      if (!data.serviceCategory || !data.serviceType || !data.serviceProvider) {
+        throw new Error("All fields must have values");
+      }
       const response = await apiRequest("POST", "/api/master-data", data);
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
         description: "Data saved successfully",
@@ -89,8 +93,9 @@ export default function MasterData() {
         active: true,
       });
       setSelectedCategory(null);
-      // Invalidate queries if needed
+      // Invalidate queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["/api/master-data"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-providers"] });
     },
     onError: (error) => {
       toast({
@@ -162,6 +167,7 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
+                            value={field.value}
                             onChange={(e) => {
                               const value = e.target.value;
                               field.onChange(value);
@@ -214,6 +220,7 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
+                            value={field.value}
                             onChange={(e) => field.onChange(e.target.value)}
                             placeholder="Or enter custom type"
                             className="flex-1"
@@ -262,6 +269,7 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
+                            value={field.value}
                             onChange={(e) => field.onChange(e.target.value)}
                             placeholder="Or enter custom provider"
                             className="flex-1"
