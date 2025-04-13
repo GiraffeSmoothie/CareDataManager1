@@ -166,7 +166,7 @@ export default function DocumentUpload() {
         <h1 className="text-3xl font-bold">Document Upload</h1>
 
         {/* Search Section */}
-        <Card>
+        <Card className="max-w-5xl mx-auto">
           <CardHeader>
             <CardTitle>Search Member</CardTitle>
           </CardHeader>
@@ -202,7 +202,7 @@ export default function DocumentUpload() {
 
         {/* Documents List Section */}
         {selectedMember && (
-          <Card>
+          <Card className="max-w-5xl mx-auto">
             <CardHeader>
               <CardTitle>Documents for {selectedMember.firstName} {selectedMember.lastName}</CardTitle>
             </CardHeader>
@@ -247,7 +247,7 @@ export default function DocumentUpload() {
 
         {/* Upload Section */}
         {selectedMember && (
-          <Card>
+          <Card className="max-w-5xl mx-auto">
             <CardHeader>
               <CardTitle>Upload New Document</CardTitle>
             </CardHeader>

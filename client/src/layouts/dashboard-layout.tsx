@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Users className="h-4 w-4" />
-                <span>Manage Client</span>
+                <span>Manage Client Details</span>
               </div>
             </Link>
             <Link href="/member-assignment">

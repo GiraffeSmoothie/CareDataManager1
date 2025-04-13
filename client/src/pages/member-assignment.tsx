@@ -123,7 +123,7 @@ export default function MemberAssignment() {
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4">
-        <Card className="w-full max-w-2xl mx-auto">
+        <Card className="max-w-5xl mx-auto">
           <CardHeader>
             <CardTitle>Member Service Assignment</CardTitle>
             <CardDescription>
