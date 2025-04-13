@@ -29,9 +29,12 @@ import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { MasterData as MasterDataType } from "@shared/schema";
 
 const masterDataSchema = z.object({
-  category: z.string({ required_error: "Please select a care category" }),
-  type: z.string({ required_error: "Please select a care type" }),
-  provider: z.string().optional(),
+  serviceCategory: z.string({ required_error: "Please select a service category" }),
+  serviceType: z.string({ required_error: "Please select a service type" }),
+  serviceProvider: z.string().optional(),
+  serviceStartDate: z.string({ required_error: "Please select start date" }),
+  serviceDays: z.string({ required_error: "Please enter service days" }),
+  serviceHours: z.string({ required_error: "Please enter service hours" }),
   active: z.boolean().default(true),
 });
 
@@ -52,9 +55,12 @@ export default function MasterData() {
   const form = useForm<MasterDataFormValues>({
     resolver: zodResolver(masterDataSchema),
     defaultValues: {
-      category: "",
-      type: "",
-      provider: "",
+      serviceCategory: "",
+      serviceType: "",
+      serviceProvider: "",
+      serviceStartDate: "",
+      serviceDays: "",
+      serviceHours: "",
       active: true,
     },
   });
@@ -199,7 +205,7 @@ export default function MasterData() {
             </div>
           </div>
 
-          {/* Care Provider */}
+          {/* Service Provider */}
           <div className="flex items-center gap-4">
             <div className="w-1/4">
               <h3 className="text-base font-medium">Service Provider:</h3>
@@ -207,13 +213,93 @@ export default function MasterData() {
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="provider"
+                name="serviceProvider"
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
                       <input
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder="Enter service provider name"
+                        {...field}
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Service Start Date */}
+          <div className="flex items-center gap-4">
+            <div className="w-1/4">
+              <h3 className="text-base font-medium">Start Date:</h3>
+            </div>
+            <div className="flex-1">
+              <FormField
+                control={form.control}
+                name="serviceStartDate"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl>
+                      <input
+                        type="date"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        {...field}
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Service Days */}
+          <div className="flex items-center gap-4">
+            <div className="w-1/4">
+              <h3 className="text-base font-medium">Service Days:</h3>
+            </div>
+            <div className="flex-1">
+              <FormField
+                control={form.control}
+                name="serviceDays"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl>
+                      <input
+                        type="text"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Enter service days (e.g., Mon,Wed,Fri)"
+                        {...field}
+                        disabled={saveMutation.isPending}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Service Hours */}
+          <div className="flex items-center gap-4">
+            <div className="w-1/4">
+              <h3 className="text-base font-medium">Service Hours:</h3>
+            </div>
+            <div className="flex-1">
+              <FormField
+                control={form.control}
+                name="serviceHours"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl>
+                      <input
+                        type="text"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Enter service hours (e.g., 9:00-17:00)"
                         {...field}
                         disabled={saveMutation.isPending}
                       />
