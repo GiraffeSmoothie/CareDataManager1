@@ -143,25 +143,28 @@ export default function MasterData() {
                           value={field.value}
                         >
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select service category" />
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select category" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {masterDataList
-                            .filter(item => item.serviceCategory)
-                            .map((item) => (
-                              <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
-                                {item.serviceCategory}
-                              </SelectItem>
-                            ))}
+                              .filter(item => item.serviceCategory)
+                              .map((item) => (
+                                <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
+                                  {item.serviceCategory}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          value={field.value}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          placeholder="Or enter custom category"
-                        />
+                        <FormControl>
+                          <Input
+                            value={field.value}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            placeholder="Or enter custom category"
+                            className="flex-1"
+                          />
+                        </FormControl>
                       </div>
                     </FormControl>
                     <FormMessage />
@@ -183,26 +186,35 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        allowCustomValue
-                      >
+                      <div className="flex gap-2">
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {masterDataList
+                              .filter(item => item.serviceType)
+                              .map((item) => (
+                                <SelectItem key={item.serviceType} value={item.serviceType}>
+                                  {item.serviceType}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select or enter service type" />
-                          </SelectTrigger>
+                          <Input
+                            value={field.value}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            placeholder="Or enter custom type"
+                            className="flex-1"
+                          />
                         </FormControl>
-                        <SelectContent>
-                          {masterDataList
-                            .filter(item => item.serviceType)
-                            .map((item) => (
-                              <SelectItem key={item.serviceType} value={item.serviceType}>
-                                {item.serviceType}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -223,26 +235,35 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        allowCustomValue
-                      >
+                      <div className="flex gap-2">
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select provider" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {masterDataList
+                              .filter(item => item.serviceProvider)
+                              .map((item) => (
+                                <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
+                                  {item.serviceProvider}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select or enter service provider" />
-                          </SelectTrigger>
+                          <Input
+                            value={field.value}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            placeholder="Or enter custom provider"
+                            className="flex-1"
+                          />
                         </FormControl>
-                        <SelectContent>
-                          {masterDataList
-                            .filter(item => item.serviceProvider)
-                            .map((item) => (
-                              <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
-                                {item.serviceProvider}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
