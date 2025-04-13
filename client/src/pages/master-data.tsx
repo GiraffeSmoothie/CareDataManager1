@@ -127,7 +127,7 @@ export default function MasterData() {
           {/* Care Category */}
           <div className="flex items-center gap-4">
             <div className="w-1/4">
-              <h3 className="text-base font-medium">Service Category:</h3>
+              <h3 className="text-base font-medium">Care Category:</h3>
             </div>
             <div className="flex-1">
               <FormField
@@ -145,7 +145,7 @@ export default function MasterData() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a service category" />
+                          <SelectValue placeholder="Select a category" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -166,7 +166,7 @@ export default function MasterData() {
           {/* Care Type */}
           <div className="flex items-center gap-4">
             <div className="w-1/4">
-              <h3 className="text-base font-medium">Service Type:</h3>
+              <h3 className="text-base font-medium">Care Type:</h3>
             </div>
             <div className="flex-1">
               <FormField
@@ -181,7 +181,7 @@ export default function MasterData() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={selectedCategory ? "Select a service type" : "Select a category first"} />
+                          <SelectValue placeholder={selectedCategory ? "Select a care type" : "Select a category first"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -202,7 +202,7 @@ export default function MasterData() {
           {/* Care Provider */}
           <div className="flex items-center gap-4">
             <div className="w-1/4">
-              <h3 className="text-base font-medium">Service Provider:</h3>
+              <h3 className="text-base font-medium">Care Provider:</h3>
             </div>
             <div className="flex-1">
               <FormField
@@ -213,7 +213,7 @@ export default function MasterData() {
                     <FormControl>
                       <input
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        placeholder="Enter service provider name"
+                        placeholder="Enter care provider name"
                         {...field}
                         disabled={saveMutation.isPending}
                       />
@@ -279,9 +279,9 @@ export default function MasterData() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Category</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Provider</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Category</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Type</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Care Provider</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
