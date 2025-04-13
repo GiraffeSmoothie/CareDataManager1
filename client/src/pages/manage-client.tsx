@@ -69,6 +69,16 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     .min(5, { message: "Post code is required" }),
   hcpEndDate: z.string().optional(),
   nextOfKinEmail: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal('')),
+  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), // Added status field
+  title: z.string().min(1, {message: "Title is required"}), // Added required validation
+  firstName: z.string().min(1, {message: "First Name is required"}), // Added required validation
+  lastName: z.string().min(1, {message: "Last Name is required"}), // Added required validation
+  dateOfBirth: z.string().min(1, {message: "Date of Birth is required"}), // Added required validation
+  email: z.string().min(1, {message: "Email is required"}), // Added required validation
+  mobilePhone: z.string().min(10, {message: "Mobile Phone is required"}), // Added required validation
+  nextOfKinName: z.string().min(1, {message: "Next of Kin Name is required"}), // Added required validation
+  nextOfKinAddress: z.string().min(1, {message: "Next of Kin Address is required"}), // Added required validation
+
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
@@ -80,6 +90,7 @@ export default function ManageClient() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
+  const [buttonLabel, setButtonLabel] = useState("Add client"); // Added state for button label
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -113,6 +124,7 @@ export default function ManageClient() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpEndDate: "",
+      status: "Created", // Added status field to default values
     },
   });
 
@@ -127,6 +139,7 @@ export default function ManageClient() {
     setSelectedMember(member);
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
+    setButtonLabel("Update client"); // Change button label on member selection
 
     // Populate form with member data
     Object.entries(member).forEach(([key, value]) => {
@@ -194,6 +207,7 @@ export default function ManageClient() {
   };
 
   const hcpLevels = ["1", "2", "3", "4"];
+  const statusOptions = ["Created", "Active", "Paused", "Closed"];
 
   return (
     <DashboardLayout>
@@ -399,6 +413,33 @@ export default function ManageClient() {
                         )}
                       />
                     </div>
+                    <FormField
+                        control={form.control}
+                        name="status"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Status</FormLabel>
+                            <Select 
+                              onValueChange={field.onChange} 
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select Status" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {statusOptions.map((status) => (
+                                  <SelectItem key={status} value={status}>
+                                    {status}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                   </TabsContent>
 
                   {/* Address Tab */}
@@ -702,7 +743,7 @@ export default function ManageClient() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         <span>Processing...</span>
                       </div>
-                    ) : "Update Client"}
+                    ) : buttonLabel} {/* Use buttonLabel state */}
                   </Button>
                 </div>
               </form>

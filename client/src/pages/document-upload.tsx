@@ -163,10 +163,11 @@ export default function DocumentUpload() {
   return (
     <DashboardLayout>
       <div className="container mx-auto py-6 space-y-6">
-        <h1 className="text-3xl font-bold">Document Upload</h1>
-
         {/* Search Section */}
         <Card className="max-w-5xl mx-auto">
+          <CardHeader>
+            <CardTitle className="text-3xl">Document Upload</CardTitle>
+          </CardHeader>
           <CardHeader>
             <CardTitle>Search Member</CardTitle>
           </CardHeader>
