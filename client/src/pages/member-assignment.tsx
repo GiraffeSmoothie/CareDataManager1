@@ -39,34 +39,7 @@ export default function MemberAssignment() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [activeTab, setActiveTab] = useState("view");
-  
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const memberId = params.get('memberId');
-    const memberName = params.get('name');
-    
-    if (memberId && memberName) {
-      setSearchTerm(decodeURIComponent(memberName));
-      const member = members.find(m => m.id.toString() === memberId);
-      if (member) {
-        handleSelectMember(member);
-      }
-    }
-  }, [members]);
-
-  const handleStatusChange = async (serviceId: number, newStatus: string) => {
-    try {
-      await apiRequest("PATCH", `/api/member-assignment/${serviceId}`, { status: newStatus });
-      queryClient.invalidateQueries({ queryKey: ["/api/member-assignment", selectedMember?.id] });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update service status",
-        variant: "destructive",
-      });
-    }
-  };
+  const [activeTab, setActiveTab] = useState("assign");
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -175,7 +148,6 @@ export default function MemberAssignment() {
                   placeholder="Search member (minimum 4 characters)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                   className="border-0 focus:ring-0"
                 />
               </div>
@@ -379,7 +351,6 @@ export default function MemberAssignment() {
                         <TableHead>Start Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Hours</TableHead>
-                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -392,21 +363,6 @@ export default function MemberAssignment() {
                             <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
                             <TableCell>{service.serviceDays}</TableCell>
                             <TableCell>{service.serviceHours}</TableCell>
-                            <TableCell>
-                              <Select 
-                                value={service.status || 'Planned'}
-                                onValueChange={(value) => handleStatusChange(service.id, value)}
-                              >
-                                <SelectTrigger className="w-[130px]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Planned">Planned</SelectItem>
-                                  <SelectItem value="In Progress">In Progress</SelectItem>
-                                  <SelectItem value="Closed">Closed</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
                           </TableRow>
                         ))
                       ) : (

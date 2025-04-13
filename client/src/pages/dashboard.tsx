@@ -157,13 +157,7 @@ export default function Dashboard() {
               <TableBody>
                 {combinedData.length > 0 ? (
                   combinedData.map((member) => (
-                    <TableRow 
-                      key={member.id} 
-                      className="cursor-pointer hover:bg-gray-50"
-                      onClick={() => {
-                        window.location.href = `/member-assignment?memberId=${member.id}&name=${encodeURIComponent(`${member.firstName} ${member.lastName}`)}`;
-                      }}
-                    >
+                    <TableRow key={member.id}>
                       <TableCell className="font-medium">
                         {member.title} {member.firstName} {member.lastName}
                       </TableCell>

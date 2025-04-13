@@ -17,7 +17,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Input
 } from "@/components/ui/select";
 import {
   Tabs,
@@ -136,23 +135,30 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="serviceCategory"
+                name="category"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <FormControl>
-                      <Input
-                        list="serviceCategories"
-                        {...field}
-                        placeholder="Enter or select category"
-                      />
-                      <datalist id="serviceCategories">
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        handleCategoryChange(value);
+                      }}
+                      value={field.value}
+                      disabled={saveMutation.isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a service category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
                         {serviceCategories.map((category) => (
-                          <option key={category.value} value={category.value}>
+                          <SelectItem key={category.value} value={category.value}>
                             {category.label}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </datalist>
-                    </FormControl>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -168,23 +174,27 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
             <div className="flex-1">
               <FormField
                 control={form.control}
-                name="serviceType"
+                name="type"
                 render={({ field }) => (
                   <FormItem className="w-full">
-                    <FormControl>
-                      <Input
-                        list="serviceTypes"
-                        {...field}
-                        placeholder="Enter or select type"
-                      />
-                      <datalist id="serviceTypes">
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={!selectedCategory || saveMutation.isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={selectedCategory ? "Select a service type" : "Select a category first"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
                         {serviceTypes.map((type) => (
-                          <option key={type.value} value={type.value}>
+                          <SelectItem key={type.value} value={type.value}>
                             {type.label}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </datalist>
-                    </FormControl>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -204,7 +214,22 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Input {...field} placeholder="Enter provider" />
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        allowCustomValue
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select or enter provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...customProviders].map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {provider}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
