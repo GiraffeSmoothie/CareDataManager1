@@ -69,19 +69,17 @@ export default function MemberAssignment() {
     enabled: !!selectedMember,
   });
 
-  // Fetch service providers (replace with your actual API call)
+  // Fetch service providers
+  const { data: providers = [] } = useQuery({
+    queryKey: ["/api/service-providers"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
   useEffect(() => {
-    const fetchProviders = async () => {
-      try {
-        const response = await apiRequest("GET", "/api/service-providers"); // Replace with your API endpoint
-        const data = await response.json();
-        setServiceProviders(data);
-      } catch (error) {
-        console.error("Error fetching service providers:", error);
-      }
-    };
-    fetchProviders();
-  }, []);
+    if (providers) {
+      setServiceProviders(providers);
+    }
+  }, [providers]);
 
 
   // Filter members based on search
@@ -213,7 +211,13 @@ export default function MemberAssignment() {
 
                 <TabsContent value="assign">
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(createAssignmentMutation.mutate)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit((data) => {
+                      if (!selectedMember) return;
+                      createAssignmentMutation.mutate({
+                        ...data,
+                        memberId: selectedMember.id.toString()
+                      });
+                    })} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField
                           control={form.control}

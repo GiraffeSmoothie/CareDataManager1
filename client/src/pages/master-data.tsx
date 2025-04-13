@@ -137,24 +137,30 @@ export default function MasterData() {
                 render={({ field }) => (
                   <FormItem className="w-full">
                     <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        allowCustomValue
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select or enter service category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {masterDataList.map((item) => (
-                            <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
-                              {item.serviceCategory}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select service category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {masterDataList.map((item) => (
+                              <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
+                                {item.serviceCategory}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={field.value}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          placeholder="Or enter custom category"
+                        />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
