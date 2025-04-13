@@ -307,14 +307,7 @@ const [customProviders, setCustomProviders] = useState<string[]>([]);
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceType}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <Switch
-                      checked={item.active}
-                      onCheckedChange={(checked) => {
-                        const updatedItem = { ...item, active: checked };
-                        saveMutation.mutate(updatedItem);
-                      }}
-                    />
-                    <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {item.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>

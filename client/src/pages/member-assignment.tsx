@@ -49,12 +49,14 @@ export default function MemberAssignment() {
     
     if (memberId && memberName) {
       setSearchTerm(decodeURIComponent(memberName));
-      const member = members.find(m => m.id === parseInt(memberId));
-      if (member) {
-        handleSelectMember(member);
+      if (members && members.length > 0) {
+        const member = members.find(m => m.id === parseInt(memberId));
+        if (member) {
+          handleSelectMember(member);
+        }
       }
     }
-  }, [members]);
+  }, [members, handleSelectMember]);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
