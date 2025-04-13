@@ -218,11 +218,12 @@ export default function MasterData() {
                         <SelectTrigger>
                           <SelectValue placeholder="Select or enter provider" />
                         </SelectTrigger>
+                        </FormControl>
                         <SelectContent>
                           {/*No changes needed here as it already allows custom values */}
                         </SelectContent>
                       </Select>
-                    </FormControl>
+                    
                     <FormMessage />
                   </FormItem>
                 )}
