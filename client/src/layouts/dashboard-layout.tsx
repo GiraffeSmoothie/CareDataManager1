@@ -51,17 +51,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>HCP Data</span>
               </div>
             </Link>
-            <Link href="/person-info">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/person-info" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Users className="h-4 w-4" />
-                <span>Add Client</span>
-              </div>
-            </Link>
             <Link href="/manage-client">
               <div className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
@@ -82,17 +71,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               )}>
                 <Link2 className="h-4 w-4" />
                 <span>Member Assignment</span>
-              </div>
-            </Link>
-            <Link href="/case-notes">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/case-notes" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <BookOpen className="h-4 w-4" />
-                <span>Case Notes</span>
               </div>
             </Link>
             <Link href="/document-upload">
