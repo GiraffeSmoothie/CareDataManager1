@@ -1,34 +1,41 @@
+
 import { z } from "zod";
 
 export const serviceCategories = [
-  { value: "personal-care", label: "Personal Care" },
-  { value: "domestic-assistance", label: "Domestic Assistance" },
+  { value: "personal_care", label: "Personal Care" },
+  { value: "domestic_assistance", label: "Domestic Assistance" },
+  { value: "social_support", label: "Social Support" },
   { value: "nursing", label: "Nursing" },
-  { value: "allied-health", label: "Allied Health" },
-] as const;
+  { value: "allied_health", label: "Allied Health" }
+];
 
-export const serviceTypes = {
-  "personal-care": [
+const serviceTypes = {
+  personal_care: [
     { value: "showering", label: "Showering" },
     { value: "dressing", label: "Dressing" },
-    { value: "mobility", label: "Mobility" },
+    { value: "grooming", label: "Grooming" }
   ],
-  "domestic-assistance": [
+  domestic_assistance: [
     { value: "cleaning", label: "Cleaning" },
     { value: "laundry", label: "Laundry" },
-    { value: "meal-prep", label: "Meal Preparation" },
+    { value: "meal_prep", label: "Meal Preparation" }
   ],
-  "nursing": [
+  social_support: [
+    { value: "companionship", label: "Companionship" },
+    { value: "transport", label: "Transport" },
+    { value: "shopping", label: "Shopping" }
+  ],
+  nursing: [
     { value: "medication", label: "Medication Management" },
-    { value: "wound-care", label: "Wound Care" },
-    { value: "health-monitoring", label: "Health Monitoring" },
+    { value: "wound_care", label: "Wound Care" },
+    { value: "health_monitoring", label: "Health Monitoring" }
   ],
-  "allied-health": [
+  allied_health: [
     { value: "physiotherapy", label: "Physiotherapy" },
-    { value: "occupational-therapy", label: "Occupational Therapy" },
-    { value: "podiatry", label: "Podiatry" },
-  ],
-} as const;
+    { value: "occupational_therapy", label: "Occupational Therapy" },
+    { value: "podiatry", label: "Podiatry" }
+  ]
+};
 
 export const getServiceTypesByCategory = (category: string) => {
   return serviceTypes[category as keyof typeof serviceTypes] || [];

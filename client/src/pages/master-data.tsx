@@ -25,7 +25,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import DashboardLayout from "@/layouts/dashboard-layout";
-import { careCategories, getCareTypesByCategory } from "@/lib/data";
+import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { MasterData as MasterDataType } from "@shared/schema";
 
 const masterDataSchema = z.object({
@@ -60,7 +60,7 @@ export default function MasterData() {
   });
 
   // Get care types based on selected category
-  const careTypes = selectedCategory ? getCareTypesByCategory(selectedCategory) : [];
+  const serviceTypes = selectedCategory ? getServiceTypesByCategory(selectedCategory) : [];
 
   // Handle category change
   const handleCategoryChange = (value: string) => {
@@ -149,7 +149,7 @@ export default function MasterData() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {careCategories.map((category) => (
+                        {serviceCategories.map((category) => (
                           <SelectItem key={category.value} value={category.value}>
                             {category.label}
                           </SelectItem>
@@ -185,7 +185,7 @@ export default function MasterData() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {careTypes.map((type) => (
+                        {serviceTypes.map((type) => (
                           <SelectItem key={type.value} value={type.value}>
                             {type.label}
                           </SelectItem>
