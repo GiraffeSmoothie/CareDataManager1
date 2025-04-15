@@ -29,6 +29,48 @@ const memberAssignmentSchema = z.object({
   note: z.string().optional(),
 });
 
+const staticCategories = [
+  { value: "personal_care", label: "Personal Care" },
+  { value: "domestic_assistance", label: "Domestic Assistance" },
+  { value: "social_support", label: "Social Support" },
+  { value: "nursing", label: "Nursing" },
+  { value: "allied_health", label: "Allied Health" }
+];
+const staticServiceTypes = {
+  personal_care: [
+    { value: "showering", label: "Showering" },
+    { value: "dressing", label: "Dressing" },
+    { value: "grooming", label: "Grooming" }
+  ],
+  domestic_assistance: [
+    { value: "cleaning", label: "Cleaning" },
+    { value: "laundry", label: "Laundry" },
+    { value: "meal_prep", label: "Meal Preparation" }
+  ],
+  social_support: [
+    { value: "companionship", label: "Companionship" },
+    { value: "transport", label: "Transport" },
+    { value: "shopping", label: "Shopping" }
+  ],
+  nursing: [
+    { value: "medication", label: "Medication Management" },
+    { value: "wound_care", label: "Wound Care" },
+    { value: "health_monitoring", label: "Health Monitoring" }
+  ],
+  allied_health: [
+    { value: "physiotherapy", label: "Physiotherapy" },
+    { value: "occupational_therapy", label: "Occupational Therapy" },
+    { value: "podiatry", label: "Podiatry" }
+  ]
+};
+
+const staticServiceProviders = [
+  { value: "Darren_handyman", label: "Handyman" },
+  { value: "Steve_electrician", label: "Electrician" },
+  { value: "Matt_plumber", label: "Plumber" }
+  ];
+
+
 type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
 
 export default function MemberAssignment() {
@@ -80,11 +122,11 @@ export default function MemberAssignment() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  useEffect(() => {
-    if (providers) {
-      setServiceProviders(providers);
-    }
-  }, [providers]);
+//  useEffect(() => {
+//    if (providers) {
+//      setServiceProviders(providers);
+//    }
+//  }, [providers]);
 
 
   // Filter members based on search
@@ -224,6 +266,7 @@ export default function MemberAssignment() {
                       });
                     })} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        // In the service category dropdown
                         <FormField
                           control={form.control}
                           name="serviceCategory"
@@ -237,16 +280,11 @@ export default function MemberAssignment() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {Array.from(new Set([
-                                    ...masterDataList.map(item => item.serviceCategory),
-                                    ...JSON.parse(localStorage.getItem('serviceCategories') || '[]')
-                                  ]))
-                                    .filter(Boolean)
-                                    .map((category) => (
-                                      <SelectItem key={category} value={category}>
-                                        {category}
-                                      </SelectItem>
-                                    ))}
+                                  {staticCategories.map((category) => (
+                                    <SelectItem key={category.value} value={category.value}>
+                                      {category.label}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -254,24 +292,21 @@ export default function MemberAssignment() {
                           )}
                         />
 
+                        
                         <FormField
                           control={form.control}
                           name="serviceType"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Service Type</FormLabel>
-                              <Select
-                                onValueChange={field.onChange}
-                                value={field.value}
-                                disabled={!selectedCategory}
-                              >
+                              <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}>
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue placeholder="Select type" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {serviceTypes.map((type) => (
+                                  {staticServiceTypes[selectedCategory]?.map((type) => (
                                     <SelectItem key={type.value} value={type.value}>
                                       {type.label}
                                     </SelectItem>
@@ -282,6 +317,7 @@ export default function MemberAssignment() {
                             </FormItem>
                           )}
                         />
+
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -298,9 +334,9 @@ export default function MemberAssignment() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {serviceProviders.map((provider) => (
-                                    <SelectItem key={provider} value={provider}>
-                                      {provider}
+                                  {staticServiceProviders.map((Provider) => (
+                                    <SelectItem key={provider.value} value={provider.value}>
+                                      {provider.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
