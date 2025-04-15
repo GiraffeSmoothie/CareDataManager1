@@ -173,11 +173,14 @@ export default function MasterData() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {masterDataList
-                              .filter(item => item.serviceCategory)
-                              .map((item) => (
-                                <SelectItem key={item.serviceCategory} value={item.serviceCategory}>
-                                  {item.serviceCategory}
+                            {Array.from(new Set([
+                              ...masterDataList.map(item => item.serviceCategory),
+                              ...JSON.parse(localStorage.getItem('serviceCategories') || '[]')
+                            ]))
+                              .filter(Boolean)
+                              .map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category}
                                 </SelectItem>
                               ))}
                           </SelectContent>
@@ -225,11 +228,14 @@ export default function MasterData() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {masterDataList
-                              .filter(item => item.serviceType)
-                              .map((item) => (
-                                <SelectItem key={item.serviceType} value={item.serviceType}>
-                                  {item.serviceType}
+                            {Array.from(new Set([
+                              ...masterDataList.map(item => item.serviceType),
+                              ...JSON.parse(localStorage.getItem('serviceTypes') || '[]')
+                            ]))
+                              .filter(Boolean)
+                              .map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
                                 </SelectItem>
                               ))}
                           </SelectContent>
@@ -273,11 +279,14 @@ export default function MasterData() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {masterDataList
-                              .filter(item => item.serviceProvider)
-                              .map((item) => (
-                                <SelectItem key={item.serviceProvider} value={item.serviceProvider}>
-                                  {item.serviceProvider}
+                            {Array.from(new Set([
+                              ...masterDataList.map(item => item.serviceProvider),
+                              ...JSON.parse(localStorage.getItem('serviceProviders') || '[]')
+                            ]))
+                              .filter(Boolean)
+                              .map((provider) => (
+                                <SelectItem key={provider} value={provider}>
+                                  {provider}
                                 </SelectItem>
                               ))}
                           </SelectContent>
