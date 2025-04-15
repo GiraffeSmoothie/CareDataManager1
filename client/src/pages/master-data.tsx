@@ -574,7 +574,7 @@ export default function MasterData() {
             </TabsContent>
           </CardContent>
         </Card>
-      </Tabs>
+      </div>
     </DashboardLayout>
   );
 }
