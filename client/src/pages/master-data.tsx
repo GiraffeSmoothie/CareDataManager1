@@ -352,11 +352,49 @@ export default function MasterData() {
   );
 
   // Render table for the View tab
-  const renderViewTable = () => (
+  const [showEditModal, setShowEditModal] = useState(false);
+const [editingItem, setEditingItem] = useState(null);
+
+const handleEdit = (item) => {
+  setEditingItem(item);
+  setShowEditModal(true);
+};
+
+const handleSave = async (updatedItem) => {
+  try {
+    // Update localStorage
+    const storedData = JSON.parse(localStorage.getItem('masterData') || '[]');
+    const updatedData = storedData.map(item => 
+      item.id === updatedItem.id ? updatedItem : item
+    );
+    localStorage.setItem('masterData', JSON.stringify(updatedData));
+    
+    // Update categories, types and providers
+    const uniqueCategories = Array.from(new Set(updatedData.map(item => item.serviceCategory))).filter(Boolean);
+    const uniqueTypes = Array.from(new Set(updatedData.map(item => item.serviceType))).filter(Boolean);
+    const uniqueProviders = Array.from(new Set(updatedData.map(item => item.serviceProvider))).filter(Boolean);
+    
+    localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
+    localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
+    localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
+
+    setShowEditModal(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/master-data"] });
+  } catch (error) {
+    console.error('Error updating data:', error);
+  }
+};
+
+const renderViewTable = () => {
+  // Combine data from API and localStorage
+  const storedData = JSON.parse(localStorage.getItem('masterData') || '[]');
+  const combinedData = [...masterDataList, ...storedData];
+
+  return (
     <div className="space-y-4">
       {isLoading ? (
         <div className="text-center py-4">Loading data...</div>
-      ) : masterDataList.length === 0 ? (
+      ) : combinedData.length === 0 ? (
         <div className="text-center py-4">No Services master data found. Add some data using the Add tab.</div>
       ) : (
         <div className="border rounded-md">

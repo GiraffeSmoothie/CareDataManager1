@@ -182,7 +182,18 @@ export default function MemberAssignment() {
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: MemberAssignmentFormValues) => {
-      const response = await apiRequest("POST", "/api/member-assignment", data);
+      if (!selectedMember?.id) {
+        throw new Error("Please select a member first");
+      }
+      const payload = {
+        ...data,
+        memberId: selectedMember.id.toString()
+      };
+      const response = await apiRequest("POST", "/api/member-assignment", payload);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create assignment");
+      }
       return await response.json();
     },
     onSuccess: () => {
