@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Upload, FileText, ArrowDown, Search, Plus } from "lucide-react";
-import { useState } from "react";
+//import { useState } from "react";
 import type { Document, PersonInfo } from "@shared/schema";
 
 // Document types
