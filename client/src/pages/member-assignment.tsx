@@ -360,7 +360,7 @@ export default function MemberAssignment() {
                         name="note"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Notes</FormLabel>
+                            <FormLabel>Case Notes</FormLabel>
                             <FormControl>
                               <Editor
                                 value={field.value}
@@ -417,6 +417,18 @@ export default function MemberAssignment() {
                             <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
                             <TableCell>{service.serviceDays}</TableCell>
                             <TableCell>{service.serviceHours}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  // Navigate to case notes page with service ID
+                                  window.location.href = `/case-notes?serviceId=${service.id}`;
+                                }}
+                              >
+                                Add Case Notes
+                              </Button>
+                            </TableCell>
                             <TableCell>
                               <Select
                                 value={service.status || 'Planned'}

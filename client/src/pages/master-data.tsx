@@ -72,14 +72,20 @@ export default function MasterData() {
   // Save mutation
   // Local storage handling
   useEffect(() => {
+    // Clear existing localStorage data
+    localStorage.removeItem('serviceCategories');
+    localStorage.removeItem('serviceTypes');
+    localStorage.removeItem('serviceProviders');
+    localStorage.removeItem('masterData');
+    
     if (masterDataList.length > 0) {
-      const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory)));
-      const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType)));
+      const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory))).filter(Boolean);
+      const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType))).filter(Boolean);
       const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider).filter(Boolean)));
       
-      localStorage.setItem('serviceCategories', JSON.stringify([...uniqueCategories]));
-      localStorage.setItem('serviceTypes', JSON.stringify([...uniqueTypes]));
-      localStorage.setItem('serviceProviders', JSON.stringify([...uniqueProviders]));
+      localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
+      localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
+      localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
       localStorage.setItem('masterData', JSON.stringify(masterDataList));
     }
   }, [masterDataList]);
@@ -363,6 +369,7 @@ export default function MasterData() {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Provider</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -378,6 +385,23 @@ export default function MasterData() {
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {item.active ? 'Active' : 'Inactive'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setActiveTab("add");
+                        form.reset({
+                          serviceCategory: item.serviceCategory,
+                          serviceType: item.serviceType,
+                          serviceProvider: item.serviceProvider || "",
+                          active: item.active
+                        });
+                      }}
+                    >
+                      Edit
+                    </Button>
                   </td>
                 </tr>
               ))}
