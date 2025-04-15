@@ -72,19 +72,15 @@ export default function MasterData() {
   // Save mutation
   // Local storage handling
   useEffect(() => {
-    const savedCategories = JSON.parse(localStorage.getItem('serviceCategories') || '[]');
-    const savedTypes = JSON.parse(localStorage.getItem('serviceTypes') || '[]');
-    const savedProviders = JSON.parse(localStorage.getItem('serviceProviders') || '[]');
-    const savedMasterData = JSON.parse(localStorage.getItem('masterData') || '[]');
-    
     if (masterDataList.length > 0) {
       const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory)));
       const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType)));
-      const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider)));
+      const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider).filter(Boolean)));
       
-      localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
-      localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
-      localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
+      localStorage.setItem('serviceCategories', JSON.stringify([...uniqueCategories]));
+      localStorage.setItem('serviceTypes', JSON.stringify([...uniqueTypes]));
+      localStorage.setItem('serviceProviders', JSON.stringify([...uniqueProviders]));
+      localStorage.setItem('masterData', JSON.stringify(masterDataList));
     }
   }, [masterDataList]);
 

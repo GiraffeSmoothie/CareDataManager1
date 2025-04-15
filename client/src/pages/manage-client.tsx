@@ -65,7 +65,7 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   mobilePhone: z.string().optional(),
   postCode: z.string().optional(),   
   hcpEndDate: z.string().optional(),
-  nextOfKinEmail: z.string().email().optional(),
+  nextOfKinEmail: z.string().email().optional().or(z.literal("")),
   status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), // Added status field
   title: z.string().optional(), // Added required validation
   firstName: z.string().optional(),
