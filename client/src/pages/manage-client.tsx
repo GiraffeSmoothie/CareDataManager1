@@ -7,8 +7,7 @@ import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import DashboardLayout from "../layouts/dashboard-layout";
 import { useToast } from "../hooks/use-toast";
-import { Loader2, CalendarIcon, Search } from "lucide-react";
-import { format } from "date-fns";
+import { Loader2, CalendarIcon, Search, Plus } from "lucide-react";
 
 import {
   Form,
@@ -48,6 +47,13 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { cn } from "../lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
@@ -66,8 +72,8 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   postCode: z.string().optional(),   
   hcpEndDate: z.string().optional(),
   nextOfKinEmail: z.string().email().optional().or(z.literal("")),
-  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), // Added status field
-  title: z.string().optional(), // Added required validation
+  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), 
+  title: z.string().optional(), 
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   dateOfBirth: z.string().optional(),
@@ -87,7 +93,9 @@ export default function ManageClient() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [buttonLabel, setButtonLabel] = useState("Add client"); // Added state for button label
+  const [showDialog, setShowDialog] = useState(false);
+  const [buttonLabel, setButtonLabel] = useState("Add client");
+  const [isEditing, setIsEditing] = useState(false);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -121,29 +129,38 @@ export default function ManageClient() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpEndDate: "",
-      status: "Created", // Added status field to default values
+      status: "Created", 
     },
   });
 
-  // Filter members based on search term
-  const filteredMembers = members.filter(member => 
-    searchTerm.length >= 3 && 
-    `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter clients based on search term
+  const filteredClients = members.filter(client => 
+    searchTerm.length === 0 || 
+    `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Handle member selection
-  const handleSelectMember = (member: PersonInfo) => {
-    setSelectedMember(member);
-    setSearchTerm(`${member.firstName} ${member.lastName}`);
-    setShowDropdown(false);
-    setButtonLabel("Update client"); // Change button label on member selection
+  // Handle edit client
+  const handleEdit = (client: PersonInfo) => {
+    setSelectedMember(client);
+    setIsEditing(true);
+    setButtonLabel("Update client");
+    setShowDialog(true);
 
-    // Populate form with member data
-    Object.entries(member).forEach(([key, value]) => {
+    // Populate form with client data
+    Object.entries(client).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'createdBy') {
         form.setValue(key as any, value || "");
       }
     });
+  };
+
+  // Handle add new
+  const handleAddNew = () => {
+    setSelectedMember(null);
+    setIsEditing(false);
+    setButtonLabel("Add client");
+    setShowDialog(true);
+    form.reset();
   };
 
   // When useHomeAddress changes, update mailing address fields
@@ -189,6 +206,7 @@ export default function ManageClient() {
         title: "Success",
         description: "Client information updated successfully",
       });
+      setShowDialog(false);
     },
     onError: (error: any) => {
       toast({
@@ -211,52 +229,61 @@ export default function ManageClient() {
       <div className="container py-6">
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Search Client</CardTitle>
-            <CardDescription>
-              Search for an existing client to manage their information
-            </CardDescription>
+            <div className="flex justify-between items-center">
+              <CardTitle>Client Management</CardTitle>
+              <div className="flex gap-2">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search clients..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Button onClick={handleAddNew}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="relative">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search by client name..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setShowDropdown(true);
-                  }}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  className="pl-9"
-                />
-              </div>
-              {showDropdown && filteredMembers.length > 0 && (
-                <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
-                  {filteredMembers.map((member) => (
-                    <div
-                      key={member.id}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => handleSelectMember(member)}
-                    >
-                      {member.title} {member.firstName} {member.lastName}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredClients.map((client) => (
+                  <TableRow key={client.id}>
+                    <TableCell>{client.title} {client.firstName} {client.lastName}</TableCell>
+                    <TableCell>{client.email}</TableCell>
+                    <TableCell>{client.mobilePhone}</TableCell>
+                    <TableCell>{client.status}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(client)}>
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
-        <Card className="max-w-5xl mx-auto">
-          <CardHeader>
-            <CardTitle>Manage Client Details</CardTitle>
-            <CardDescription>
-              Update the client's details using the tabs below
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>{isEditing ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+            </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)}>
                 <Tabs defaultValue="personal" className="w-full">
@@ -267,7 +294,6 @@ export default function ManageClient() {
                     <TabsTrigger value="hcp">HCP Information</TabsTrigger>
                   </TabsList>
 
-                  {/* Personal Details Tab */}
                   <TabsContent value="personal" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
@@ -440,9 +466,7 @@ export default function ManageClient() {
                       />
                   </TabsContent>
 
-                  {/* Address Tab */}
                   <TabsContent value="address" className="space-y-6">
-                    {/* Home Address */}
                     <div>
                       <h3 className="text-lg font-medium mb-4">Home Address</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -501,7 +525,6 @@ export default function ManageClient() {
                       </div>
                     </div>
 
-                    {/* Mailing Address */}
                     <div className="pt-4 border-t">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium">Mailing Address</h3>
@@ -596,7 +619,6 @@ export default function ManageClient() {
                     </div>
                   </TabsContent>
 
-                  {/* Next of Kin Tab */}
                   <TabsContent value="nextOfKin" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -654,7 +676,6 @@ export default function ManageClient() {
                     </div>
                   </TabsContent>
 
-                  {/* HCP Information Tab */}
                   <TabsContent value="hcp" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -741,13 +762,13 @@ export default function ManageClient() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         <span>Processing...</span>
                       </div>
-                    ) : buttonLabel} {/* Use buttonLabel state */}
+                    ) : buttonLabel}
                   </Button>
                 </div>
               </form>
             </Form>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

@@ -41,7 +41,9 @@ type MasterDataFormValues = z.infer<typeof masterDataSchema>;
 export default function MasterData() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("view");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingData, setEditingData] = useState<MasterDataType | null>(null);
 
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading } = useQuery<MasterDataType[]>({
@@ -412,12 +414,150 @@ export default function MasterData() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Services Master Data Entry</h1>
-        <p className="text-sm text-muted-foreground">Manage home care package categories, types, and providers in the system</p>
-      </div>
+      <div className="container py-6">
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Services Master Data</CardTitle>
+              <div className="flex gap-2">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search services..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Button onClick={() => {
+                  setEditingData(null);
+                  setShowDialog(true);
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Service Category</TableHead>
+                  <TableHead>Service Type</TableHead>
+                  <TableHead>Service Provider</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {masterDataList
+                  .filter(item => 
+                    searchTerm === "" || 
+                    item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    item.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    item.serviceProvider?.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.serviceCategory}</TableCell>
+                      <TableCell>{item.serviceType}</TableCell>
+                      <TableCell>{item.serviceProvider || '-'}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {item.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingData(item);
+                            setShowDialog(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-      <Tabs defaultValue="view" value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingData ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="serviceCategory"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Category</FormLabel>
+                        <Input {...field} placeholder="Enter service category" />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="serviceType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Type</FormLabel>
+                        <Input {...field} placeholder="Enter service type" />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="serviceProvider"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Provider</FormLabel>
+                        <Input {...field} placeholder="Enter service provider" />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Active</FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full">
+                  {editingData ? 'Update' : 'Add'} Service
+                </Button>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
         <TabsList className="mb-4">
           <TabsTrigger value="view">View</TabsTrigger>
           <TabsTrigger value="add">Add</TabsTrigger>

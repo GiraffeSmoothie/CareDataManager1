@@ -163,13 +163,21 @@ export default function DocumentUpload() {
   return (
     <DashboardLayout>
       <div className="container mx-auto py-6 space-y-6 text-base font-sans">
-        {/* Search Section */}
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
-            <CardTitle className="text-3xl">Document Upload</CardTitle>
-          </CardHeader>
-          <CardHeader>
-            <CardTitle>Search Client</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Document Management</CardTitle>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowDropdown(true)}>
+                  <Search className="h-4 w-4 mr-2" />
+                  Search Client
+                </Button>
+                <Button onClick={() => setShowUploadForm(!showUploadForm)} disabled={!selectedMember}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div ref={searchRef} className="relative">
