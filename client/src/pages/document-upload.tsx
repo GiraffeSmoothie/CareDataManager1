@@ -263,11 +263,8 @@ export default function DocumentUpload() {
             <DialogHeader>
               <DialogTitle>Upload New Document</DialogTitle>
             </DialogHeader>
-                <CardHeader>
-                  <CardTitle>Upload New Document</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Form {...form}>
+            <div className="mt-4">
+              <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <FormField
                         control={form.control}
@@ -354,12 +351,10 @@ export default function DocumentUpload() {
                       </Button>
                     </form>
                   </Form>
-                </CardContent>
-              </Card>
+              </div>
             </DialogContent>
           </Dialog>
-        )}
-      </div>
+        </div>
     </DashboardLayout>
   );
 }
