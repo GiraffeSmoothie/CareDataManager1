@@ -447,6 +447,8 @@ const renderViewTable = () => {
       )}
     </div>
   );
+  
+  return (
     <DashboardLayout>
       <div className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Services Master Data Entry</h1>
