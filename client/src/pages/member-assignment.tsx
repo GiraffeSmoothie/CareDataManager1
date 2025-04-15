@@ -208,8 +208,16 @@ export default function MemberAssignment() {
         {/* Search Section */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Search Client</CardTitle>
-            <CardDescription>Select a Client to manage their service assignments</CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Client Services Management</CardTitle>
+                <CardDescription>Select a Client to manage their service assignments</CardDescription>
+              </div>
+              <Button onClick={() => setShowDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add New
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="relative">

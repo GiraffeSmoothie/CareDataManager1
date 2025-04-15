@@ -44,6 +44,7 @@ export default function MasterData() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [editingData, setEditingData] = useState<MasterDataType | null>(null);
+  const [activeTab, setActiveTab] = useState("view");
 
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading } = useQuery<MasterDataType[]>({

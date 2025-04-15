@@ -13,7 +13,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Upload, FileText, ArrowDown, Search } from "lucide-react";
+import { Loader2, Upload, FileText, ArrowDown, Search, Plus } from "lucide-react";
+import { useState } from "react";
 import type { Document, PersonInfo } from "@shared/schema";
 
 // Document types
@@ -45,6 +46,7 @@ export default function DocumentUpload() {
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Handle click outside search dropdown
