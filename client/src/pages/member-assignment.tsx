@@ -38,7 +38,7 @@ export default function MemberAssignment() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [activeTab, setActiveTab] = useState("view");
+  const [activeTab, setActiveTab] = useState("view"); // Changed default tab to "view"
   const [serviceProviders, setServiceProviders] = useState<string[]>([]); // Added state for service providers
 
   // Fetch all members
@@ -210,8 +210,8 @@ export default function MemberAssignment() {
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="mb-4">
-                  <TabsTrigger value="assign">Assign Service</TabsTrigger>
-                  <TabsTrigger value="view">View Services</TabsTrigger>
+                  <TabsTrigger value="view">View Services</TabsTrigger> {/* Moved View to first position */}
+                  <TabsTrigger value="assign">Assign Service</TabsTrigger> {/* Moved Assign to second position */}
                 </TabsList>
 
                 <TabsContent value="assign">

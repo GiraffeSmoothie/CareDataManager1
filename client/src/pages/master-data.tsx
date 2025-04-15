@@ -41,7 +41,7 @@ type MasterDataFormValues = z.infer<typeof masterDataSchema>;
 export default function MasterData() {
   const { toast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("add");
+  const [activeTab, setActiveTab] = useState("view");
 
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading } = useQuery<MasterDataType[]>({
@@ -70,9 +70,31 @@ export default function MasterData() {
   };
 
   // Save mutation
+  // Local storage handling
+  useEffect(() => {
+    const savedCategories = JSON.parse(localStorage.getItem('serviceCategories') || '[]');
+    const savedTypes = JSON.parse(localStorage.getItem('serviceTypes') || '[]');
+    const savedProviders = JSON.parse(localStorage.getItem('serviceProviders') || '[]');
+    const savedMasterData = JSON.parse(localStorage.getItem('masterData') || '[]');
+    
+    if (masterDataList.length > 0) {
+      const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory)));
+      const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType)));
+      const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider)));
+      
+      localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
+      localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
+      localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
+    }
+  }, [masterDataList]);
+
   const saveMutation = useMutation({
     mutationFn: async (data: MasterDataFormValues) => {
       const response = await apiRequest("POST", "/api/master-data", data);
+      // Save to local storage
+      const savedMasterData = JSON.parse(localStorage.getItem('masterData') || '[]');
+      savedMasterData.push(data);
+      localStorage.setItem('masterData', JSON.stringify(savedMasterData));
       return await response.json();
     },
     onSuccess: () => {
@@ -365,10 +387,10 @@ export default function MasterData() {
         <p className="text-sm text-muted-foreground">Manage home care package categories, types, and providers in the system</p>
       </div>
 
-      <Tabs defaultValue="add" value={activeTab} onValueChange={handleTabChange} className="w-full">
+      <Tabs defaultValue="view" value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="mb-4">
-          <TabsTrigger value="add">Add</TabsTrigger>
           <TabsTrigger value="view">View</TabsTrigger>
+          <TabsTrigger value="add">Add</TabsTrigger>
         </TabsList>
 
         <Card className="bg-white shadow-sm border w-full">
