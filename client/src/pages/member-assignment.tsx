@@ -182,18 +182,7 @@ export default function MemberAssignment() {
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: MemberAssignmentFormValues) => {
-      if (!selectedMember?.id) {
-        throw new Error("Please select a member first");
-      }
-      const payload = {
-        ...data,
-        memberId: selectedMember.id.toString()
-      };
-      const response = await apiRequest("POST", "/api/member-assignment", payload);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create assignment");
-      }
+      const response = await apiRequest("POST", "/api/member-assignment", data);
       return await response.json();
     },
     onSuccess: () => {
@@ -277,7 +266,7 @@ export default function MemberAssignment() {
                       });
                     })} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        
+                        // In the service category dropdown
                         <FormField
                           control={form.control}
                           name="serviceCategory"
