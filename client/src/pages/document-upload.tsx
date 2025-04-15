@@ -9,6 +9,7 @@ import DashboardLayout from "@/layouts/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -46,7 +47,7 @@ export default function DocumentUpload() {
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Handle click outside search dropdown
@@ -174,7 +175,7 @@ export default function DocumentUpload() {
                   <Search className="h-4 w-4 mr-2" />
                   Search Client
                 </Button>
-                <Button onClick={() => setShowUploadForm(!showUploadForm)} disabled={!selectedMember}>
+                <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
                 </Button>
@@ -256,11 +257,12 @@ export default function DocumentUpload() {
           </Card>
         )}
 
-        {/* Upload Section */}
-        {showUploadForm && (
-          <Dialog open>
-            <DialogContent>
-              <Card className="max-w-5xl mx-auto">
+        {/* Upload Dialog */}
+        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Upload New Document</DialogTitle>
+            </DialogHeader>
                 <CardHeader>
                   <CardTitle>Upload New Document</CardTitle>
                 </CardHeader>

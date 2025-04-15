@@ -563,22 +563,24 @@ export default function MasterData() {
             </Form>
           </DialogContent>
         </Dialog>
-        <TabsList className="mb-4">
-          <TabsTrigger value="view">View</TabsTrigger>
-          <TabsTrigger value="add">Add</TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="view">
+          <TabsList className="mb-4">
+            <TabsTrigger value="view">View</TabsTrigger>
+            <TabsTrigger value="add">Add</TabsTrigger>
+          </TabsList>
 
-        <Card className="bg-white shadow-sm border w-full">
-          <CardContent className="p-6">
-            <TabsContent value="add">
-              {renderAddForm()}
-            </TabsContent>
+          <Card className="bg-white shadow-sm border w-full">
+            <CardContent className="p-6">
+              <TabsContent value="add">
+                {renderAddForm()}
+              </TabsContent>
 
-            <TabsContent value="view">
-              {renderViewTable()}
-            </TabsContent>
-          </CardContent>
-        </Card>
+              <TabsContent value="view">
+                {renderViewTable()}
+              </TabsContent>
+            </CardContent>
+          </Card>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

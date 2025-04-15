@@ -215,7 +215,7 @@ export default function MemberAssignment() {
               </div>
               <Button onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add New
+                Add New Service
               </Button>
             </div>
           </CardHeader>
@@ -258,13 +258,81 @@ export default function MemberAssignment() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="mb-4">
-                  <TabsTrigger value="view">View Services</TabsTrigger> {/* Moved View to first position */}
-                  <TabsTrigger value="assign">Assign Service</TabsTrigger> {/* Moved Assign to second position */}
-                </TabsList>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead>Days</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {memberServices.length > 0 ? (
+                    memberServices.map((service: any) => (
+                      <TableRow key={service.id}>
+                        <TableCell>{service.serviceCategory}</TableCell>
+                        <TableCell>{service.serviceType}</TableCell>
+                        <TableCell>{service.serviceProvider}</TableCell>
+                        <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
+                        <TableCell>{service.serviceDays}</TableCell>
+                        <TableCell>{service.serviceHours}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={service.status || 'Planned'}
+                            onValueChange={async (value) => {
+                              try {
+                                await apiRequest("PATCH", `/api/member-assignment/${service.id}`, {
+                                  status: value
+                                });
 
-                <TabsContent value="assign">
+                                queryClient.invalidateQueries({ 
+                                  queryKey: ["/api/member-assignment", selectedMember?.id]
+                                });
+
+                                toast({
+                                  title: "Success",
+                                  description: "Service status updated",
+                                });
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to update status",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-[130px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Planned">Planned</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Closed">Closed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-4">
+                        No services assigned yet
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+
+              <Dialog open={showDialog} onOpenChange={setShowDialog}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Assign New Service</DialogTitle>
+                  </DialogHeader>
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit((data) => {
                       if (!selectedMember) return;
@@ -435,10 +503,8 @@ export default function MemberAssignment() {
                       </Button>
                     </form>
                   </Form>
-                </TabsContent>
-
-                <TabsContent value="view">
-                  <Table>
+                </DialogContent>
+              </Dialog>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Category</TableHead>
