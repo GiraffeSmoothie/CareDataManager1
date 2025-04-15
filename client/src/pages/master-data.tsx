@@ -72,21 +72,19 @@ export default function MasterData() {
   // Save mutation
   // Local storage handling
   useEffect(() => {
-    // Clear existing localStorage data
-    localStorage.removeItem('serviceCategories');
-    localStorage.removeItem('serviceTypes');
-    localStorage.removeItem('serviceProviders');
-    localStorage.removeItem('masterData');
-    
-    if (masterDataList.length > 0) {
-      const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory))).filter(Boolean);
-      const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType))).filter(Boolean);
-      const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider).filter(Boolean)));
-      
-      localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
-      localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
-      localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
-      localStorage.setItem('masterData', JSON.stringify(masterDataList));
+    try {
+      if (masterDataList && masterDataList.length > 0) {
+        const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory))).filter(Boolean);
+        const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType))).filter(Boolean);
+        const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider))).filter(Boolean);
+        
+        localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
+        localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
+        localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
+        localStorage.setItem('masterData', JSON.stringify(masterDataList));
+      }
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
     }
   }, [masterDataList]);
 

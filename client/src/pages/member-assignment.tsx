@@ -334,7 +334,7 @@ export default function MemberAssignment() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {staticServiceProviders.map((Provider) => (
+                                  {staticServiceProviders.map((provider) => (
                                     <SelectItem key={provider.value} value={provider.value}>
                                       {provider.label}
                                     </SelectItem>
