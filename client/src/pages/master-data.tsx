@@ -370,8 +370,11 @@ export default function MasterData() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {masterDataList.map((item) => (
-                <tr key={item.id}>
+              {[
+                ...masterDataList,
+                ...JSON.parse(localStorage.getItem('masterData') || '[]')
+              ].map((item, index) => (
+                <tr key={item.id || `local-${index}`}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceCategory}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceType}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>

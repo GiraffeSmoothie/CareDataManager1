@@ -237,8 +237,11 @@ export default function MemberAssignment() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {Array.from(new Set(masterDataList.map(item => item.serviceCategory)))
-                                    .filter(category => category)
+                                  {Array.from(new Set([
+                                    ...masterDataList.map(item => item.serviceCategory),
+                                    ...JSON.parse(localStorage.getItem('serviceCategories') || '[]')
+                                  ]))
+                                    .filter(Boolean)
                                     .map((category) => (
                                       <SelectItem key={category} value={category}>
                                         {category}

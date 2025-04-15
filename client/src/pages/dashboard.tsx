@@ -147,10 +147,11 @@ export default function Dashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Date of Birth</TableHead>
                   <TableHead>Service Category</TableHead>
                   <TableHead>Service Type</TableHead>
+                  <TableHead>Service Provider</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>Days & Hours</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -167,15 +168,16 @@ export default function Dashboard() {
                       <TableCell className="font-medium">
                         {member.title} {member.firstName} {member.lastName}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{member.email}</span>
-                          <span className="text-muted-foreground">{member.mobilePhone}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{new Date(member.dateOfBirth).toLocaleDateString()}</TableCell>
                       <TableCell>{member.careDetails?.serviceCategory || 'Not assigned'}</TableCell>
                       <TableCell>{member.careDetails?.serviceType || 'Not assigned'}</TableCell>
+                      <TableCell>{member.careDetails?.serviceProvider || 'Not assigned'}</TableCell>
+                      <TableCell>{member.careDetails?.serviceStartDate ? new Date(member.careDetails.serviceStartDate).toLocaleDateString() : 'Not set'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{member.careDetails?.serviceDays || 'Not set'}</span>
+                          <span className="text-muted-foreground">{member.careDetails?.serviceHours || 'Not set'}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {member.careDetails?.active ? (
                           <Badge variant="default" className="bg-green-100 text-green-800">Active</Badge>
