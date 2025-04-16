@@ -18,6 +18,8 @@ import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Editor } from '@tinymce/tinymce-react';
 
+import { getServiceTypesByCategory } from "@/lib/data";  // Add this line
+
 const memberAssignmentSchema = z.object({
   memberId: z.string().min(1, "Please select a member"),
   serviceCategory: z.string().min(1, "Service category is required"),
