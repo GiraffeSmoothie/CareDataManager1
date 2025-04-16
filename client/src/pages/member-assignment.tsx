@@ -22,13 +22,13 @@ import { getServiceTypesByCategory } from "@/lib/data";  // Add this line
 
 const memberAssignmentSchema = z.object({
   memberId: z.string().min(1, "Please select a member"),
-  serviceCategory: z.string().min(1, "Service category is required"),
-  serviceType: z.string().min(1, "Service type is required"),
+  careCategory: z.string().min(1, "Service category is required"),
+  careType: z.string().min(1, "Service type is required"),
   serviceProvider: z.string().min(1, "Service provider is required"),
   serviceStartDate: z.string().min(1, "Start date is required"),
   serviceDays: z.string().min(1, "Service days are required"),
   serviceHours: z.string().min(1, "Service hours are required"),
-  note: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const staticCategories = [
@@ -331,7 +331,7 @@ export default function MemberAssignment() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
-                    name="serviceCategory"
+                    name="careCategory"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Category</FormLabel>
@@ -356,7 +356,7 @@ export default function MemberAssignment() {
 
                   <FormField
                     control={form.control}
-                    name="serviceType"
+                    name="careType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Type</FormLabel>
