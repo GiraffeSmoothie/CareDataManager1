@@ -29,6 +29,8 @@ async function initializeUsers() {
       password: hashPassword("password"),
     });
     console.log("Default admin user created");
+
+    console.log(process.env.NODE_ENV);
   }
 }
 
