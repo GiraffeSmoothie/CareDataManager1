@@ -9,6 +9,9 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import pgSession from "connect-pg-simple"; // You need to install this
+import pg from "pg"; // Use Pool for connection pooling
+const { Pool } = pg; // Destructure Pool from the default export
 
 declare module "express-session" {
   interface SessionData {
@@ -37,10 +40,21 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+const PgStore = pgSession(session);
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize session store
+  const pgStore = new PgStore({
+    pool: pool,
+    tableName: 'user_sessions',
+  });
+
   // Initialize session
   app.use(
     session({
+      store: pgStore,
       secret: process.env.SESSION_SECRET || "care-system-secret",
       resave: false,
       saveUninitialized: false,
@@ -58,23 +72,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
-      
+
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password are required" });
       }
-      
+
       const user = await dbStorage.getUserByUsername(username);
-      
+
       if (!user || user.password !== hashPassword(password)) {
         return res.status(401).json({ message: "Invalid username or password" });
       }
-      
+
       // Set session
       req.session.user = {
         id: user.id,
         username: user.username,
       };
-      
+
       return res.status(200).json({ message: "Login successful" });
     } catch (error) {
       console.error("Login error:", error);
