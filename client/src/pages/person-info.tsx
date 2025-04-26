@@ -101,8 +101,7 @@ export default function PersonInfo() {
       nextOfKinEmail: "",
       nextOfKinPhone: "",
       hcpLevel: "",
-      hcpEndDate: "",
-      status: "Created",
+      hcpEndDate: ""
     },
   });
 
