@@ -13,6 +13,7 @@ import pgSession from "connect-pg-simple"; // You need to install this
 import pg from "pg"; // Use Pool for connection pooling
 const { Pool } = pg; // Destructure Pool from the default export
 
+
 declare module "express-session" {
   interface SessionData {
     user: {
