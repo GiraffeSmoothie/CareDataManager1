@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   password TEXT NOT NULL
 );
 
-/*
+
 -- Create user_sessions table for session store
 CREATE TABLE IF NOT EXISTS user_sessions (
   sid varchar NOT NULL COLLATE "default",
@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   expire timestamp(6) NOT NULL,
   CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
 );
-*/
 
+/*
 CREATE TABLE IF NOT EXISTS user_sessions (
     session_id varchar NOT NULL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE	
 );
 CREATE INDEX "IDX_user_sessions_expire" ON "user_sessions" ("expire");
+*/
 
 -- Create person_info table
 CREATE TABLE IF NOT EXISTS person_info (
