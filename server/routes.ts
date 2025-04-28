@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cookie: {
         secure: process.env.NODE_ENV === "production",
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      },
+      }
     })
   );
 
@@ -91,7 +91,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username: user.username,
       };
 
-      return res.status(200).json({ message: "Login successful" });
+      const result = await dbStorage.createUserSession({
+        sid: req.sessionID,
+        user_id: user.id,
+        sess: req.session,
+        expire: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+
+      if (!result) {
+        return res.status(500).json({ message: "Failed to create user session" });
+      } else {
+        return res.status(200).json({ message: "Login successful" });
+      }
+      
     } catch (error) {
       console.error("Login error:", error);
       return res.status(500).json({ message: "Internal server error" });
@@ -464,3 +478,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
+

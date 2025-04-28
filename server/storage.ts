@@ -101,7 +101,9 @@ export const storage = {
 
 
 import { Pool } from 'pg';
-import { User, PersonInfo, MasterData, CaseNote, Document } from '@shared/schema';
+import { User, PersonInfo, MasterData, CaseNote, Document, UserSession } from '@shared/schema';
+import * as dotenv from 'dotenv';
+dotenv.config({ path: 'development.env' });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -117,6 +119,14 @@ export const storage = {
     const result = await pool.query(
       'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *',
       [user.username, user.password]
+    );
+    return result.rows[0];
+  },
+
+  async createUserSession(data: Omit<UserSession, 'id'>): Promise<UserSession> {
+    const result = await pool.query(
+      'INSERT INTO user_sessions (sid, user_id, sess, expire, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      Object.values(data)
     );
     return result.rows[0];
   },

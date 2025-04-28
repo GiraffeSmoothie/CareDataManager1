@@ -68,6 +68,15 @@ export const documents = pgTable("documents", {
   createdBy: integer("created_by").references(() => users.id),
 });
 
+export const userSessions = pgTable("user_sessions", {
+  sid: text("sid").primaryKey(),
+  user_id: integer("user_id").references(() => users.id).notNull(),
+  sess: jsonb("sess").notNull(),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow(),
+  expire: timestamp("expire").notNull(),
+});
+
 // User schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -101,6 +110,11 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
   filename: true, // This will be handled by the server
 });
 
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
+  created_at: true,
+  updated_at: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -115,6 +129,9 @@ export type CaseNote = typeof caseNotes.$inferSelect;
 
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
+
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
 
 // Login session type
 export interface Session {

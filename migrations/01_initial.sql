@@ -1,4 +1,3 @@
-
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -19,10 +18,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE TABLE IF NOT EXISTS user_sessions (
     session_id varchar NOT NULL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    session_data json NOT NULL,
+    sess json NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	expire timestamp(6) NOT NULL,
+    expire timestamp(6) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE	
 );
 CREATE INDEX "IDX_user_sessions_expire" ON "user_sessions" ("expire");
