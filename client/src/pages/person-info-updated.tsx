@@ -5,7 +5,7 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { insertPersonInfoSchema } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
-import DashboardLayout from "../layouts/dashboard-layout";
+import DashboardLayout from "@/layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -40,16 +40,11 @@ import { cn } from "../lib/utils";
 // Extend the schema with validation
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .refine((date) => {
-      try {
-        const parsed = new Date(date);
-        return !isNaN(parsed.getTime());
-      } catch {
-        return false;
-      }
-    }, {
-      message: "Please enter a valid date",
-    }),
+      const parsedDate = new Date(date);
+      return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
+    }, "Please enter a valid date that is not in the future"),
   email: z.string()
     .email({ message: "Please enter a valid email address" }),
   mobilePhone: z.string()

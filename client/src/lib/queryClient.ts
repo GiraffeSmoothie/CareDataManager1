@@ -2,8 +2,14 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    try {
+      const errorData = await res.json();
+      throw new Error(errorData.message || `${res.status}: ${res.statusText}`);
+    } catch (e) {
+      // If parsing JSON fails, use text or status
+      const text = await res.text() || res.statusText;
+      throw new Error(`${res.status}: ${text}`);
+    }
   }
 }
 
@@ -18,7 +24,6 @@ export async function apiRequest(
   
   if (data) {
     if (isFormData) {
-      // Don't set Content-Type for FormData, browser will set it with boundary
       body = data;
     } else {
       headers["Content-Type"] = "application/json";
@@ -26,15 +31,28 @@ export async function apiRequest(
     }
   }
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method,
     headers,
     body,
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  // Clone the response before checking status and reading body
+  const responseClone = response.clone();
+  
+  if (!response.ok) {
+    let errorMessage;
+    try {
+      const errorData = await responseClone.json();
+      errorMessage = errorData.message || response.statusText;
+    } catch (e) {
+      errorMessage = await responseClone.text() || response.statusText;
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -43,7 +61,9 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
+    const url = queryKey[0] as string;
+    
+    const res = await fetch(url, {
       credentials: "include",
     });
 

@@ -6,11 +6,10 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import MasterData from "@/pages/master-data";
 import PersonInfo from "@/pages/person-info";
-import Dashboard from "@/pages/dashboard";
 import MemberAssignment from "@/pages/member-assignment";
-import CaseNotes from "@/pages/case-notes";
 import DocumentUpload from "@/pages/document-upload";
 import ManageClient from "@/pages/manage-client";
+import Homepage from "@/pages/homepage";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -56,10 +55,10 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/">
-        <Redirect to="/dashboard" />
+        <Redirect to="/homepage" />
       </Route>
-      <Route path="/dashboard">
-        <PrivateRoute component={Dashboard} />
+      <Route path="/homepage">
+        <PrivateRoute component={Homepage} />
       </Route>
       <Route path="/master-data">
         <PrivateRoute component={MasterData} />
@@ -72,9 +71,6 @@ function Router() {
       </Route>
       <Route path="/member-assignment">
         <PrivateRoute component={MemberAssignment} />
-      </Route>
-      <Route path="/case-notes">
-        <PrivateRoute component={CaseNotes} />
       </Route>
       <Route path="/document-upload">
         <PrivateRoute component={DocumentUpload} />

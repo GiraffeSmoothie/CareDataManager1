@@ -5,7 +5,7 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { insertPersonInfoSchema } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
-import DashboardLayout from "../layouts/dashboard-layout";
+import AppLayout from "@/layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -17,6 +17,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -52,16 +53,11 @@ import { cn } from "../lib/utils";
 // Extend the schema with validation
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .refine((date) => {
-      try {
-        const parsed = new Date(date);
-        return !isNaN(parsed.getTime());
-      } catch {
-        return false;
-      }
-    }, {
-      message: "Please enter a valid date",
-    }),
+      const parsedDate = new Date(date);
+      return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
+    }, "Please enter a valid date that is not in the future"),
   email: z.string().optional(),
   mobilePhone: z.string().optional(),
   postCode: z.string().optional(),    
@@ -167,7 +163,7 @@ export default function PersonInfo() {
   const hcpLevels = ["1", "2", "3", "4"];
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container py-6">
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
@@ -276,6 +272,7 @@ export default function PersonInfo() {
                                   selected={field.value ? new Date(field.value) : undefined}
                                   onSelect={(date) => {
                                     if (date) {
+                                      // Format date as YYYY-MM-DD
                                       field.onChange(date.toISOString().split('T')[0]);
                                     }
                                   }}
@@ -284,6 +281,9 @@ export default function PersonInfo() {
                                 />
                               </PopoverContent>
                             </Popover>
+                            <FormDescription>
+                              Select your date of birth using the calendar
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -642,6 +642,6 @@ export default function PersonInfo() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

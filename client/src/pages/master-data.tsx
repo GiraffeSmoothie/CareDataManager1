@@ -29,14 +29,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import DashboardLayout from "@/layouts/dashboard-layout";
+import DashboardLayout from "@/layouts/app-layout";
 import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { MasterData as MasterDataType } from "@shared/schema";
 
 const masterDataSchema = z.object({
   serviceCategory: z.string({ required_error: "Please select a service category" }),
   serviceType: z.string({ required_error: "Please select a service type" }),
-  serviceProvider: z.string().optional(),  
+  serviceProvider: z.string({ required_error: "Please select or enter a service provider" }),
   active: z.boolean().default(true),
 });
 
@@ -50,10 +50,22 @@ export default function MasterData() {
   const [editingData, setEditingData] = useState<MasterDataType | null>(null);
   const [activeTab, setActiveTab] = useState("view");
 
+  // Populate form when editing data changes
+  useEffect(() => {
+    if (editingData) {
+      form.reset({
+        serviceCategory: editingData.serviceCategory,
+        serviceType: editingData.serviceType,
+        serviceProvider: editingData.serviceProvider || "",
+        active: editingData.active
+      });
+      setSelectedCategory(editingData.serviceCategory);
+    }
+  }, [editingData]);
+
   // Fetch all master data for the View tab
-  const { data: masterDataList = [], isLoading } = useQuery<MasterDataType[]>({
+  const { data: masterDataList = [], isLoading, refetch } = useQuery<MasterDataType[]>({
     queryKey: ["/api/master-data"],
-    enabled: activeTab === "view", // Only fetch when View tab is active
   });
 
   // Initialize form with default values
@@ -77,32 +89,22 @@ export default function MasterData() {
   };
 
   // Save mutation
-  // Local storage handling
-  useEffect(() => {
-    try {
-      if (masterDataList && masterDataList.length > 0) {
-        const uniqueCategories = Array.from(new Set(masterDataList.map(item => item.serviceCategory))).filter(Boolean);
-        const uniqueTypes = Array.from(new Set(masterDataList.map(item => item.serviceType))).filter(Boolean);
-        const uniqueProviders = Array.from(new Set(masterDataList.map(item => item.serviceProvider))).filter(Boolean);
-        
-        localStorage.setItem('serviceCategories', JSON.stringify(uniqueCategories));
-        localStorage.setItem('serviceTypes', JSON.stringify(uniqueTypes));
-        localStorage.setItem('serviceProviders', JSON.stringify(uniqueProviders));
-        localStorage.setItem('masterData', JSON.stringify(masterDataList));
-      }
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-    }
-  }, [masterDataList]);
-
   const saveMutation = useMutation({
     mutationFn: async (data: MasterDataFormValues) => {
-      const response = await apiRequest("POST", "/api/master-data", data);
-      // Save to local storage
-      const savedMasterData = JSON.parse(localStorage.getItem('masterData') || '[]');
-      savedMasterData.push(data);
-      localStorage.setItem('masterData', JSON.stringify(savedMasterData));
-      return await response.json();
+      const response = await fetch("/api/master-data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create master data");
+      }
+
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -110,28 +112,59 @@ export default function MasterData() {
         description: "Data saved successfully",
         variant: "default",
       });
-      // Reset form
-      form.reset({
-        serviceCategory: "",
-        serviceType: "",
-        serviceProvider: "",
-        active: true,
-      });
+      form.reset();
+      setShowDialog(false);
       setSelectedCategory(null);
-      // Invalidate queries if needed
-      queryClient.invalidateQueries({ queryKey: ["/api/master-data"] });
+      refetch();
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: `Failed to save data: ${error.message}`,
+        description: error instanceof Error ? error.message : "Failed to save data",
         variant: "destructive",
       });
     },
   });
 
-  const onSubmit = (data: MasterDataFormValues) => {
-    saveMutation.mutate(data);
+  const onSubmit = async (data: MasterDataFormValues) => {
+    try {
+      if (editingData) {
+        const response = await fetch(`/api/master-data/${editingData.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            serviceCategory: data.serviceCategory,
+            serviceType: data.serviceType,
+            serviceProvider: data.serviceProvider,
+            active: data.active
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to update service");
+        }
+
+        toast({
+          title: "Success",
+          description: "Service updated successfully",
+        });
+        setShowDialog(false);
+        setEditingData(null);
+        form.reset();
+        refetch();
+      } else {
+        await saveMutation.mutateAsync(data);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save service",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleReset = () => {
@@ -172,7 +205,7 @@ export default function MasterData() {
                             field.onChange(value);
                             setSelectedCategory(value);
                           }}
-                          value={field.value}
+                          value={field.value || ""}
                         >
                           <FormControl>
                             <SelectTrigger className="w-[200px]">
@@ -196,9 +229,12 @@ export default function MasterData() {
                           <Input
                             onChange={(e) => {
                               const value = e.target.value;
-                              field.onChange(value);
-                              setSelectedCategory(value);
+                              if (value) {
+                                field.onChange(value);
+                                setSelectedCategory(value);
+                              }
                             }}
+                            value={!field.value || masterDataList.some(item => item.serviceCategory === field.value) ? "" : field.value}
                             placeholder="Or enter custom category"
                             className="flex-1"
                           />
@@ -227,7 +263,7 @@ export default function MasterData() {
                       <div className="flex gap-2">
                         <Select
                           onValueChange={field.onChange}
-                          value={field.value}
+                          value={field.value || ""}
                         >
                           <FormControl>
                             <SelectTrigger className="w-[200px]">
@@ -249,7 +285,13 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
-                            onChange={(e) => field.onChange(e.target.value)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value) {
+                                field.onChange(value);
+                              }
+                            }}
+                            value={!field.value || masterDataList.some(item => item.serviceType === field.value) ? "" : field.value}
                             placeholder="Or enter custom type"
                             className="flex-1"
                           />
@@ -278,7 +320,7 @@ export default function MasterData() {
                       <div className="flex gap-2">
                         <Select
                           onValueChange={field.onChange}
-                          value={field.value}
+                          value={field.value || ""}
                         >
                           <FormControl>
                             <SelectTrigger className="w-[200px]">
@@ -300,7 +342,13 @@ export default function MasterData() {
                         </Select>
                         <FormControl>
                           <Input
-                            onChange={(e) => field.onChange(e.target.value)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value) {
+                                field.onChange(value);
+                              }
+                            }}
+                            value={!field.value || masterDataList.some(item => item.serviceProvider === field.value) ? "" : field.value}
                             placeholder="Or enter custom provider"
                             className="flex-1"
                           />
@@ -358,65 +406,6 @@ export default function MasterData() {
     </Form>
   );
 
-  // Render table for the View tab
-  const renderViewTable = () => (
-    <div className="space-y-4">
-      {isLoading ? (
-        <div className="text-center py-4">Loading data...</div>
-      ) : masterDataList.length === 0 ? (
-        <div className="text-center py-4">No Services master data found. Add some data using the Add tab.</div>
-      ) : (
-        <div className="border rounded-md">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Category</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Type</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Provider</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {[
-                ...masterDataList,
-                ...JSON.parse(localStorage.getItem('masterData') || '[]')
-              ].map((item, index) => (
-                <tr key={item.id || `local-${index}`}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceCategory}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceType}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serviceProvider || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {item.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setActiveTab("add");
-                        form.reset({
-                          serviceCategory: item.serviceCategory,
-                          serviceType: item.serviceType,
-                          serviceProvider: item.serviceProvider || "",
-                          active: item.active
-                        });
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <DashboardLayout>
       <div className="container py-6">
@@ -446,50 +435,56 @@ export default function MasterData() {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service Category</TableHead>
-                  <TableHead>Service Type</TableHead>
-                  <TableHead>Service Provider</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {masterDataList
-                  .filter(item => 
-                    searchTerm === "" || 
-                    item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    item.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    item.serviceProvider?.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.serviceCategory}</TableCell>
-                      <TableCell>{item.serviceType}</TableCell>
-                      <TableCell>{item.serviceProvider || '-'}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {item.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingData(item);
-                            setShowDialog(true);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+            {isLoading ? (
+              <div className="text-center py-4">Loading data...</div>
+            ) : masterDataList.length === 0 ? (
+              <div className="text-center py-4">No Services master data found.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service Category</TableHead>
+                    <TableHead>Service Type</TableHead>
+                    <TableHead>Service Provider</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {masterDataList
+                    .filter(item => 
+                      searchTerm === "" || 
+                      item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      item.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      item.serviceProvider?.toLowerCase().includes(searchTerm.toLowerCase())
+                    )
+                    .map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.serviceCategory}</TableCell>
+                        <TableCell>{item.serviceType}</TableCell>
+                        <TableCell>{item.serviceProvider || '-'}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {item.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingData(item);
+                              setShowDialog(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -563,11 +558,6 @@ export default function MasterData() {
             </Form>
           </DialogContent>
         </Dialog>
-        <Card className="bg-white shadow-sm border w-full">
-          <CardContent className="p-6">
-            {renderViewTable()}
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );

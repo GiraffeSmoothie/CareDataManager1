@@ -5,9 +5,9 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
-import DashboardLayout from "../layouts/dashboard-layout";
+import DashboardLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
-import { Loader2, CalendarIcon, Search, Plus } from "lucide-react";
+import { Loader2, Search, Plus } from "lucide-react";
 
 import {
   Form,
@@ -26,7 +26,6 @@ import {
   CardHeader,
   CardTitle 
 } from "../components/ui/card";
-import { Calendar } from "../components/ui/calendar";
 import {
   Popover,
   PopoverContent,
@@ -57,31 +56,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .refine((date) => {
-      try {
-        const parsed = new Date(date);
-        return !isNaN(parsed.getTime());
-      } catch {
-        return false;
-      }
-    }, {
-      message: "Please enter a valid date",
-    }),
-  email: z.string().optional(),
-  mobilePhone: z.string().optional(),
-  postCode: z.string().optional(),   
-  hcpEndDate: z.string().optional(),
-  nextOfKinEmail: z.string().email().optional().or(z.literal("")),
-  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"), 
-  title: z.string().optional(), 
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  dateOfBirth: z.string().optional(),
-  email: z.string().optional(),
-  mobilePhone: z.string().optional(),
-  nextOfKinName: z.string().optional(),
-  nextOfKinAddress: z.string().optional(),
-
+      const parsedDate = new Date(date);
+      return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
+    }, "Please enter a valid date that is not in the future"),
+  hcpEndDate: z.string().min(1, "HCP End Date is required"),
+  nextOfKinEmail: z.string().email("Invalid email address"),
+  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
+  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
+  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
+  hcpLevel: z.string().min(1, "HCP Level is required"),
+  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created")
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
@@ -197,27 +183,50 @@ export default function ManageClient() {
 
   const mutation = useMutation({
     mutationFn: async (data: PersonInfoFormValues) => {
-      const response = await apiRequest("POST", "/api/person-info", data);
-      return await response.json();
+      const requestData = {
+        ...data,
+        status: data.status || (isEditing ? selectedMember?.status : 'Created')
+      };
+
+      if (!isEditing) {
+        const response = await apiRequest("POST", "/api/person-info", requestData);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to add client');
+        }
+        return response.json();
+      } else if (selectedMember?.id) {
+        const response = await apiRequest("PUT", `/api/person-info/${selectedMember.id}`, requestData);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to update client');
+        }
+        return response.json();
+      }
+      throw new Error("Invalid operation");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
       toast({
         title: "Success",
-        description: "Client information updated successfully",
+        description: isEditing ? "Client information updated successfully" : "New client added successfully",
       });
       setShowDialog(false);
+      form.reset();
+      setSelectedMember(null);
+      setIsEditing(false);
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to update client information",
+        description: error.message || `Failed to ${isEditing ? 'update' : 'add'} client information`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: PersonInfoFormValues) => {
+    console.log("Form submitted:", data, "isEditing:", isEditing, "selectedMember:", selectedMember);
     mutation.mutate(data);
   };
 
@@ -253,7 +262,8 @@ export default function ManageClient() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>First Name</TableHead>
+                  <TableHead>Last Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Status</TableHead>
@@ -263,7 +273,8 @@ export default function ManageClient() {
               <TableBody>
                 {filteredClients.map((client) => (
                   <TableRow key={client.id}>
-                    <TableCell>{client.title} {client.firstName} {client.lastName}</TableCell>
+                    <TableCell>{client.firstName}</TableCell>
+                    <TableCell>{client.lastName}</TableCell>
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.mobilePhone}</TableCell>
                     <TableCell>{client.status}</TableCell>
@@ -357,39 +368,9 @@ export default function ManageClient() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Date of Birth</FormLabel>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                      "w-full pl-3 text-left font-normal",
-                                      !field.value && "text-muted-foreground"
-                                    )}
-                                  >
-                                    {field.value ? (
-                                      format(new Date(field.value), "PPP")
-                                    ) : (
-                                      <span>Pick a date</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                  </Button>
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value ? new Date(field.value) : undefined}
-                                  onSelect={(date) => {
-                                    if (date) {
-                                      field.onChange(date.toISOString().split('T')[0]);
-                                    }
-                                  }}
-                                  disabled={(date) => date > new Date()}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
+                            <FormControl>
+                              <Input type="date" {...field} max={new Date().toISOString().split('T')[0]} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -711,38 +692,9 @@ export default function ManageClient() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>HCP End Date</FormLabel>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                      "w-full pl-3 text-left font-normal",
-                                      !field.value && "text-muted-foreground"
-                                    )}
-                                  >
-                                    {field.value ? (
-                                      format(new Date(field.value), "PPP")
-                                    ) : (
-                                      <span>Pick a date</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                  </Button>
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value ? new Date(field.value) : undefined}
-                                  onSelect={(date) => {
-                                    if (date) {
-                                      field.onChange(date.toISOString().split('T')[0]);
-                                    }
-                                  }}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}

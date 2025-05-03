@@ -353,6 +353,61 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+interface ChartData {
+  name: string
+  value: number
+}
+
+interface ChartProps {
+  data: ChartData[]
+  className?: string
+  color?: string
+}
+
+function SimpleBarChart({
+  data,
+  className,
+  color = "#2563eb",
+}: ChartProps) {
+  return (
+    <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
+      <RechartsPrimitive.BarChart
+        data={data}
+        margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
+      >
+        <RechartsPrimitive.CartesianGrid
+          strokeDasharray="3 3"
+          className="stroke-muted"
+        />
+        <RechartsPrimitive.XAxis
+          dataKey="name"
+          tick={{ fill: "currentColor" }}
+          tickLine={{ stroke: "currentColor" }}
+          className="text-xs"
+        />
+        <RechartsPrimitive.YAxis
+          tick={{ fill: "currentColor" }}
+          tickLine={{ stroke: "currentColor" }}
+          className="text-xs"
+        />
+        <RechartsPrimitive.Tooltip
+          contentStyle={{
+            backgroundColor: "white",
+            border: "1px solid #e2e8f0",
+            borderRadius: "6px",
+            fontSize: "12px",
+          }}
+        />
+        <RechartsPrimitive.Bar
+          dataKey="value"
+          fill={color}
+          radius={[4, 4, 0, 0]}
+        />
+      </RechartsPrimitive.BarChart>
+    </RechartsPrimitive.ResponsiveContainer>
+  )
+}
+
 export {
   ChartContainer,
   ChartTooltip,
@@ -360,4 +415,5 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  SimpleBarChart,
 }

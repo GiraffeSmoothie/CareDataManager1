@@ -8,7 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -33,18 +32,31 @@ export default function Login() {
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     try {
-      await apiRequest("POST", "/api/auth/login", data);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid username or password");
+      }
+
+      const result = await response.json();
       
       toast({
         title: "Success",
         description: "Successfully logged in",
         variant: "default",
       });
-      setLocation("/dashboard");
+      setLocation("/homepage");
     } catch (error) {
       toast({
         title: "Error",
-        description: "Invalid username or password",
+        description: error instanceof Error ? error.message : "Failed to login",
         variant: "destructive",
       });
     } finally {

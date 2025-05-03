@@ -4,21 +4,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import DashboardLayout from "@/layouts/dashboard-layout";
+import DashboardLayout from "@/layouts/app-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CaseNotesDialog } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
-import { Editor } from '@tinymce/tinymce-react';
+import { Checkbox } from "@/components/ui/checkbox";
 
-import { getServiceTypesByCategory } from "@/lib/data";  // Add this line
+import { getServiceTypesByCategory } from "@/lib/data";
 
 const memberAssignmentSchema = z.object({
   memberId: z.string().min(1, "Please select a member"),
@@ -26,54 +26,32 @@ const memberAssignmentSchema = z.object({
   careType: z.string().min(1, "Service type is required"),
   serviceProvider: z.string().min(1, "Service provider is required"),
   serviceStartDate: z.string().min(1, "Start date is required"),
-  serviceDays: z.string().min(1, "Service days are required"),
-  serviceHours: z.string().min(1, "Service hours are required"),
-  notes: z.string().optional(),
+  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
+  serviceHours: z.string().min(1, "Hours per day is required")
 });
 
-const staticCategories = [
-  { value: "personal_care", label: "Personal Care" },
-  { value: "domestic_assistance", label: "Domestic Assistance" },
-  { value: "social_support", label: "Social Support" },
-  { value: "nursing", label: "Nursing" },
-  { value: "allied_health", label: "Allied Health" }
-];
-const staticServiceTypes = {
-  personal_care: [
-    { value: "showering", label: "Showering" },
-    { value: "dressing", label: "Dressing" },
-    { value: "grooming", label: "Grooming" }
-  ],
-  domestic_assistance: [
-    { value: "cleaning", label: "Cleaning" },
-    { value: "laundry", label: "Laundry" },
-    { value: "meal_prep", label: "Meal Preparation" }
-  ],
-  social_support: [
-    { value: "companionship", label: "Companionship" },
-    { value: "transport", label: "Transport" },
-    { value: "shopping", label: "Shopping" }
-  ],
-  nursing: [
-    { value: "medication", label: "Medication Management" },
-    { value: "wound_care", label: "Wound Care" },
-    { value: "health_monitoring", label: "Health Monitoring" }
-  ],
-  allied_health: [
-    { value: "physiotherapy", label: "Physiotherapy" },
-    { value: "occupational_therapy", label: "Occupational Therapy" },
-    { value: "podiatry", label: "Podiatry" }
-  ]
-};
-
-const staticServiceProviders = [
-  { value: "Darren_handyman", label: "Handyman" },
-  { value: "Steve_electrician", label: "Electrician" },
-  { value: "Matt_plumber", label: "Plumber" }
-];
-
-
 type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
+
+interface MasterDataType {
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  active: boolean;
+}
+
+interface MemberService {
+  id: number;
+  memberId: number;
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  serviceStartDate: string;
+  serviceDays: string[];
+  serviceHours: number;
+  status: string;
+  createdAt: string;
+  createdBy: number;
+}
 
 export default function MemberAssignment() {
   const { toast } = useToast();
@@ -82,7 +60,46 @@ export default function MemberAssignment() {
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [selectedType, setSelectedType] = useState<string>("");
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedService, setSelectedService] = useState<MemberService | null>(null);
+  const [showCaseNotesDialog, setShowCaseNotesDialog] = useState(false);
+
+  const days = [
+    { label: "Monday", value: "Monday" },
+    { label: "Tuesday", value: "Tuesday" },
+    { label: "Wednesday", value: "Wednesday" },
+    { label: "Thursday", value: "Thursday" },
+    { label: "Friday", value: "Friday" },
+    { label: "Saturday", value: "Saturday" },
+    { label: "Sunday", value: "Sunday" }
+  ];
+
+  // Fetch master data
+  const { data: masterData = [] } = useQuery<MasterDataType[]>({
+    queryKey: ["/api/master-data"],
+  });
+
+  // Get unique categories, types, and providers from master data
+  const uniqueCategories = Array.from(new Set(masterData
+    .filter(item => item.serviceCategory?.trim())
+    .map(item => item.serviceCategory)
+  ));
+  
+  const uniqueTypes = Array.from(new Set(masterData
+    .filter(item => item.serviceCategory === selectedCategory && item.serviceType?.trim())
+    .map(item => item.serviceType)
+  ));
+  
+  const activeProviders = Array.from(new Set(masterData
+    .filter(item => 
+      item.active && 
+      item.serviceProvider?.trim() &&
+      item.serviceCategory === selectedCategory &&
+      item.serviceType === selectedType
+    )
+    .map(item => item.serviceProvider)
+  ));
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -106,36 +123,32 @@ export default function MemberAssignment() {
   }, [members]);
 
   // Fetch member services
-  const { data: memberServices = [] } = useQuery({
-    queryKey: ["/api/member-assignment", selectedMember?.id],
-    queryFn: getQueryFn({ on401: "throw" }),
+  const { data: memberServices = [], isLoading: isServicesLoading, error: servicesError } = useQuery<MemberService[]>({
+    queryKey: ["/api/member-services/member", selectedMember?.id],
+    queryFn: () => 
+      selectedMember 
+        ? apiRequest("GET", `/api/member-services/member/${selectedMember.id}`).then(res => res.json())
+        : Promise.resolve([]),
     enabled: !!selectedMember,
   });
-
-
-  // Filter members based on search
-  const filteredMembers = members.filter(member =>
-    searchTerm.length >= 4 &&
-    `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   // Form setup
   const form = useForm<MemberAssignmentFormValues>({
     resolver: zodResolver(memberAssignmentSchema),
     defaultValues: {
       memberId: "",
-      serviceCategory: "",
-      serviceType: "",
+      careCategory: "",
+      careType: "",
       serviceProvider: "",
       serviceStartDate: "",
-      serviceDays: "",
+      serviceDays: [],
       serviceHours: "",
-      note: "",
     },
   });
 
   // Handle member selection
   const handleSelectMember = (member: PersonInfo) => {
+    console.log("Selected member:", member); // DEBUG LOG
     setSelectedMember(member);
     setSearchTerm(`${member.firstName} ${member.lastName}`);
     setShowDropdown(false);
@@ -152,39 +165,69 @@ export default function MemberAssignment() {
   }, [searchTerm]);
 
   // Watch for changes in the category field
-  const watchedCategory = form.watch("serviceCategory");
+  const watchedCategory = form.watch("careCategory");
+  const watchedType = form.watch("careType");
 
   useEffect(() => {
     if (watchedCategory) {
       setSelectedCategory(watchedCategory);
-      const types = getServiceTypesByCategory(watchedCategory);
-      setServiceTypes(types);
-      form.setValue("serviceType", "");
+      form.setValue("careType", "");
+      form.setValue("serviceProvider", "");
     }
   }, [watchedCategory, form]);
+
+  useEffect(() => {
+    if (watchedType) {
+      setSelectedType(watchedType);
+      form.setValue("serviceProvider", "");
+    }
+  }, [watchedType, form]);
 
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: MemberAssignmentFormValues) => {
-      const response = await apiRequest("POST", "/api/member-assignment", data);
+      if (!selectedMember) {
+        throw new Error("No member selected");
+      }
+      
+      // Transform the data to match the API schema
+      const serviceData = {
+        memberId: parseInt(data.memberId),
+        serviceCategory: data.careCategory,
+        serviceType: data.careType,
+        serviceProvider: data.serviceProvider,
+        serviceStartDate: data.serviceStartDate,
+        serviceDays: data.serviceDays,
+        serviceHours: parseInt(data.serviceHours),
+        status: "Planned"
+      };
+
+      const response = await apiRequest("POST", "/api/member-services", serviceData);
       return await response.json();
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Member assignment has been created",
+        description: "Service assigned successfully",
       });
       form.reset();
-      queryClient.invalidateQueries({ queryKey: ["/api/member-assignment", selectedMember?.id] });
+      setShowDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/member-services", selectedMember?.id] });
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to create assignment",
+        description: error.message || "Failed to assign service",
         variant: "destructive",
       });
     },
   });
+
+  // Filter members based on search
+  const filteredMembers = members.filter(member =>
+    searchTerm.length >= 4 &&
+    `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <DashboardLayout>
@@ -199,7 +242,7 @@ export default function MemberAssignment() {
               </div>
               <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add New Service
+                Assign Service
               </Button>
             </div>
           </CardHeader>
@@ -242,6 +285,8 @@ export default function MemberAssignment() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {isServicesLoading && <div>Loading assigned services...</div>}
+              {servicesError && <div className="text-red-500">Error loading services: {servicesError.message}</div>}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -252,29 +297,30 @@ export default function MemberAssignment() {
                     <TableHead>Days</TableHead>
                     <TableHead>Hours</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Case Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {memberServices.length > 0 ? (
-                    memberServices.map((service: any) => (
+                    memberServices.map((service: MemberService) => (
                       <TableRow key={service.id}>
                         <TableCell>{service.serviceCategory}</TableCell>
                         <TableCell>{service.serviceType}</TableCell>
                         <TableCell>{service.serviceProvider}</TableCell>
                         <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
-                        <TableCell>{service.serviceDays}</TableCell>
+                        <TableCell>{service.serviceDays.join(", ")}</TableCell>
                         <TableCell>{service.serviceHours}</TableCell>
                         <TableCell>
                           <Select
-                            value={service.status || 'Planned'}
+                            value={service.status}
                             onValueChange={async (value) => {
                               try {
-                                await apiRequest("PATCH", `/api/member-assignment/${service.id}`, {
+                                await apiRequest("PATCH", `/api/member-services/${service.id}`, {
                                   status: value
                                 });
 
                                 queryClient.invalidateQueries({
-                                  queryKey: ["/api/member-assignment", selectedMember?.id]
+                                  queryKey: ["/api/member-services", selectedMember?.id]
                                 });
 
                                 toast({
@@ -300,11 +346,23 @@ export default function MemberAssignment() {
                             </SelectContent>
                           </Select>
                         </TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              setSelectedService(service);
+                              setShowCaseNotesDialog(true);
+                            }}
+                          >
+                            View/Edit Notes
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-4">
+                      <TableCell colSpan={8} className="text-center py-4">
                         No services assigned yet
                       </TableCell>
                     </TableRow>
@@ -335,16 +393,19 @@ export default function MemberAssignment() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Category</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={(value) => {
+                          field.onChange(value);
+                          setSelectedCategory(value);
+                        }} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select category" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {staticCategories.map((category) => (
-                              <SelectItem key={category.value} value={category.value}>
-                                {category.label}
+                            {uniqueCategories.map((category) => (
+                              <SelectItem key={category} value={category || "_"}>
+                                {category}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -360,16 +421,23 @@ export default function MemberAssignment() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Type</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategory}>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            setSelectedType(value);
+                          }} 
+                          value={field.value} 
+                          disabled={!selectedCategory}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {staticServiceTypes[selectedCategory]?.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
+                            {uniqueTypes.map((type) => (
+                              <SelectItem key={type} value={type || "_"}>
+                                {type}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -394,9 +462,9 @@ export default function MemberAssignment() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {staticServiceProviders.map((provider) => (
-                              <SelectItem key={provider.value} value={provider.value}>
-                                {provider.label}
+                            {activeProviders.map((provider) => (
+                              <SelectItem key={provider} value={provider || "_"}>
+                                {provider}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -428,9 +496,28 @@ export default function MemberAssignment() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Days</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="e.g., Mon, Wed, Fri" />
-                        </FormControl>
+                        <div className="grid grid-cols-2 gap-2 border rounded-md p-3">
+                          {days.map((day) => (
+                            <div key={day.value} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={day.value}
+                                checked={field.value?.includes(day.value)}
+                                onCheckedChange={(checked) => {
+                                  const updatedDays = checked
+                                    ? [...field.value || [], day.value]
+                                    : field.value?.filter((value) => value !== day.value) || [];
+                                  field.onChange(updatedDays);
+                                }}
+                              />
+                              <label
+                                htmlFor={day.value}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {day.label}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -443,38 +530,13 @@ export default function MemberAssignment() {
                       <FormItem>
                         <FormLabel>Service Hours</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., 9:00 AM - 5:00 PM" />
+                          <Input {...field} type="number" min="1" max="24" placeholder="Number of hours per day" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="note"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Case Notes</FormLabel>
-                      <FormControl>
-                        <Editor
-                          value={field.value}
-                          onEditorChange={(content) => field.onChange(content)}
-                          init={{
-                            height: 300,
-                            menubar: false,
-                            plugins: ['advlist', 'autolink', 'lists', 'link', 'charmap', 'preview', 'searchreplace',
-                              'visualblocks', 'fullscreen', 'insertdatetime', 'table', 'code', 'help', 'wordcount'
-                            ],
-                            toolbar: 'undo redo | formatselect | bold italic | alignleft aligncenter alignright | bullist numlist outdent indent | help'
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <Button
                   type="submit"
@@ -490,6 +552,18 @@ export default function MemberAssignment() {
             </Form>
           </DialogContent>
         </Dialog>
+
+        <CaseNotesDialog
+          open={showCaseNotesDialog}
+          onOpenChange={setShowCaseNotesDialog}
+          service={selectedService}
+          onSave={() => {
+            // Refresh the services data
+            queryClient.invalidateQueries({ 
+              queryKey: ["/api/member-services", selectedMember?.id] 
+            });
+          }}
+        />
       </div>
     </DashboardLayout>
   );

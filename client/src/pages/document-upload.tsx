@@ -5,17 +5,16 @@ import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import DashboardLayout from "@/layouts/dashboard-layout";
+import AppLayout from "@/layouts/app-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Upload, FileText, ArrowDown, Search, Plus } from "lucide-react";
-//import { useState } from "react";
+import { Loader2, Upload, FileText, ArrowDown, Search, Plus, Eye } from "lucide-react";
 import type { Document, PersonInfo } from "@shared/schema";
 
 // Document types
@@ -73,6 +72,9 @@ export default function DocumentUpload() {
   // Fetch documents for selected member
   const { data: documents = [], isLoading: loadingDocuments } = useQuery<Document[]>({
     queryKey: ["/api/documents/member", selectedMember?.id],
+    queryFn: () => selectedMember 
+      ? apiRequest("GET", `/api/documents/member/${selectedMember.id}`).then(res => res.json())
+      : Promise.resolve([]),
     enabled: !!selectedMember,
   });
 
@@ -120,7 +122,7 @@ export default function DocumentUpload() {
         formData.append("file", data.file[0]);
       }
 
-      const res = await apiRequest("POST", "/api/documents", formData, true);
+      const res = await apiRequest("POST", "http://localhost:3000/api/documents", formData, true);
       return await res.json();
     },
     onSuccess: () => {
@@ -164,7 +166,7 @@ export default function DocumentUpload() {
   };
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container mx-auto py-6 space-y-6 text-base font-sans">
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
@@ -214,14 +216,19 @@ export default function DocumentUpload() {
 
         {/* Documents List Section */}
         {selectedMember && (
-          <Card className="max-w-5xl mx-auto">
+          <Card className="max-w-5xl mx-auto mt-6">
             <CardHeader>
               <CardTitle>Documents for {selectedMember.firstName} {selectedMember.lastName}</CardTitle>
+              <CardDescription>Total documents: {documents.length}</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingDocuments ? (
                 <div className="flex justify-center p-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No documents found for this client. Click "Add New" to upload documents.
                 </div>
               ) : (
                 <Table>
@@ -229,6 +236,7 @@ export default function DocumentUpload() {
                     <TableRow>
                       <TableHead>Document Name</TableHead>
                       <TableHead>Document Type</TableHead>
+                      <TableHead>Upload Date</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -237,16 +245,25 @@ export default function DocumentUpload() {
                       <TableRow key={doc.id}>
                         <TableCell>{doc.documentName}</TableCell>
                         <TableCell>{doc.documentType}</TableCell>
+                        <TableCell>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : '-'}</TableCell>
                         <TableCell>
-                          <a
-                            href={`/api/documents/${doc.filename}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center text-sm font-medium text-primary hover:underline"
-                          >
-                            <ArrowDown className="h-4 w-4 mr-1" />
-                            Download
-                          </a>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(`/api/documents/${doc.filename}`, '_blank')}
+                              title="View Document"
+                            >
+                              <Eye className="h-4 w-4 text-blue-600" />
+                            </Button>
+                            <a
+                              href={`/api/documents/${doc.filename}`}
+                              download
+                              className="inline-flex items-center justify-center text-sm font-medium text-primary hover:text-primary/80"
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </a>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -355,6 +372,6 @@ export default function DocumentUpload() {
             </DialogContent>
           </Dialog>
         </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

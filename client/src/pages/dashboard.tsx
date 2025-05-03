@@ -10,20 +10,22 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PersonInfo, MasterData } from "@shared/schema";
-import { getQueryFn, queryClient } from "@/lib/queryClient";
-import { Loader2 } from "lucide-react";
-import DashboardLayout from "@/layouts/dashboard-layout";
+import { PersonInfo, MemberService } from "@shared/schema";
+import { getQueryFn } from "@/lib/queryClient";
+import { Loader2, Users, Activity, Search } from "lucide-react";
+import AppLayout from "@/layouts/app-layout";
+import { SimpleBarChart } from "@/components/ui/chart";
+import { Input } from "@/components/ui/input";
 
 export default function Dashboard() {
-  const [combinedData, setCombinedData] = useState<Array<PersonInfo & { careDetails?: MasterData }>>([]);
+  const [combinedData, setCombinedData] = useState<Array<PersonInfo & { memberService?: MemberService }>>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch person info data
   const {
@@ -35,129 +37,175 @@ export default function Dashboard() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  // Fetch master data
+  // Fetch member services data
   const {
-    data: masterData = [],
-    isLoading: isLoadingMaster,
-    error: masterError,
-  } = useQuery<MasterData[]>({
-    queryKey: ["/api/master-data"],
+    data: memberServices = [],
+    isLoading: isLoadingServices,
+    error: servicesError,
+  } = useQuery<MemberService[]>({
+    queryKey: ["/api/member-services"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
   // Combine data when both queries complete
   useEffect(() => {
-    if (personData && masterData) {
+    if (personData && memberServices) {
       const combinedData = personData.map(person => {
-        // Find matching master data for this person
-        const careDetails = masterData.find(md => md.memberId === person.id);
-        
+        const memberService = memberServices.find(ms => ms.memberId === person.id);
         return {
           ...person,
-          careDetails
+          memberService
         };
       });
-      
       setCombinedData(combinedData);
     }
-  }, [personData, masterData]);
+  }, [personData, memberServices]);
 
-  // Handle loading state
-  if (isLoadingPersons || isLoadingMaster) {
+  // Filter members and calculate statistics
+  const filteredMembers = combinedData
+    .filter(member => member.memberService?.status !== 'Closed')
+    .filter(member => 
+      (member.firstName + " " + member.lastName).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.memberService?.status?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+  const activeMembers = filteredMembers.filter(member => 
+    member.memberService?.status === 'In Progress'
+  );
+
+  const statistics = {
+    totalClients: combinedData.length,
+    activeClients: activeMembers.length,
+    hcpLevelStats: combinedData.reduce((acc, member) => {
+      const level = member.hcpLevel || 'Unassigned';
+      acc[level] = (acc[level] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+    serviceStatusStats: combinedData.reduce((acc, member) => {
+      const status = member.memberService?.status || 'Not Assigned';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
+  };
+
+  // Prepare chart data
+  const hcpChartData = Object.entries(statistics.hcpLevelStats).map(([level, count]) => ({
+    name: level === 'Unassigned' ? 'Unassigned' : `Level ${level}`,
+    value: count
+  }));
+
+  const statusChartData = Object.entries(statistics.serviceStatusStats).map(([status, count]) => ({
+    name: status,
+    value: count
+  }));
+
+  if (isLoadingPersons || isLoadingServices) {
     return (
-      <DashboardLayout>
+      <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </DashboardLayout>
+      </AppLayout>
     );
   }
 
-  // Handle error state
-  if (personsError || masterError) {
+  if (personsError || servicesError) {
     return (
-      <DashboardLayout>
+      <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle className="text-destructive">Error Loading Data</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>
-                {personsError?.message || masterError?.message || "There was an error loading the dashboard data."}
-              </p>
+              <p>{personsError?.message || servicesError?.message || "There was an error loading the dashboard data."}</p>
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
+      </AppLayout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container mx-auto p-4 space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Client Dashboard</h1>
+          <div className="relative w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search clients..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Total Clients</CardTitle>
-              <CardDescription>Number of registered clients</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{personData?.length || 0}</p>
+              <div className="text-2xl font-bold">{statistics.totalClients}</div>
             </CardContent>
           </Card>
-          
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Active Care Services</CardTitle>
-              <CardDescription>Types of care being provided</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{masterData?.filter(item => item.active).length || 0}</p>
+              <div className="text-2xl font-bold">{statistics.activeClients}</div>
             </CardContent>
           </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Service Categories</CardTitle>
-              <CardDescription>Distinct care categories</CardDescription>
+
+          {/* Charts */}
+          <Card className="col-span-2">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">HCP Level Distribution</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">
-                {new Set(masterData?.map(item => item.serviceCategory) || []).size}
-              </p>
+            <CardContent className="h-[200px]">
+              <SimpleBarChart data={hcpChartData} color="#2563eb" />
             </CardContent>
           </Card>
         </div>
 
-        {/* Member Table */}
+        {/* Service Status Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Client Details</CardTitle>
-            <CardDescription>Overview of all registered clients and their care services</CardDescription>
+            <CardTitle>Service Status Overview</CardTitle>
+            <CardDescription>Distribution of client service statuses</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <SimpleBarChart data={statusChartData} color="#64748b" />
+          </CardContent>
+        </Card>
+
+        {/* Active Members Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Active Members</CardTitle>
+            <CardDescription>Members with active services and their HCP details</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
-              <TableCaption>A list of all members and their assigned care services.</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Service Category</TableHead>
-                  <TableHead>Service Type</TableHead>
-                  <TableHead>Service Provider</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>Days & Hours</TableHead>
+                  <TableHead>HCP Level</TableHead>
+                  <TableHead>HCP End Date</TableHead>
+                  <TableHead>Service Days</TableHead>
+                  <TableHead>Service Hours</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {combinedData.length > 0 ? (
-                  combinedData.map((member) => (
+                {filteredMembers.length > 0 ? (
+                  filteredMembers.map((member) => (
                     <TableRow 
                       key={member.id} 
                       className="cursor-pointer hover:bg-gray-100"
@@ -168,29 +216,32 @@ export default function Dashboard() {
                       <TableCell className="font-medium">
                         {member.title} {member.firstName} {member.lastName}
                       </TableCell>
-                      <TableCell>{member.careDetails?.serviceCategory || 'Not assigned'}</TableCell>
-                      <TableCell>{member.careDetails?.serviceType || 'Not assigned'}</TableCell>
-                      <TableCell>{member.careDetails?.serviceProvider || 'Not assigned'}</TableCell>
-                      <TableCell>{member.careDetails?.serviceStartDate ? new Date(member.careDetails.serviceStartDate).toLocaleDateString() : 'Not set'}</TableCell>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span>{member.careDetails?.serviceDays || 'Not set'}</span>
-                          <span className="text-muted-foreground">{member.careDetails?.serviceHours || 'Not set'}</span>
-                        </div>
+                        {member.hcpLevel ? `Level ${member.hcpLevel}` : 'Unassigned'}
                       </TableCell>
                       <TableCell>
-                        {member.careDetails?.active ? (
-                          <Badge variant="default" className="bg-green-100 text-green-800">Active</Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-gray-100">Inactive</Badge>
-                        )}
+                        {member.hcpEndDate ? new Date(member.hcpEndDate).toLocaleDateString() : 'Not set'}
+                      </TableCell>
+                      <TableCell>
+                        {member.memberService?.serviceDays?.join(', ') || 'Not set'}
+                      </TableCell>
+                      <TableCell>
+                        {member.memberService?.serviceHours || 'Not set'} hours
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={member.memberService?.status === 'In Progress' ? 'default' : 'secondary'}
+                          className={member.memberService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
+                        >
+                          {member.memberService?.status || 'Not Assigned'}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No client data available yet. Add clients through the Add Client page.
+                      No members found matching your search.
                     </TableCell>
                   </TableRow>
                 )}
@@ -199,6 +250,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

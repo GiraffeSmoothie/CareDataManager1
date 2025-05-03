@@ -1,14 +1,14 @@
 import { ReactNode } from "react";
 import { useLocation, Link } from "wouter";
-import { Heart, Database, Users, LayoutDashboard, Link2, BookOpen, FileText, ChevronDown } from "lucide-react";
+import { Heart, Database, Users, Link2, FileText } from "lucide-react";
 import UserNav from "@/components/user-nav";
 import { cn } from "../lib/utils";
 
-interface DashboardLayoutProps {
+interface AppLayoutProps {
   children: ReactNode;
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   
   return (
@@ -29,15 +29,48 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <nav className="bg-white border-b">
         <div className="container mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex space-x-4 overflow-x-auto">
-            <Link href="/dashboard">
+            <Link href="/homepage">
               <div className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/dashboard" 
+                location === "/homepage"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-gray-600"
+              )}>
+                <Heart className="h-4 w-4" />
+                <span>Homepage</span>
+              </div>
+            </Link>
+                        <Link href="/manage-client">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/manage-client" 
                   ? "border-primary text-primary" 
                   : "border-transparent text-gray-600"
               )}>
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Client Dashboard</span>
+                <Users className="h-4 w-4" />
+                <span>Client Details</span>
+              </div>
+            </Link>
+            <Link href="/member-assignment">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/member-assignment" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <Link2 className="h-4 w-4" />
+                <span>Assigned Services</span>
+              </div>
+            </Link>
+            <Link href="/document-upload">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
+                location === "/document-upload" 
+                  ? "border-primary text-primary" 
+                  : "border-transparent text-gray-600"
+              )}>
+                <FileText className="h-4 w-4" />
+                <span>Client Documents</span>
               </div>
             </Link>
             <Link href="/master-data">
@@ -49,39 +82,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               )}>
                 <Database className="h-4 w-4" />
                 <span>Services Master Data</span>
-              </div>
-            </Link>
-            <Link href="/manage-client">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/manage-client" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Users className="h-4 w-4" />
-                <span>Manage Client Details</span>
-              </div>
-            </Link>
-            <Link href="/member-assignment">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/member-assignment" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Link2 className="h-4 w-4" />
-                <span>Manage Client Services</span>
-              </div>
-            </Link>
-            <Link href="/document-upload">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/document-upload" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <FileText className="h-4 w-4" />
-                <span>Manage Client Documents</span>
               </div>
             </Link>
           </div>

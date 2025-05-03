@@ -1,7 +1,7 @@
-import express, { type Express, Request, Response } from "express";
+import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage } from "./storage";
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertCaseNoteSchema, insertDocumentSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertMemberServiceSchema, insertServiceCaseNoteSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -9,10 +9,10 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import pgSession from "connect-pg-simple"; // You need to install this
-import pg from "pg"; // Use Pool for connection pooling
-const { Pool } = pg; // Destructure Pool from the default export
-
+import pgSession from "connect-pg-simple";
+import pg from "pg";
+import cors from 'cors';
+const { Pool } = pg;
 
 declare module "express-session" {
   interface SessionData {
@@ -20,6 +20,17 @@ declare module "express-session" {
       id: number;
       username: string;
     };
+  }
+}
+
+declare module "express" {
+  interface Request {
+    user?: {
+      id: number;
+      username: string;
+    };
+    memberPath?: string;
+    filePath?: string;
   }
 }
 
@@ -48,15 +59,31 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
+// Use the pool from storage.ts to ensure we're using the same connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  user: 'postgres',
+  host: 'localhost',
+  database: 'CareDataManager1',
+  password: 'postgres',
+  port: 5432,
+  ssl: false
 });
+
 const PgStore = pgSession(session);
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Initialize session store
+  // Configure CORS
+  app.use(cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type"]
+  }));
+
+  // Initialize session store with connection check
   const pgStore = new PgStore({
     pool: pool,
-    tableName: 'user_sessions',
+    tableName: 'session',  // Changed from user_sessions to session
+    createTableIfMissing: true
   });
 
   // Initialize session
@@ -69,6 +96,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cookie: {
         secure: process.env.NODE_ENV === "production",
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true,
+        sameSite: 'lax'
       },
     })
   );
@@ -85,17 +114,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username and password are required" });
       }
 
-      console.log("Default admin user created");
-      console.log("Connecting to:", process.env.DATABASE_URL);
-      console.log("Environment:", process.env.NODE_ENV);
-
       const user = await dbStorage.getUserByUsername(username);
-
-      //if (!user || user.password !== hashPassword(password)) {
-      //  return res.status(401).json({ message: "Invalid username or password" });
-      //}
-
-      if (!user) {
+      
+      if (!user || user.password !== hashPassword(password)) {
         return res.status(401).json({ message: "Invalid username or password" });
       }
 
@@ -130,15 +151,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auth middleware for protected routes
-  const authMiddleware = (req: Request, res: Response, next: Function) => {
+  const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     if (!req.session.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
+    req.user = req.session.user; // Make user data available on request object
     next();
   };
   
   // Setup file upload
-  const uploadsDir = path.join(process.cwd(), "uploads");
+  const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
   
   // Create uploads directory if it doesn't exist
   if (!fs.existsSync(uploadsDir)) {
@@ -147,14 +169,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Configure multer for file uploads
   const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, uploadsDir);
+    destination: async function (req, file, cb) {
+      try {
+        // Get member details for folder creation
+        const memberId = req.body.memberId;
+        const member = await dbStorage.getPersonInfoById(parseInt(memberId));
+        
+        if (!member) {
+          return cb(new Error("Member not found"), "");
+        }
+
+        // Create member-specific folder name
+        const memberFolder = `${member.id}_${member.firstName}_${member.lastName}`;
+        const memberPath = path.join(uploadsDir, memberFolder);
+
+        // Create member folder if it doesn't exist
+        if (!fs.existsSync(memberPath)) {
+          fs.mkdirSync(memberPath, { recursive: true });
+        }
+
+        // Store the member path for use in filename callback
+        req.memberPath = memberPath;
+        cb(null, memberPath);
+      } catch (error) {
+        cb(error as Error, "");
+      }
     },
     filename: function (req, file, cb) {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      const ext = path.extname(file.originalname);
-      cb(null, file.fieldname + "-" + uniqueSuffix + ext);
-    },
+      let originalName = file.originalname;
+      const ext = path.extname(originalName);
+      const nameWithoutExt = path.basename(originalName, ext);
+      let counter = 1;
+      let newFilename = originalName;
+      
+      // Check if file exists and append number if it does
+      if (req.memberPath) {
+        while (fs.existsSync(path.join(req.memberPath, newFilename))) {
+          newFilename = `${nameWithoutExt} (${counter})${ext}`;
+          counter++;
+        }
+      }
+      
+      // Store the relative path for database
+      if (req.memberPath) {
+        const memberFolder = path.basename(req.memberPath);
+        req.filePath = path.join(memberFolder, newFilename);
+      }
+      
+      cb(null, newFilename);
+    }
   });
   
   const upload = multer({ 
@@ -173,32 +236,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Protected routes
+  app.use("/api", authMiddleware);
+
   // Master data routes
-  app.post("/api/master-data", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/master-data", async (req: Request, res: Response) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No active session found" });
+      }
+
+      console.log("Received master data:", req.body);
       const validatedData = insertMasterDataSchema.parse(req.body);
       
       // Add the current user as the creator
       const masterDataWithUser = {
         ...validatedData,
-        createdBy: req.session.user!.id,
+        createdBy: req.user.id,
+        active: validatedData.active ?? true,
       };
       
+      console.log("Creating master data with:", masterDataWithUser);
       const createdData = await dbStorage.createMasterData(masterDataWithUser);
+      console.log("Created master data:", createdData);
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
+        console.error("Validation error:", validationError);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
       }
+      
       console.error("Error creating master data:", error);
-      return res.status(500).json({ message: "Failed to create master data" });
+      // Check for duplicate service error
+      if (error instanceof Error && error.message.includes('combination of category, type, and provider already exists')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      return res.status(500).json({ 
+        message: "Failed to create master data",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
-  app.get("/api/master-data", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/master-data", async (req: Request, res: Response) => {
     try {
+      console.log("Fetching all master data");
       const masterData = await dbStorage.getAllMasterData();
+      console.log("Fetched master data count:", masterData.length);
       return res.status(200).json(masterData);
     } catch (error) {
       console.error("Error fetching master data:", error);
@@ -206,30 +295,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Person Info routes
-  app.post("/api/person-info", authMiddleware, async (req: Request, res: Response) => {
+  // Add PUT endpoint for updating master data
+  app.put("/api/master-data/:id", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertPersonInfoSchema.parse(req.body);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      console.log("Updating master data for id:", id, "with data:", req.body);
+      const validatedData = insertMasterDataSchema.parse(req.body);
       
-      // Add the current user as the creator
+      const updatedData = await dbStorage.updateMasterData(id, {
+        ...validatedData,
+        createdBy: req.user!.id
+      });
+
+      console.log("Updated master data:", updatedData);
+      return res.status(200).json(updatedData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
+      }
+      
+      console.error("Error updating master data:", error);
+      return res.status(500).json({ 
+        message: "Failed to update master data",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Person Info routes
+  app.post("/api/person-info", async (req: Request, res: Response) => {
+    try {
+      console.log("Received person info data:", req.body);
+      const validatedData = insertPersonInfoSchema.parse(req.body);
+      console.log("Validated data:", validatedData);
+      
+      // Add the current user as the creator and handle optional fields
       const personInfoWithUser = {
         ...validatedData,
-        createdBy: req.session.user!.id,
+        createdBy: req.user!.id,
+        middleName: validatedData.middleName || '',
+        homePhone: validatedData.homePhone || '',
+        addressLine2: validatedData.addressLine2 || '',
+        addressLine3: validatedData.addressLine3 || '',
+        mailingAddressLine1: validatedData.mailingAddressLine1 || '',
+        mailingAddressLine2: validatedData.mailingAddressLine2 || '',
+        mailingAddressLine3: validatedData.mailingAddressLine3 || '',
+        mailingPostCode: validatedData.mailingPostCode || '',
+        nextOfKinName: validatedData.nextOfKinName || '',
+        nextOfKinAddress: validatedData.nextOfKinAddress || '',
+        nextOfKinEmail: validatedData.nextOfKinEmail || '',
+        nextOfKinPhone: validatedData.nextOfKinPhone || '',
+        hcpLevel: validatedData.hcpLevel || '',
+        hcpEndDate: validatedData.hcpEndDate || '',
+        useHomeAddress: validatedData.useHomeAddress ?? true,
+        status: validatedData.status || 'Created'
       };
       
+      console.log("Processed data:", personInfoWithUser);
       const createdData = await dbStorage.createPersonInfo(personInfoWithUser);
+      console.log("Created data:", createdData);
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationError = fromZodError(error);
+        console.error("Validation error:", validationError);
         return res.status(400).json({ message: validationError.message });
       }
       console.error("Error creating person info:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", error.message, error.stack);
+      }
       return res.status(500).json({ message: "Failed to create person info" });
     }
   });
 
-  app.get("/api/person-info", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/person-info", async (req: Request, res: Response) => {
     try {
       const personInfo = await dbStorage.getAllPersonInfo();
       return res.status(200).json(personInfo);
@@ -239,7 +387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/person-info/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/person-info/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -257,9 +405,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch person info" });
     }
   });
+
+  app.put('/api/person-info/:id', async (req: Request, res: Response) => {
+    try {
+      console.log("Update request received for id:", req.params.id, "with data:", req.body);
+      
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        console.error("Invalid ID format:", req.params.id);
+        return res.status(400).json({ message: 'Invalid ID provided' });
+      }
+
+      // First check if the person exists
+      const existingPerson = await dbStorage.getPersonInfoById(id);
+      if (!existingPerson) {
+        console.error("Person not found with ID:", id);
+        return res.status(404).json({ message: 'Person not found' });
+      }
+
+      // Validate the update data
+      const validatedData = insertPersonInfoSchema.parse({
+        ...req.body,
+        status: req.body.status || existingPerson.status || 'Created'
+      });
+      
+      console.log("Validated update data:", validatedData);
+      
+      // Update the person info
+      const updatedPerson = await dbStorage.updatePersonInfo(id, {
+        ...validatedData,
+        createdBy: existingPerson.createdBy // Preserve the original createdBy value
+      });
+      
+      console.log("Person updated successfully:", updatedPerson);
+      return res.status(200).json(updatedPerson);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        console.error('Validation error:', validationError, '\nFull error:', error);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
+      }
+      console.error('Error updating person info:', error);
+      if (error instanceof Error) {
+        console.error('Error stack:', error.stack);
+      }
+      return res.status(500).json({ 
+        message: 'Failed to update person info',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
   
   // Update member assignment status
-  app.patch("/api/member-assignment/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/member-assignment/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { status } = req.body;
@@ -277,7 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Member Assignment route with file upload  
-  app.post("/api/member-assignment", authMiddleware, upload.single("document"), async (req: Request, res: Response) => {
+  app.post("/api/member-assignment", upload.single("document"), async (req: Request, res: Response) => {
     try {
       const { memberId, careCategory, careType, notes } = req.body;
       
@@ -299,12 +500,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create master data entry for this member
       const masterDataEntry = {
-        careCategory,
-        careType,
+        serviceCategory: careCategory,
+        serviceType: careType,
+        serviceProvider: "",
         active: true,
-        notes: notes || "",
         memberId: memberIdNum,
-        createdBy: req.session.user!.id,
+        createdBy: req.user!.id,
+        notes: notes || ""
       };
       
       // Add document info if uploaded
@@ -326,136 +528,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Endpoint to get master data by member ID
-  app.get("/api/master-data/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
-    try {
-      const memberId = parseInt(req.params.memberId);
-      if (isNaN(memberId)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
-      }
-      
-      const masterData = await dbStorage.getMasterDataByMemberId(memberId);
-      return res.status(200).json(masterData);
-    } catch (error) {
-      console.error("Error fetching master data for member:", error);
-      return res.status(500).json({ message: "Failed to fetch master data for member" });
-    }
-  });
-
   // Endpoint to serve uploaded files
-  app.get("/api/documents/:filename", authMiddleware, (req: Request, res: Response) => {
-    const { filename } = req.params;
-    const filePath = path.join(uploadsDir, filename);
-    
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: "Document not found" });
-    }
-    
-    // Send the file
-    res.sendFile(filePath);
-  });
-
-  // Case Notes routes
-  app.post("/api/case-notes", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/documents/:filename", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertCaseNoteSchema.parse(req.body);
+      const { filename } = req.params;
+      const document = await dbStorage.getDocumentByFilename(filename);
       
-      // Check if member exists
-      const memberId = validatedData.memberId;
-      const member = await dbStorage.getPersonInfoById(memberId);
-      if (!member) {
-        return res.status(404).json({ message: "Member not found" });
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
       }
       
-      // Add the current user as the creator
-      const caseNoteWithUser = {
-        ...validatedData,
-        createdBy: req.session.user!.id,
-      };
+      if (!document.filePath) {
+        return res.status(404).json({ message: "Document file path not found" });
+      }
       
-      const createdNote = await dbStorage.createCaseNote(caseNoteWithUser);
-      return res.status(201).json(createdNote);
+      const fullPath = path.join(uploadsDir, document.filePath);
+      
+      // Check if file exists
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ message: "Document file not found" });
+      }
+      
+      // Send the file
+      res.download(fullPath, document.documentName);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
-      }
-      console.error("Error creating case note:", error);
-      return res.status(500).json({ message: "Failed to create case note" });
-    }
-  });
-
-  app.get("/api/case-notes/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
-    try {
-      const memberId = parseInt(req.params.memberId);
-      if (isNaN(memberId)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
-      }
-      
-      // Check if member exists
-      const member = await dbStorage.getPersonInfoById(memberId);
-      if (!member) {
-        return res.status(404).json({ message: "Member not found" });
-      }
-      
-      const caseNotes = await dbStorage.getCaseNotesByMemberId(memberId);
-      return res.status(200).json(caseNotes);
-    } catch (error) {
-      console.error("Error fetching case notes for member:", error);
-      return res.status(500).json({ message: "Failed to fetch case notes for member" });
+      console.error("Error serving document:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
   // Document management routes
-  app.post("/api/documents", authMiddleware, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/documents", upload.single("file"), async (req: Request, res: Response) => {
     try {
+      console.log("Document upload request received");
+      console.log("Request body:", req.body);
+      console.log("File:", req.file);
+      console.log("File path:", req.filePath);
+
       if (!req.file) {
+        console.log("No file uploaded");
         return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      if (!req.filePath) {
+        console.error("File path not set by multer");
+        return res.status(500).json({ message: "File path not set correctly" });
       }
 
       const { memberId, documentName, documentType } = req.body;
       
       // Validation
       if (!memberId || !documentName || !documentType) {
+        console.log("Missing required fields:", { memberId, documentName, documentType });
         return res.status(400).json({ message: "Member ID, document name, and document type are required" });
       }
       
       // Check if member exists
       const memberIdNum = parseInt(memberId);
       if (isNaN(memberIdNum)) {
+        console.log("Invalid member ID format:", memberId);
         return res.status(400).json({ message: "Invalid member ID format" });
       }
       
+      console.log("Looking up member:", memberIdNum);
       const member = await dbStorage.getPersonInfoById(memberIdNum);
       if (!member) {
+        console.log("Member not found:", memberIdNum);
         return res.status(404).json({ message: "Member not found" });
       }
       
-      // Create document entry
+      console.log("Member found:", member);
+      
+      // Create document entry with file path
       const documentData = {
         memberId: memberIdNum,
         documentName,
         documentType,
-        createdBy: req.session.user!.id,
-        filename: req.file.filename
+        createdBy: req.user!.id,
+        filename: req.file.filename,
+        filePath: req.filePath,
+        uploadedAt: new Date()
       };
+
+      console.log("Creating document with data:", documentData);
       
       const createdDocument = await dbStorage.createDocument(documentData);
+      console.log("Document created successfully:", createdDocument);
       
       return res.status(201).json(createdDocument);
     } catch (error) {
+      console.error("Error uploading document:", error);
       if (error instanceof z.ZodError) {
         const validationError = fromZodError(error);
         return res.status(400).json({ message: validationError.message });
       }
-      console.error("Error uploading document:", error);
-      return res.status(500).json({ message: "Failed to upload document" });
+      return res.status(500).json({ 
+        message: "Failed to upload document", 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
   });
 
-  app.get("/api/documents/member/:memberId", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/documents/member/:memberId", async (req: Request, res: Response) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const memberId = parseInt(req.params.memberId);
       if (isNaN(memberId)) {
         return res.status(400).json({ message: "Invalid member ID format" });
@@ -472,6 +651,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching documents for member:", error);
       return res.status(500).json({ message: "Failed to fetch documents for member" });
+    }
+  });
+
+  // Member services routes
+  app.get("/api/member-services", async (req: Request, res: Response) => {
+    try {
+      const memberServices = await dbStorage.getAllMemberServices();
+      return res.status(200).json(memberServices);
+    } catch (error) {
+      console.error("Error fetching member services:", error);
+      return res.status(500).json({ message: "Failed to fetch member services" });
+    }
+  });
+
+  app.post("/api/member-services", async (req: Request, res: Response) => {
+    try {
+      console.log("Received member service data:", req.body);
+      const validatedData = insertMemberServiceSchema.parse(req.body);
+      
+      const memberServiceWithUser = {
+        ...validatedData,
+        createdBy: req.user!.id,
+        status: validatedData.status || 'Created'
+      };
+      
+      const createdService = await dbStorage.createMemberService(memberServiceWithUser);
+      return res.status(201).json(createdService);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating member service:", error);
+      return res.status(500).json({ message: "Failed to create member service" });
+    }
+  });
+
+  app.get("/api/member-services/member/:memberId", async (req: Request, res: Response) => {
+    try {
+      const memberId = parseInt(req.params.memberId);
+      if (isNaN(memberId)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+
+      const services = await dbStorage.getMemberServicesByMemberId(memberId);
+      return res.status(200).json(services);
+    } catch (error) {
+      console.error("Error fetching member services:", error);
+      return res.status(500).json({ message: "Failed to fetch member services" });
+    }
+  });
+
+  app.get("/api/member-services/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+      
+      const memberService = await dbStorage.getMemberServiceById(id);
+      if (!memberService) {
+        return res.status(404).json({ message: "Member service not found" });
+      }
+      
+      return res.status(200).json(memberService);
+    } catch (error) {
+      console.error("Error fetching member service:", error);
+      return res.status(500).json({ message: "Failed to fetch member service" });
+    }
+  });
+
+  app.patch("/api/member-services/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+
+      const { status } = req.body;
+      if (!status || !["Planned", "In Progress", "Closed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+
+      await dbStorage.updateMemberServiceStatus(id, status);
+      return res.status(200).json({ message: "Service status updated successfully" });
+    } catch (error) {
+      console.error("Error updating service status:", error);
+      return res.status(500).json({ message: "Failed to update service status" });
+    }
+  });
+
+  // Service case notes endpoints
+  app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
+    try {
+      const serviceId = parseInt(req.params.serviceId);
+      if (isNaN(serviceId)) {
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+
+      const note = await dbStorage.getServiceCaseNote(serviceId);
+      return res.status(200).json(note);
+    } catch (error) {
+      console.error("Error fetching case note:", error);
+      return res.status(500).json({ message: "Failed to fetch case note" });
+    }
+  });
+
+  // Create service case note
+  app.post("/api/service-case-notes", async (req: Request, res: Response) => {
+    try {
+      const { serviceId, noteText } = req.body;
+      if (!req.session?.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const note = await dbStorage.createServiceCaseNote({
+        serviceId,
+        noteText,
+        createdBy: req.session.user.id
+      });
+
+      return res.status(201).json(note);
+    } catch (error) {
+      console.error("Error creating case note:", error);
+      return res.status(500).json({ message: "Failed to create case note" });
+    }
+  });
+
+  // Update service case note
+  app.put("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
+    try {
+      const serviceId = parseInt(req.params.serviceId);
+      const { noteText } = req.body;
+      if (!req.session?.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (isNaN(serviceId)) {
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+
+      const note = await dbStorage.updateServiceCaseNote(serviceId, {
+        noteText,
+        updatedBy: req.session.user.id
+      });
+
+      return res.status(200).json(note);
+    } catch (error) {
+      console.error("Error updating case note:", error);
+      return res.status(500).json({ message: "Failed to update case note" });
     }
   });
 

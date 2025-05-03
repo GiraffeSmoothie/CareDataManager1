@@ -1,4 +1,3 @@
-
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -6,27 +5,16 @@ CREATE TABLE IF NOT EXISTS users (
   password TEXT NOT NULL
 );
 
-
--- Create user_sessions table for session store
-CREATE TABLE IF NOT EXISTS user_sessions (
-  sid varchar NOT NULL COLLATE "default",
-  sess json NOT NULL,
-  expire timestamp(6) NOT NULL,
+-- Create session store table with correct structure for connect-pg-simple
+DROP TABLE IF EXISTS "session";
+CREATE TABLE "session" (
+  "sid" varchar NOT NULL COLLATE "default",
+  "sess" json NOT NULL,
+  "expire" timestamp(6) NOT NULL,
   CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
-);
+) WITH (OIDS=FALSE);
 
-/*
-CREATE TABLE IF NOT EXISTS user_sessions (
-    session_id varchar NOT NULL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    session_data json NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	expire timestamp(6) NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE	
-);
-CREATE INDEX "IDX_user_sessions_expire" ON "user_sessions" ("expire");
-*/
+CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
 
 -- Create person_info table
 CREATE TABLE IF NOT EXISTS person_info (
@@ -54,6 +42,7 @@ CREATE TABLE IF NOT EXISTS person_info (
   next_of_kin_phone TEXT DEFAULT '',
   hcp_level TEXT DEFAULT '',
   hcp_end_date TEXT DEFAULT '',
+  status TEXT DEFAULT 'Created',
   created_by INTEGER REFERENCES users(id)
 );
 
@@ -63,8 +52,7 @@ CREATE TABLE IF NOT EXISTS master_data (
   service_category TEXT NOT NULL,
   service_type TEXT NOT NULL,
   service_provider TEXT NOT NULL,
-  active BOOLEAN NOT NULL DEFAULT true,
-  member_id INTEGER REFERENCES person_info(id),
+  active BOOLEAN NOT NULL DEFAULT true,  
   created_by INTEGER REFERENCES users(id)
 );
 
