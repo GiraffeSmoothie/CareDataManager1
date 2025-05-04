@@ -42,32 +42,39 @@ type DocumentFormValues = z.infer<typeof documentFormSchema>;
 
 export default function DocumentUpload() {
   const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
-  const [filteredMembers, setFilteredMembers] = useState<PersonInfo[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  // Handle click outside search dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     staleTime: 10000,
   });
+
+  // Filtered members for dropdown
+  const filteredMembers = searchTerm.length >= 4
+    ? members.filter((member) =>
+        `${member.firstName} ${member.lastName}`
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())
+      )
+    : [];
+
+  // Handle click outside dropdown
+  const searchRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch documents for selected member
   const { data: documents = [], isLoading: loadingDocuments } = useQuery<Document[]>({
@@ -88,25 +95,9 @@ export default function DocumentUpload() {
     },
   });
 
-  // Handle search input change
-  useEffect(() => {
-    if (searchTerm.length >= 4) {
-      const filtered = members.filter(member => 
-        `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredMembers(filtered);
-      setShowDropdown(true);
-    } else {
-      setShowDropdown(false);
-    }
-  }, [searchTerm, members]);
-
   // Select member handler
   const handleSelectMember = (member: PersonInfo) => {
     setSelectedMember(member);
-    setSearchTerm(`${member.firstName} ${member.lastName}`);
-    setShowDropdown(false);
-    setFilteredMembers([]);
     form.setValue("memberId", member.id.toString());
   };
 
@@ -171,12 +162,8 @@ export default function DocumentUpload() {
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Document Management</CardTitle>
+              <CardTitle>Client Documents</CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowDropdown(true)}>
-                  <Search className="h-4 w-4 mr-2" />
-                  Search Client
-                </Button>
                 <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
@@ -185,27 +172,40 @@ export default function DocumentUpload() {
             </div>
           </CardHeader>
           <CardContent>
-            <div ref={searchRef} className="relative">
+            {/* Styled search field like Member Assignment */}
+            <div className="relative max-w-md mb-4" ref={searchRef}>
               <div className="flex items-center border rounded-md">
                 <Search className="h-4 w-4 ml-2 text-gray-500" />
                 <Input
                   type="text"
                   placeholder="Search Client (minimum 4 characters)"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setShowDropdown(e.target.value.length >= 4 && filteredMembers.length > 0);
+                  }}
+                  onFocus={() => {
+                    if (filteredMembers.length > 0) setShowDropdown(true);
+                  }}
                   className="border-0 focus:ring-0"
+                  autoComplete="off"
                 />
               </div>
-
-              {showDropdown && (
-                <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
-                  {filteredMembers.map((member) => (
+              {showDropdown && filteredMembers.length > 0 && (
+                <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                  {filteredMembers.map((client) => (
                     <div
-                      key={member.id}
+                      key={client.id}
                       className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => handleSelectMember(member)}
+                      onClick={() => {
+                        setSelectedMember(client);
+                        setSearchTerm(`${client.firstName} ${client.lastName}`);
+                        setShowDropdown(false);
+                        form.setValue("memberId", client.id.toString());
+                      }}
                     >
-                      {member.title} {member.firstName} {member.lastName}
+                      {client.title ? client.title + " " : ""}
+                      {client.firstName} {client.lastName}
                     </div>
                   ))}
                 </div>

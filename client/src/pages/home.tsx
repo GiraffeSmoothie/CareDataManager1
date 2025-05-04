@@ -113,7 +113,7 @@ export default function Home() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpEndDate: "",
-      status: "Created",
+      status: "New",
     },
   });
 

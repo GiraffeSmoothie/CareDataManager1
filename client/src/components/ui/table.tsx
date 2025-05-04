@@ -1,5 +1,4 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
 
 const Table = React.forwardRef<
@@ -66,10 +65,12 @@ const TableRow = React.forwardRef<
 ))
 TableRow.displayName = "TableRow"
 
+interface TableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {}
+
 const TableHead = React.forwardRef<
   HTMLTableCellElement,
-  React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
+  TableHeadProps
+>(({ className, children, ...props }, ref) => (
   <th
     ref={ref}
     className={cn(
@@ -77,7 +78,9 @@ const TableHead = React.forwardRef<
       className
     )}
     {...props}
-  />
+  >
+    {children}
+  </th>
 ))
 TableHead.displayName = "TableHead"
 

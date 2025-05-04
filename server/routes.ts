@@ -356,7 +356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hcpLevel: validatedData.hcpLevel || '',
         hcpEndDate: validatedData.hcpEndDate || '',
         useHomeAddress: validatedData.useHomeAddress ?? true,
-        status: validatedData.status || 'Created'
+        status: validatedData.status || 'New'
       };
       
       console.log("Processed data:", personInfoWithUser);
@@ -426,7 +426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate the update data
       const validatedData = insertPersonInfoSchema.parse({
         ...req.body,
-        status: req.body.status || existingPerson.status || 'Created'
+        status: req.body.status || existingPerson.status || 'New'
       });
       
       console.log("Validated update data:", validatedData);
@@ -673,7 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const memberServiceWithUser = {
         ...validatedData,
         createdBy: req.user!.id,
-        status: validatedData.status || 'Created'
+        status: validatedData.status || 'New'
       };
       
       const createdService = await dbStorage.createMemberService(memberServiceWithUser);

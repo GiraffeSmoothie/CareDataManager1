@@ -32,6 +32,7 @@ import {
 import DashboardLayout from "@/layouts/app-layout";
 import { serviceCategories, getServiceTypesByCategory } from "@/lib/data";
 import { MasterData as MasterDataType } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
 
 const masterDataSchema = z.object({
   serviceCategory: z.string({ required_error: "Please select a service category" }),
@@ -49,6 +50,7 @@ export default function MasterData() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingData, setEditingData] = useState<MasterDataType | null>(null);
   const [activeTab, setActiveTab] = useState("view");
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   // Populate form when editing data changes
   useEffect(() => {
@@ -66,6 +68,14 @@ export default function MasterData() {
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading, refetch } = useQuery<MasterDataType[]>({
     queryKey: ["/api/master-data"],
+  });
+
+  // Sort services by Service Category A -> Z
+  const sortedMasterDataList = [...masterDataList].sort((a, b) => {
+    if (a.serviceCategory && b.serviceCategory) {
+      return a.serviceCategory.localeCompare(b.serviceCategory);
+    }
+    return 0;
   });
 
   // Initialize form with default values
@@ -412,8 +422,23 @@ export default function MasterData() {
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Services Master Data</CardTitle>
-              <div className="flex gap-2">
+              <CardTitle>Services Inventory</CardTitle>
+              <div className="flex gap-2 items-center">
+                <div className="flex items-center space-x-2 mr-2">
+                  <Switch
+                    id="active-only"
+                    checked={showActiveOnly}
+                    onCheckedChange={setShowActiveOnly}
+                  />
+                  <label htmlFor="active-only" className="text-sm cursor-pointer">
+                    Show Active Only
+                    {showActiveOnly && masterDataList.length > 0 && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        ({masterDataList.filter(item => item.active).length}/{masterDataList.length})
+                      </span>
+                    )}
+                  </label>
+                </div>
                 <div className="relative flex items-center">
                   <Search className="absolute left-3 h-4 w-4 text-gray-400" />
                   <Input
@@ -451,12 +476,13 @@ export default function MasterData() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {masterDataList
+                  {sortedMasterDataList
                     .filter(item => 
-                      searchTerm === "" || 
+                      (showActiveOnly ? item.active : true) &&
+                      (searchTerm === "" || 
                       item.serviceCategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       item.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      item.serviceProvider?.toLowerCase().includes(searchTerm.toLowerCase())
+                      item.serviceProvider?.toLowerCase().includes(searchTerm.toLowerCase()))
                     )
                     .map((item) => (
                       <TableRow key={item.id}>

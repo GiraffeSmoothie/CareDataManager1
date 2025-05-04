@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/layouts/app-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -80,20 +80,21 @@ export default function MemberAssignment() {
     queryKey: ["/api/master-data"],
   });
 
-  // Get unique categories, types, and providers from master data
-  const uniqueCategories = Array.from(new Set(masterData
+  // Get unique categories, types, and providers from active services only
+  const activeMasterData = masterData.filter(item => item.active);
+
+  const uniqueCategories = Array.from(new Set(activeMasterData
     .filter(item => item.serviceCategory?.trim())
     .map(item => item.serviceCategory)
   ));
   
-  const uniqueTypes = Array.from(new Set(masterData
+  const uniqueTypes = Array.from(new Set(activeMasterData
     .filter(item => item.serviceCategory === selectedCategory && item.serviceType?.trim())
     .map(item => item.serviceType)
   ));
   
-  const activeProviders = Array.from(new Set(masterData
+  const activeProviders = Array.from(new Set(activeMasterData
     .filter(item => 
-      item.active && 
       item.serviceProvider?.trim() &&
       item.serviceCategory === selectedCategory &&
       item.serviceType === selectedType
@@ -157,12 +158,12 @@ export default function MemberAssignment() {
 
   // Effect to handle search filtering
   useEffect(() => {
-    if (searchTerm.length >= 4) {
+    if (searchTerm.length >= 4 && !selectedMember) {
       setShowDropdown(true);
     } else {
       setShowDropdown(false);
     }
-  }, [searchTerm]);
+  }, [searchTerm, selectedMember]);
 
   // Watch for changes in the category field
   const watchedCategory = form.watch("careCategory");
@@ -212,7 +213,7 @@ export default function MemberAssignment() {
       });
       form.reset();
       setShowDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/member-services", selectedMember?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/member-services/member", selectedMember?.id] });
     },
     onError: (error: Error) => {
       toast({
@@ -237,8 +238,7 @@ export default function MemberAssignment() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle>Client Services Management</CardTitle>
-                <CardDescription>Select a Client to manage their service assignments</CardDescription>
+                <CardTitle>Client Services</CardTitle>
               </div>
               <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -279,10 +279,7 @@ export default function MemberAssignment() {
         {selectedMember && (
           <Card>
             <CardHeader>
-              <CardTitle>Service Assignments</CardTitle>
-              <CardDescription>
-                Managing services for {selectedMember.title} {selectedMember.firstName} {selectedMember.lastName}
-              </CardDescription>
+              <CardTitle>Client Services</CardTitle>
             </CardHeader>
             <CardContent>
               {isServicesLoading && <div>Loading assigned services...</div>}
@@ -318,11 +315,7 @@ export default function MemberAssignment() {
                                 await apiRequest("PATCH", `/api/member-services/${service.id}`, {
                                   status: value
                                 });
-
-                                queryClient.invalidateQueries({
-                                  queryKey: ["/api/member-services", selectedMember?.id]
-                                });
-
+                                await queryClient.refetchQueries({ queryKey: ["/api/member-services/member", selectedMember?.id] });
                                 toast({
                                   title: "Success",
                                   description: "Service status updated",

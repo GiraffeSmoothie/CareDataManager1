@@ -263,7 +263,7 @@ export const storage = {
           nextOfKinPhone || '',
           hcpLevel || '',
           hcpEndDate || '',
-          status || 'Created',
+          status || 'New',
           id
         ]
       );
@@ -480,7 +480,7 @@ export const storage = {
           data.serviceStartDate,
           data.serviceDays,
           data.serviceHours,
-          data.status || 'Planned',
+          data.status || 'New',
           data.createdBy
         ]
       );

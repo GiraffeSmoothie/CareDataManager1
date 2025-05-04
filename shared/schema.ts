@@ -16,7 +16,9 @@ export const personInfo = pgTable("person_info", {
   lastName: text("last_name").notNull(),
   dateOfBirth: text("date_of_birth").notNull(),
   email: text("email").notNull(),
+  homePhoneCountryCode: text("home_phone_country_code").default("+61"),
   homePhone: text("home_phone").default(""),
+  mobilePhoneCountryCode: text("mobile_phone_country_code").default("+61"),
   mobilePhone: text("mobile_phone").notNull(),
   // Home Address
   addressLine1: text("address_line1").notNull(),
@@ -33,11 +35,12 @@ export const personInfo = pgTable("person_info", {
   nextOfKinName: text("next_of_kin_name").default(""),
   nextOfKinAddress: text("next_of_kin_address").default(""),
   nextOfKinEmail: text("next_of_kin_email").default(""),
+  nextOfKinPhoneCountryCode: text("next_of_kin_phone_country_code").default("+61"),
   nextOfKinPhone: text("next_of_kin_phone").default(""),
   // HCP Information
   hcpLevel: text("hcp_level").default(""),
   hcpEndDate: text("hcp_end_date").default(""),
-  status: text("status").default("Created"),
+  status: text("status").default("New"),
   createdBy: integer("created_by").references(() => users.id),
 });
 
@@ -70,7 +73,7 @@ export const memberServices = pgTable("member_services", {
   serviceStartDate: date("service_start_date").notNull(),
   serviceDays: text("service_days").array().notNull(),
   serviceHours: integer("service_hours").notNull(),
-  status: text("status").default("Planned"),
+  status: text("status").default("New"),
   createdAt: timestamp("created_at").defaultNow(),
   createdBy: integer("created_by").references(() => users.id),
 });
@@ -116,7 +119,9 @@ export const insertPersonInfoSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .refine((date) => !isNaN(Date.parse(date)), "Invalid date format"),
   email: z.string().email("Invalid email address"),
+  homePhoneCountryCode: z.string().default("+61"),
   homePhone: z.string().optional().default(""),
+  mobilePhoneCountryCode: z.string().default("+61"),
   mobilePhone: z.string().min(10, "Mobile phone must be at least 10 digits"),
   addressLine1: z.string().min(1, "Address line 1 is required"),
   addressLine2: z.string().optional().default(""),
@@ -130,10 +135,11 @@ export const insertPersonInfoSchema = z.object({
   nextOfKinName: z.string().optional().default(""),
   nextOfKinAddress: z.string().optional().default(""),
   nextOfKinEmail: z.string().email("Invalid email address").optional().default(""),
+  nextOfKinPhoneCountryCode: z.string().default("+61"),
   nextOfKinPhone: z.string().optional().default(""),
   hcpLevel: z.string().optional().default(""),
   hcpEndDate: z.string().optional().default(""),
-  status: z.enum(["Created", "Active", "Paused", "Closed"]).default("Created"),
+  status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
 });
 
 // Document schema

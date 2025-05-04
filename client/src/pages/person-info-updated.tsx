@@ -9,6 +9,7 @@ import DashboardLayout from "@/layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { PhoneInput } from "../components/ui/phone-input";
 
 import {
   Form,
@@ -49,6 +50,8 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     .email({ message: "Please enter a valid email address" }),
   mobilePhone: z.string()
     .min(10, { message: "Mobile phone must be at least 10 digits" }),
+  mobilePhoneCountryCode: z.string().default("61"),
+  homePhoneCountryCode: z.string().default("61"),
   postCode: z.string()
     .min(5, { message: "Post code is required" }),
 });
@@ -290,7 +293,15 @@ export default function PersonInfo() {
                         <FormItem>
                           <FormLabel>Home Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Home phone (optional)" {...field} />
+                            <PhoneInput
+                              placeholder="Home phone (optional)"
+                              value={field.value}
+                              onChange={field.onChange}
+                              defaultCountry="61"
+                              onCountryChange={(country) => {
+                                form.setValue("homePhoneCountryCode", country);
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -303,7 +314,15 @@ export default function PersonInfo() {
                         <FormItem>
                           <FormLabel>Mobile Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Mobile phone" {...field} />
+                            <PhoneInput
+                              placeholder="Mobile phone"
+                              value={field.value}
+                              onChange={field.onChange}
+                              defaultCountry="61"
+                              onCountryChange={(country) => {
+                                form.setValue("mobilePhoneCountryCode", country);
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

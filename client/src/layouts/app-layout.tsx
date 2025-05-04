@@ -59,7 +59,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Link2 className="h-4 w-4" />
-                <span>Assigned Services</span>
+                <span>Client Services</span>
               </div>
             </Link>
             <Link href="/document-upload">
@@ -81,7 +81,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   : "border-transparent text-gray-600"
               )}>
                 <Database className="h-4 w-4" />
-                <span>Services Master Data</span>
+                <span>Services Inventory</span>
               </div>
             </Link>
           </div>

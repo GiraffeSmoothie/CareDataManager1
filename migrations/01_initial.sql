@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS person_info (
   next_of_kin_phone TEXT DEFAULT '',
   hcp_level TEXT DEFAULT '',
   hcp_end_date TEXT DEFAULT '',
-  status TEXT DEFAULT 'Created',
+  status TEXT DEFAULT 'New',
   created_by INTEGER REFERENCES users(id)
 );
 
