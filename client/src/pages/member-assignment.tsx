@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import * as z from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import DashboardLayout from "@/layouts/app-layout";
@@ -27,7 +27,10 @@ const memberAssignmentSchema = z.object({
   serviceProvider: z.string().min(1, "Service provider is required"),
   serviceStartDate: z.string().min(1, "Start date is required"),
   serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
-  serviceHours: z.string().min(1, "Hours per day is required")
+  serviceHours: z.string().min(1, "Hours per day is required").refine(val => {
+    const hours = parseInt(val);
+    return !isNaN(hours) && hours >= 1 && hours <= 24;
+  }, "Hours must be between 1 and 24")
 });
 
 type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
@@ -184,16 +187,45 @@ export default function MemberAssignment() {
     }
   }, [watchedType, form]);
 
+  // Watch for dialog open/close
+  useEffect(() => {
+    if (showDialog) {
+      form.reset({
+        careCategory: "",
+        careType: "",
+        serviceProvider: "",
+        serviceStartDate: "",
+        serviceDays: [],
+        serviceHours: ""
+      });
+      setSelectedCategory("");
+      setSelectedType("");
+    }
+  }, [showDialog, form]);
+
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: MemberAssignmentFormValues) => {
       if (!selectedMember) {
         throw new Error("No member selected");
       }
+      console.log("[Assign Service] Submitting form data:", data);
       
-      // Transform the data to match the API schema
+      // First ensure the master data combination exists
+      try {
+        await apiRequest("POST", "/api/master-data", {
+          serviceCategory: data.careCategory,
+          serviceType: data.careType,
+          serviceProvider: data.serviceProvider,
+          active: true
+        });
+      } catch (error) {
+        // Ignore error if master data already exists
+        console.log("Master data may already exist:", error);
+      }
+      
       const serviceData = {
-        memberId: parseInt(data.memberId),
+        memberId: parseInt(selectedMember.id.toString()),
         serviceCategory: data.careCategory,
         serviceType: data.careType,
         serviceProvider: data.serviceProvider,
@@ -202,9 +234,20 @@ export default function MemberAssignment() {
         serviceHours: parseInt(data.serviceHours),
         status: "Planned"
       };
-
+      console.log("[Assign Service] Sending serviceData to API:", serviceData);
       const response = await apiRequest("POST", "/api/member-services", serviceData);
-      return await response.json();
+      console.log("[Assign Service] API response:", response);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[Assign Service] Service assignment failed:", errorData);
+        throw new Error(errorData.message || "Failed to assign service");
+      }
+      const result = await response.json();
+      console.log("[Assign Service] Service assignment result:", result);
+      if (!result.id) {
+        throw new Error("Service was not created properly");
+      }
+      return result;
     },
     onSuccess: () => {
       toast({
@@ -372,13 +415,40 @@ export default function MemberAssignment() {
               <DialogTitle>Assign New Service</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((data) => {
-                if (!selectedMember) return;
-                createAssignmentMutation.mutate({
-                  ...data,
-                  memberId: selectedMember.id.toString()
-                });
-              })} className="space-y-6">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                console.log("[Form] Starting form submission");
+                
+                // Set the memberId before handling submission
+                if (selectedMember) {
+                  form.setValue("memberId", selectedMember.id.toString());
+                }
+
+                const formState = form.getValues();
+                console.log("[Form] Current form state:", formState);
+                
+                // Add validation error logging
+                const formErrors = form.formState.errors;
+                if (Object.keys(formErrors).length > 0) {
+                  console.log("[Form] Validation errors:", formErrors);
+                  return;
+                }
+                
+                form.handleSubmit((formData: MemberAssignmentFormValues) => {
+                  console.log("[Form] Inside onSubmit handler");
+                  console.log("[Form] Form data before mutation:", formData);
+                  if (!selectedMember) {
+                    console.log("[Form] No member selected, returning");
+                    return;
+                  }
+                  createAssignmentMutation.mutate({
+                    ...formData,
+                    memberId: selectedMember.id.toString()
+                  });
+                }, (errors) => {
+                  console.log("[Form] Form submission failed with errors:", errors);
+                })(e);
+              }} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}

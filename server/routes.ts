@@ -47,8 +47,10 @@ async function initializeUsers() {
   if (!admin) {
     // Create default admin user
     await dbStorage.createUser({
+      name: "Default Admin",
       username: "admin",
       password: hashPassword("password"),
+      role: "admin"
     });
     console.log("Default admin user created");
     console.log("Connecting to:", process.env.DATABASE_URL);
@@ -146,17 +148,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get("/api/auth/status", (req: Request, res: Response) => {
-    if (req.session.user) {
-      // Fetch user from DB to get role
-      dbStorage.getUserById(req.session.user.id).then(user => {
-        if (!user) {
-          return res.status(401).json({ authenticated: false });
-        }
-        return res.status(200).json({ authenticated: true, user: { id: user.id, username: user.username, role: user.role } });
+  app.get("/api/auth/status", async (req: Request, res: Response) => {
+    try {
+      if (!req.session.user) {
+        return res.status(401).json({ authenticated: false });
+      }
+
+      const user = await dbStorage.getUserById(req.session.user.id);
+      if (!user) {
+        req.session.destroy((err) => {
+          if (err) console.error("Error destroying invalid session:", err);
+        });
+        return res.status(401).json({ authenticated: false });
+      }
+
+      return res.status(200).json({ 
+        authenticated: true, 
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          role: user.role 
+        } 
       });
-    } else {
-      return res.status(401).json({ authenticated: false });
+    } catch (error) {
+      console.error("Error checking auth status:", error);
+      return res.status(500).json({ message: "Internal server error checking auth status" });
     }
   });
 
@@ -667,7 +683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Member services routes
   app.get("/api/member-services", async (req: Request, res: Response) => {
     try {
-      const memberServices = await dbStorage.getAllMemberServices();
+      const memberServices = await dbStorage.getAllMemberServices(); // Fetch all member services
       return res.status(200).json(memberServices);
     } catch (error) {
       console.error("Error fetching member services:", error);
@@ -677,28 +693,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/member-services", async (req: Request, res: Response) => {
     try {
-      console.log("Received member service data:", req.body);
-      const validatedData = insertMemberServiceSchema.parse(req.body);
+      if (!req.session?.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log("[API] Received member service data:", req.body);
+      
+      const validatedData = insertMemberServiceSchema.parse({
+        ...req.body,
+        createdBy: req.session.user.id
+      });
+      
+      console.log("[API] Validated member service data:", validatedData);
       
       const memberServiceWithUser = {
         ...validatedData,
-        createdBy: req.user!.id,
-        status: validatedData.status || 'New'
+        createdBy: req.session.user.id,
+        status: validatedData.status || 'Planned',
+        createdAt: new Date() // Add createdAt property
       };
       
+      console.log("[API] Creating member service with:", memberServiceWithUser);
       const createdService = await dbStorage.createMemberService(memberServiceWithUser);
+      console.log("[API] Member service created:", createdService);
       return res.status(201).json(createdService);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
+        console.error("[API] Validation error:", validationError);
+        return res.status(400).json({ message: validationError.message, details: validationError.details });
       }
-      console.error("Error creating member service:", error);
+      console.error("[API] Error creating member service:", error);
       return res.status(500).json({ message: "Failed to create member service" });
     }
   });
 
   app.get("/api/member-services/member/:memberId", async (req: Request, res: Response) => {
+    console.log("[API] Getting existing services for member:", req.body);
     try {
       const memberId = parseInt(req.params.memberId);
       if (isNaN(memberId)) {
@@ -720,7 +751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid ID format" });
       }
       
-      const memberService = await dbStorage.getMemberServiceById(id);
+      const memberService = await dbStorage.getMemberServiceById(id) || null;
       if (!memberService) {
         return res.status(404).json({ message: "Member service not found" });
       }

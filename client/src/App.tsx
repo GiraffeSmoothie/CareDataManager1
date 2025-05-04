@@ -13,6 +13,17 @@ import Homepage from "@/pages/homepage";
 import Settings from "@/pages/settings";
 import ManageUsers from "@/pages/manage-users";
 import { useState, useEffect } from "react";
+import { useQuery } from '@tanstack/react-query';
+import { getQueryFn } from "./lib/queryClient";
+
+interface AuthData {
+  authenticated: boolean;
+  user?: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
 
 function PrivateRoute({ component: Component, ...rest }: any) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -52,6 +63,43 @@ function PrivateRoute({ component: Component, ...rest }: any) {
   return <Component {...rest} />;
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useLocation();
+
+  const { data: authData, isError } = useQuery<AuthData>({
+    queryKey: ["authStatus"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false
+  });
+
+  useEffect(() => {
+    if (!loading) {
+      if (!authData?.user) {
+        setLocation("/login");
+      } else if (authData.user.role !== "admin") {
+        setLocation("/");
+      }
+    }
+  }, [authData, loading, setLocation]);
+
+  useEffect(() => {
+    if (authData !== undefined) {
+      setLoading(false);
+    }
+  }, [authData]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  if (!authData?.user || authData.user.role !== "admin") {
+    return null;
+  }
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -81,7 +129,7 @@ function Router() {
         <PrivateRoute component={Settings} />
       </Route>
       <Route path="/manage-users">
-        <PrivateRoute component={ManageUsers} />
+        <AdminRoute component={ManageUsers} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote, InsertServiceCaseNote } from '@shared/schema';
+import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -206,25 +206,28 @@ export const storage = {
       lastName: row.last_name,
       dateOfBirth: row.date_of_birth,
       email: row.email,
-      homePhone: row.home_phone,
-      mobilePhone: row.mobile_phone,
+      homePhoneCountryCode: row.home_phone_country_code || null,
+      homePhone: row.home_phone || null,
+      mobilePhoneCountryCode: row.mobile_phone_country_code || null,
+      mobilePhone: row.mobile_phone || null,
       addressLine1: row.address_line1,
-      addressLine2: row.address_line2,
-      addressLine3: row.address_line3,
+      addressLine2: row.address_line2 || null,
+      addressLine3: row.address_line3 || null,
       postCode: row.post_code,
-      mailingAddressLine1: row.mailing_address_line1,
-      mailingAddressLine2: row.mailing_address_line2,
-      mailingAddressLine3: row.mailing_address_line3,
-      mailingPostCode: row.mailing_post_code,
+      mailingAddressLine1: row.mailing_address_line1 || null,
+      mailingAddressLine2: row.mailing_address_line2 || null,
+      mailingAddressLine3: row.mailing_address_line3 || null,
+      mailingPostCode: row.mailing_post_code || null,
       useHomeAddress: row.use_home_address,
-      nextOfKinName: row.next_of_kin_name,
-      nextOfKinAddress: row.next_of_kin_address,
-      nextOfKinEmail: row.next_of_kin_email,
-      nextOfKinPhone: row.next_of_kin_phone,
-      hcpLevel: row.hcp_level,
-      hcpEndDate: row.hcp_end_date,
-      status: row.status,
-      createdBy: row.created_by
+      nextOfKinName: row.next_of_kin_name || null,
+      nextOfKinAddress: row.next_of_kin_address || null,
+      nextOfKinEmail: row.next_of_kin_email || null,
+      nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
+      nextOfKinPhone: row.next_of_kin_phone || null,
+      hcpLevel: row.hcp_level || null,
+      hcpEndDate: row.hcp_end_date || null,
+      status: row.status || 'New',
+      createdBy: row.created_by || null
     }));
   },
 
@@ -241,25 +244,28 @@ export const storage = {
       lastName: row.last_name,
       dateOfBirth: row.date_of_birth,
       email: row.email,
-      homePhone: row.home_phone,
-      mobilePhone: row.mobile_phone,
+      homePhoneCountryCode: row.home_phone_country_code || null,
+      homePhone: row.home_phone || null,
+      mobilePhoneCountryCode: row.mobile_phone_country_code || null,
+      mobilePhone: row.mobile_phone || null,
       addressLine1: row.address_line1,
-      addressLine2: row.address_line2,
-      addressLine3: row.address_line3,
+      addressLine2: row.address_line2 || null,
+      addressLine3: row.address_line3 || null,
       postCode: row.post_code,
-      mailingAddressLine1: row.mailing_address_line1,
-      mailingAddressLine2: row.mailing_address_line2,
-      mailingAddressLine3: row.mailing_address_line3,
-      mailingPostCode: row.mailing_post_code,
+      mailingAddressLine1: row.mailing_address_line1 || null,
+      mailingAddressLine2: row.mailing_address_line2 || null,
+      mailingAddressLine3: row.mailing_address_line3 || null,
+      mailingPostCode: row.mailing_post_code || null,
       useHomeAddress: row.use_home_address,
-      nextOfKinName: row.next_of_kin_name,
-      nextOfKinAddress: row.next_of_kin_address,
-      nextOfKinEmail: row.next_of_kin_email,
-      nextOfKinPhone: row.next_of_kin_phone,
-      hcpLevel: row.hcp_level,
-      hcpEndDate: row.hcp_end_date,
-      status: row.status,
-      createdBy: row.created_by
+      nextOfKinName: row.next_of_kin_name || null,
+      nextOfKinAddress: row.next_of_kin_address || null,
+      nextOfKinEmail: row.next_of_kin_email || null,
+      nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
+      nextOfKinPhone: row.next_of_kin_phone || null,
+      hcpLevel: row.hcp_level || null,
+      hcpEndDate: row.hcp_end_date || null,
+      status: row.status || 'New',
+      createdBy: row.created_by || null
     };
   },
 
@@ -532,6 +538,11 @@ export const storage = {
 
   async createMemberService(data: Omit<MemberService, 'id'>): Promise<MemberService> {
     try {
+      console.log("Creating member service with data:", data);
+      
+      // Ensure serviceDays is properly formatted as a PostgreSQL array
+      const serviceDaysArray = Array.isArray(data.serviceDays) ? data.serviceDays : [data.serviceDays];
+      
       const result = await pool.query(
         `INSERT INTO member_services (
           member_id, service_category, service_type, service_provider,
@@ -542,14 +553,16 @@ export const storage = {
           data.serviceCategory,
           data.serviceType,
           data.serviceProvider,
-          data.serviceStartDate,
-          data.serviceDays,
+          new Date(data.serviceStartDate), // Properly parse the date
+          serviceDaysArray,
           data.serviceHours,
-          data.status || 'New',
+          data.status || 'Planned',
           data.createdBy
         ]
       );
 
+      console.log("Member service created:", result.rows[0]);
+      
       return {
         id: result.rows[0].id,
         memberId: result.rows[0].member_id,
