@@ -6,6 +6,8 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  role: text("role").default("user"),
+  name: text("name").default(""),
 });
 
 export const personInfo = pgTable("person_info", {
@@ -89,9 +91,11 @@ export const serviceCaseNotes = pgTable("service_case_notes", {
 });
 
 // User schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const insertUserSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+  name: z.string().min(1, "Name is required"),
+  role: z.enum(["admin", "user"]).default("user")
 });
 
 // Master data schemas

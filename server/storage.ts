@@ -2,7 +2,9 @@ import { Pool } from 'pg';
 import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote, InsertServiceCaseNote } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
+// Database pool configuration with error handling
 let pool = new Pool({
   user: 'postgres',
   host: 'localhost',
@@ -11,6 +13,30 @@ let pool = new Pool({
   port: 5432,
   ssl: false
 });
+
+// Add error handling for the pool
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+pool.on('connect', () => {
+  console.log('Connected to database successfully');
+});
+
+// Test the connection
+(async () => {
+  try {
+    const client = await pool.connect();
+    console.log('Database connection test successful');
+    client.release();
+  } catch (err) {
+    console.error('Error testing database connection:', err);
+    if (err instanceof Error) {
+      console.error('Error details:', err.message);
+      console.error('Stack trace:', err.stack);
+    }
+  }
+})();
 
 // Initialize database and run migrations
 export async function initializeDatabase() {
@@ -42,12 +68,51 @@ export const storage = {
     return result.rows[0] || null;
   },
 
-  async createUser(user: { username: string; password: string }): Promise<User> {
-    const result = await pool.query(
-      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *',
-      [user.username, user.password]
-    );
-    return result.rows[0];
+  async getUserById(id: number): Promise<User | null> {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    return result.rows[0] || null;
+  },
+
+  async verifyPassword(username: string, password: string): Promise<boolean> {
+    const user = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (!user.rows[0]) return false;
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+    return user.rows[0].password === hash;
+  },
+
+  async updateUserPassword(id: number, newPassword: string): Promise<void> {
+    const hash = crypto.createHash('sha256').update(newPassword).digest('hex');
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hash, id]);
+  },
+
+  async createUser(user: { name: string; username: string; password: string; role?: string }): Promise<User> {
+    try {
+      console.log("Attempting to create user:", {
+        name: user.name,
+        username: user.username,
+        role: user.role || 'user'
+      });
+
+      const result = await pool.query(
+        'INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING *',
+        [user.name, user.username, user.password, user.role || 'user']
+      );
+
+      console.log("User created successfully:", {
+        id: result.rows[0]?.id,
+        username: result.rows[0]?.username,
+        role: result.rows[0]?.role
+      });
+
+      return result.rows[0];
+    } catch (error) {
+      console.error("Error in createUser:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", error.message);
+        console.error("Stack trace:", error.stack);
+      }
+      throw error;
+    }
   },
 
   async createPersonInfo(data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {

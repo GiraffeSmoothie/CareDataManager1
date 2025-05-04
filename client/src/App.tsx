@@ -10,6 +10,8 @@ import MemberAssignment from "@/pages/member-assignment";
 import DocumentUpload from "@/pages/document-upload";
 import ManageClient from "@/pages/manage-client";
 import Homepage from "@/pages/homepage";
+import Settings from "@/pages/settings";
+import ManageUsers from "@/pages/manage-users";
 import { useState, useEffect } from "react";
 
 function PrivateRoute({ component: Component, ...rest }: any) {
@@ -74,6 +76,12 @@ function Router() {
       </Route>
       <Route path="/document-upload">
         <PrivateRoute component={DocumentUpload} />
+      </Route>
+      <Route path="/settings">
+        <PrivateRoute component={Settings} />
+      </Route>
+      <Route path="/manage-users">
+        <PrivateRoute component={ManageUsers} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

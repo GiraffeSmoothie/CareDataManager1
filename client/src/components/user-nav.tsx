@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,18 @@ export default function UserNav() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Use React Query to manage auth status
+  const { data: authData } = useQuery({
+    queryKey: ["authStatus"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/status");
+      if (!res.ok) throw new Error("Failed to fetch auth status");
+      return res.json();
+    }
+  });
+
+  const userRole = authData?.user?.role;
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -44,9 +57,13 @@ export default function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative flex items-center gap-2 h-8 p-1">
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-muted">JS</AvatarFallback>
+            <AvatarFallback className="bg-muted">
+              {authData?.user?.username?.[0]?.toUpperCase() || "U"}
+            </AvatarFallback>
           </Avatar>
-          <span className="hidden md:inline-block text-sm font-medium">John Smith</span>
+          <span className="hidden md:inline-block text-sm font-medium">
+            {authData?.user?.username || "User"}
+          </span>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
@@ -55,13 +72,19 @@ export default function UserNav() {
           <User className="mr-2 h-4 w-4" />
           <span>Profile</span>
         </DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer">
+        <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/settings")}>
           <Settings className="mr-2 h-4 w-4" />
           <span>Settings</span>
         </DropdownMenuItem>
+        {userRole === "admin" && (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/manage-users")}>
+            <User className="mr-2 h-4 w-4" />
+            <span>Manage Users</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
-          className="cursor-pointer" 
+        <DropdownMenuItem
+          className="cursor-pointer"
           onClick={handleLogout}
           disabled={isLoggingOut}
         >

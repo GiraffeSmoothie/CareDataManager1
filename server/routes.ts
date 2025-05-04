@@ -19,6 +19,7 @@ declare module "express-session" {
     user: {
       id: number;
       username: string;
+      role: string; // include role in session
     };
   }
 }
@@ -28,6 +29,7 @@ declare module "express" {
     user?: {
       id: number;
       username: string;
+      role: string; // include role in session
     };
     memberPath?: string;
     filePath?: string;
@@ -124,6 +126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.user = {
         id: user.id,
         username: user.username,
+        role: user.role // include role in session
       };
 
       return res.status(200).json({ message: "Login successful" });
@@ -145,9 +148,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/status", (req: Request, res: Response) => {
     if (req.session.user) {
-      return res.status(200).json({ authenticated: true, user: req.session.user });
+      // Fetch user from DB to get role
+      dbStorage.getUserById(req.session.user.id).then(user => {
+        if (!user) {
+          return res.status(401).json({ authenticated: false });
+        }
+        return res.status(200).json({ authenticated: true, user: { id: user.id, username: user.username, role: user.role } });
+      });
+    } else {
+      return res.status(401).json({ authenticated: false });
     }
-    return res.status(401).json({ authenticated: false });
   });
 
   // Auth middleware for protected routes
@@ -801,6 +811,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating case note:", error);
       return res.status(500).json({ message: "Failed to update case note" });
+    }
+  });
+
+  // Change password endpoint
+  app.post("/api/change-password", async (req, res) => {
+    try {
+      const userId = req.user?.id; // Assumes authentication middleware sets req.user
+      const { currentPassword, newPassword } = req.body;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current and new password required" });
+      }
+      // Fetch user from DB
+      const user = await dbStorage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      // Check current password
+      const isMatch = await dbStorage.verifyPassword(user.username, currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+      // Update password
+      await dbStorage.updateUserPassword(userId, newPassword);
+      return res.status(200).json({ message: "Password changed successfully" });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to change password";
+      return res.status(500).json({ message: errorMessage });
+    }
+  });
+
+  // List all users (admin only)
+  app.get("/api/users", async (req, res) => {
+    try {
+      // Only allow admin
+      if (!req.session?.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const user = await dbStorage.getUserById(req.session.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const users = await dbStorage.getAllUsers();
+      // Return only id, name, username, role
+      return res.status(200).json(users.map(u => ({ id: u.id, name: u.name, username: u.username, role: u.role })));
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Add a new user (admin only)
+  app.post("/api/users", async (req, res) => {
+    try {
+      console.log("Received user creation request with body:", {
+        ...req.body,
+        password: '[REDACTED]'  // Don't log passwords
+      });
+
+      if (!req.session?.user?.id) {
+        console.log("Request rejected: No session user ID");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const currentUser = await dbStorage.getUserById(req.session.user.id);
+      console.log("Current user attempting operation:", {
+        id: currentUser?.id,
+        username: currentUser?.username,
+        role: currentUser?.role
+      });
+
+      if (!currentUser || currentUser.role !== "admin") {
+        console.log("Request rejected: User is not admin", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      // Validate input using the schema
+      try {
+        console.log("Validating input data...");
+        const validatedData = insertUserSchema.parse(req.body);
+        console.log("Input validation successful");
+
+        // Check for duplicate username
+        const existing = await dbStorage.getUserByUsername(validatedData.username);
+        if (existing) {
+          console.log("Request rejected: Username already exists:", validatedData.username);
+          return res.status(409).json({ message: "Username already exists" });
+        }
+
+        // Hash password using the helper function
+        console.log("Creating new user with username:", validatedData.username);
+        const hashedPassword = hashPassword(validatedData.password);
+        const user = await dbStorage.createUser({ 
+          name: validatedData.name,
+          username: validatedData.username, 
+          password: hashedPassword, 
+          role: validatedData.role 
+        });
+        
+        console.log("User created successfully:", {
+          id: user.id,
+          username: user.username,
+          role: user.role
+        });
+
+        return res.status(201).json({ 
+          id: user.id, 
+          name: user.name, 
+          username: user.username, 
+          role: user.role 
+        });
+      } catch (validationError) {
+        console.error("Validation error:", validationError);
+        if (validationError instanceof z.ZodError) {
+          const formattedError = fromZodError(validationError);
+          return res.status(400).json({ 
+            message: "Validation failed", 
+            errors: formattedError.details 
+          });
+        }
+        throw validationError;
+      }
+    } catch (err) {
+      console.error("Error creating user:", err);
+      if (err instanceof Error) {
+        console.error("Error stack:", err.stack);
+      }
+      return res.status(500).json({ message: "Failed to add user" });
     }
   });
 

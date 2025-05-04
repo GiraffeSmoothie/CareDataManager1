@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -20,6 +21,7 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [_, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -46,6 +48,9 @@ export default function Login() {
       }
 
       const result = await response.json();
+      
+      // Invalidate auth status query to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ["authStatus"] });
       
       toast({
         title: "Success",
