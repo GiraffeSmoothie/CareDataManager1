@@ -30,12 +30,19 @@ jobs:
       - name: Install Root Dependencies
         run: npm install
 
-      - name: Install and Build Client
+      - name: Install Client Dependencies
         working-directory: ./client
         run: |
           npm ci
-          npm install -D vite@5.4.14 @vitejs/plugin-react typescript
-          npm run build
+          npm install -D vite@5.4.14
+          npm install -D @vitejs/plugin-react
+          npm install -D typescript
+          npm install zod
+          npm install @hookform/resolvers
+
+      - name: Build Client
+        working-directory: ./client
+        run: npm run build
 
       - name: Install Server Dependencies
         working-directory: ./server
