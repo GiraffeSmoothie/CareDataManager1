@@ -13,31 +13,11 @@
     },
     {
       "route": "/*",
-      "serve": "/index.html",
+      "rewrite": "/index.html",
       "statusCode": 200
     }
   ],
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/",
-          "clientIdSettingName": "AZURE_CLIENT_ID",
-          "clientSecretSettingName": "AZURE_CLIENT_SECRET"
-        }
-      }
-    }
-  },
   "platform": {
     "apiRuntime": "node:18"
-  },
-  "database": {
-    "connections": [
-      {
-        "name": "PostgreSQL",
-        "type": "postgresql",
-        "connectionString": "@Microsoft.KeyVault(SecretUri=${DATABASE_URL})"
-      }
-    ]
   }
 }
