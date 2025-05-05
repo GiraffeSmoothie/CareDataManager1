@@ -1,0 +1,8 @@
+{
+  "connections": {
+    "postgres": {
+      "connectionString": "@env('DATABASE_URL')",
+      "type": "postgresql"
+    }
+  }
+}
