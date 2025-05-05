@@ -24,27 +24,33 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          
-          
-      - name: Install Dependencies
-        run: |
-          npm install
-          cd client && npm install
-          cd ../server && npm install
-          
+      
+      - name: Install Root Dependencies
+        run: npm install
+      
+      - name: Install Client Dependencies
+        working-directory: ./client
+        run: npm install
+      
+      - name: Install Server Dependencies
+        working-directory: ./server
+        run: npm install
+      
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
+        env:
+          NODE_ENV: production
+          IS_STATIC_EXPORT: true
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_SEA_07E590900 }}
+          azure_static_web_apps_api_token: ${{ f61143862189bd4ed36f77a6ba20e2ef6adfd423a34800e27279c813758ec9b006-f0d1652f-0bae-41d7-8265-0b106d91863c000300307e590900 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           ###### Repository/Build Configurations ######
-          app_location: "client" # Location of your client app
-          api_location: "server" # Location of your API
+          app_location: "/" # Root of the monorepo
+          api_location: "server" # API source code path
           output_location: "dist" # Built app content directory
           app_build_command: "npm run build"
-          api_build_command: "npm run build:server"
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
@@ -56,5 +62,5 @@ jobs:
         id: closepullrequest
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_SEA_07E590900 }}
+          azure_static_web_apps_api_token: ${{ f61143862189bd4ed36f77a6ba20e2ef6adfd423a34800e27279c813758ec9b006-f0d1652f-0bae-41d7-8265-0b106d91863c000300307e590900 }}
           action: "close"
