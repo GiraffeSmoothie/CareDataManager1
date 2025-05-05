@@ -37,7 +37,10 @@ jobs:
           NODE_ENV: production
           CI: false
           VITE_API_URL: "/api"
-        run: npm run build --workspace client
+        run: |
+          cd client
+          npm run build
+          cp dist/index.html dist/404.html
 
       - name: Build And Deploy
         id: builddeploy
@@ -56,6 +59,8 @@ jobs:
           output_location: "dist"
           skip_app_build: true
           skip_api_build: false
+          production_branch: "main"
+          deployment_environment: production
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

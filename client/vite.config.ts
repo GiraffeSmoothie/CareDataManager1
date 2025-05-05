@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  base: "./",
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -13,13 +14,8 @@ export default defineConfig({
   build: {
     outDir: './dist',
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks: undefined,
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash].[ext]'
-      }
+    modulePreload: {
+      polyfill: true
     }
   }
 });
