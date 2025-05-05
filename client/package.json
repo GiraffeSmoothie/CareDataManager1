@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "npm install vite@5.4.14",
-    "build": "npx vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc"
   },
@@ -64,6 +63,6 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
-    "vite": "^5.4.14"
+    "vite": "5.4.14"
   }
 }

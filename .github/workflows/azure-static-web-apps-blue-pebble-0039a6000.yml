@@ -41,7 +41,6 @@ jobs:
           CI: false
         run: |
           npm ci --prefer-offline --no-audit --no-optional --maxsockets=8
-          npm install -D vite@5.4.14
           npm run build
 
       - name: Install Server Dependencies
