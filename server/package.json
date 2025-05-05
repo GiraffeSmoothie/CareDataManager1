@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "dev": "tsx index.ts",
-    "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"
+    "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=../dist/api"
   }
 }

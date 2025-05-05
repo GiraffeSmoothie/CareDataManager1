@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, boolean, jsonb, date, timestamp, InferModel } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, jsonb, date, timestamp } from "drizzle-orm/pg-core";
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -187,7 +188,7 @@ export const insertServiceCaseNoteSchema = z.object({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type User = InferSelectModel<typeof users>;
 
 export type InsertMasterData = z.infer<typeof insertMasterDataSchema>;
 export type MasterData = {
@@ -201,18 +202,18 @@ export type MasterData = {
 };
 
 export type InsertPersonInfo = z.infer<typeof insertPersonInfoSchema>;
-export type PersonInfo = typeof personInfo.$inferSelect;
+export type PersonInfo = InferSelectModel<typeof personInfo>;
 
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
-export type Document = typeof documents.$inferSelect;
+export type Document = InferSelectModel<typeof documents>;
 
 export type InsertMemberService = z.infer<typeof insertMemberServiceSchema>;
-export type MemberService = typeof memberServices.$inferSelect;
+export type MemberService = InferSelectModel<typeof memberServices>;
 
-export type ServiceCaseNote = typeof serviceCaseNotes.$inferSelect;
-export type InsertServiceCaseNote = typeof serviceCaseNotes.$inferInsert;
+export type ServiceCaseNote = InferSelectModel<typeof serviceCaseNotes>;
+export type InsertServiceCaseNote = InferInsertModel<typeof serviceCaseNotes>;
 
-export type NewServiceCaseNote = InferModel<typeof serviceCaseNotes, 'insert'>;
+export type NewServiceCaseNote = InferInsertModel<typeof serviceCaseNotes>;
 
 // Login session type
 export interface Session {
