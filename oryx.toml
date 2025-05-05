@@ -1,0 +1,5 @@
+[build]
+builder = "nodejs"
+pre_command = "npm install -g esbuild typescript"
+build_command = "npm run build"
+output_location = "dist"
