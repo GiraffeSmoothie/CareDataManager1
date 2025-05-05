@@ -86,7 +86,7 @@ export function serveStatic(app: Express) {
 
 export default defineConfig({
   build: {
-    outDir: path.resolve(__dirname, 'dist'), // Explicitly setting the output directory to server/dist
+    outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
@@ -103,12 +103,14 @@ export default defineConfig({
         chunkFileNames: '[name].js',
         assetFileNames: '[name].[ext]'
       }
-    }
+    },
+
+    
   },
   server: {
     strictPort: true,
     host: true,
-    port: 3001,
+    port: 3000,
     hmr: {
       server: true
     },
