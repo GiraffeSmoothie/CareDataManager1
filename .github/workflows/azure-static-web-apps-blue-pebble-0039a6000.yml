@@ -26,27 +26,18 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            client/package-lock.json
-            server/package-lock.json
 
-      - name: Install Root Dependencies
-        run: npm install
+      - name: Install All Dependencies
+        run: |
+          npm install
+          npm install --workspaces
 
-      - name: Install and Build Client
-        working-directory: ./client
+      - name: Build Client
         env:
           NODE_ENV: production
           CI: false
           VITE_API_URL: "/api"
-        run: |
-          npm ci
-          npm run build
-
-      - name: Install Server Dependencies
-        working-directory: ./server
-        run: npm ci
+        run: npm run build --workspace client
 
       - name: Build And Deploy
         id: builddeploy
