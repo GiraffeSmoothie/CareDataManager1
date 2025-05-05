@@ -360,13 +360,11 @@ interface ChartData {
 
 interface ChartProps {
   data: ChartData[]
-  className?: string
   color?: string
 }
 
 function SimpleBarChart({
   data,
-  className,
   color = "#2563eb",
 }: ChartProps) {
   return (

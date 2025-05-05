@@ -48,12 +48,13 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     }, "Please enter a valid date that is not in the future"),
   email: z.string()
     .email({ message: "Please enter a valid email address" }),
-  mobilePhone: z.string()
-    .min(10, { message: "Mobile phone must be at least 10 digits" }),
-  mobilePhoneCountryCode: z.string().default("61"),
+  homePhone: z.string().optional(),
   homePhoneCountryCode: z.string().default("61"),
+  mobilePhone: z.string()
+    .min(8, { message: "Phone number must be at least 8 digits" }),
+  mobilePhoneCountryCode: z.string().default("61"),
   postCode: z.string()
-    .min(5, { message: "Post code is required" }),
+    .min(4, { message: "Post code must be at least 4 characters" }),
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
@@ -73,7 +74,9 @@ export default function PersonInfo() {
       dateOfBirth: "",
       email: "",
       homePhone: "",
+      homePhoneCountryCode: "61",
       mobilePhone: "",
+      mobilePhoneCountryCode: "61",
       addressLine1: "",
       addressLine2: "",
       addressLine3: "",
@@ -296,8 +299,7 @@ export default function PersonInfo() {
                             <PhoneInput
                               placeholder="Home phone (optional)"
                               value={field.value}
-                              onChange={field.onChange}
-                              defaultCountry="61"
+                              defaultCountry={form.getValues("homePhoneCountryCode")}
                               onCountryChange={(country) => {
                                 form.setValue("homePhoneCountryCode", country);
                               }}
@@ -317,8 +319,7 @@ export default function PersonInfo() {
                             <PhoneInput
                               placeholder="Mobile phone"
                               value={field.value}
-                              onChange={field.onChange}
-                              defaultCountry="61"
+                              defaultCountry={form.getValues("mobilePhoneCountryCode")}
                               onCountryChange={(country) => {
                                 form.setValue("mobilePhoneCountryCode", country);
                               }}

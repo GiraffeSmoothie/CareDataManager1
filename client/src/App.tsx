@@ -65,9 +65,9 @@ function PrivateRoute({ component: Component, ...rest }: any) {
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useLocation();
+  const [_, setLocation] = useLocation();
 
-  const { data: authData, isError } = useQuery<AuthData>({
+  const { data: authData } = useQuery<AuthData>({
     queryKey: ["authStatus"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false

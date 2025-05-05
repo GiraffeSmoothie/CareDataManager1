@@ -1,54 +1,45 @@
-import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "./form";
+import { useRef, useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
 import { Button } from "./button";
 import { Textarea } from "./textarea";
-import MemberService from "@/pages/member-assignment";
-import { apiRequest } from "@/lib/queryClient";
-import { Loader2 } from "lucide-react";
+import { Label } from "./label";
+import { useToast } from "@/hooks/use-toast";
+import type { MemberService } from "@/lib/types";
 
-const caseNoteSchema = z.object({
-  noteText: z.string().min(1, "Case note is required"),
-});
-
-type CaseNoteFormValues = z.infer<typeof caseNoteSchema>;
-
-interface CaseNotesDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  service: MemberService | null;
-  onSave: () => void;
-}
-
-export function CaseNotesDialog({ open, onOpenChange, service, onSave }: CaseNotesDialogProps) {
+export function CaseNotesModal({
+  isOpen,
+  onClose,
+  service,
+  onSaved
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  service: MemberService;
+  onSaved?: () => void;
+}) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [existingNote, setExistingNote] = useState<string>("");
 
-  const form = useForm<CaseNoteFormValues>({
-    resolver: zodResolver(caseNoteSchema),
-    defaultValues: {
-      noteText: "",
-    },
-  });
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch existing case note when dialog opens
+  // Fetch existing case note when modal opens
   useEffect(() => {
-    if (open && service) {
+    if (isOpen && service) {
       setIsLoading(true);
       apiRequest("GET", `/api/service-case-notes/${service.id}`)
         .then((res) => res.json())
         .then((data) => {
           if (data && data.noteText) {
             setExistingNote(data.noteText);
-            form.reset({ noteText: data.noteText });
+            if (noteRef.current) {
+              noteRef.current.value = data.noteText;
+            }
           } else {
             setExistingNote("");
-            form.reset({ noteText: "" });
+            if (noteRef.current) {
+              noteRef.current.value = "";
+            }
           }
         })
         .catch(() => {
@@ -62,10 +53,10 @@ export function CaseNotesDialog({ open, onOpenChange, service, onSave }: CaseNot
           setIsLoading(false);
         });
     }
-  }, [open, service, form, toast]);
+  }, [isOpen, service, toast]);
 
-  const onSubmit = async (data: CaseNoteFormValues) => {
-    if (!service) return;
+  const handleSave = async () => {
+    if (!service || !noteRef.current) return;
 
     try {
       setIsLoading(true);
@@ -76,7 +67,7 @@ export function CaseNotesDialog({ open, onOpenChange, service, onSave }: CaseNot
       
       const response = await apiRequest(method, endpoint, {
         serviceId: service.id,
-        noteText: data.noteText,
+        noteText: noteRef.current.value,
       });
 
       if (!response.ok) {
@@ -87,8 +78,10 @@ export function CaseNotesDialog({ open, onOpenChange, service, onSave }: CaseNot
         title: "Success",
         description: "Case note saved successfully",
       });
-      onSave();
-      onOpenChange(false);
+      if (onSaved) {
+        onSaved();
+      }
+      onClose();
     } catch (error) {
       toast({
         title: "Error",
@@ -101,44 +94,35 @@ export function CaseNotesDialog({ open, onOpenChange, service, onSave }: CaseNot
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {service ? `Case Notes - ${service.serviceCategory} (${service.serviceType})` : 'Service Case Notes'}
           </DialogTitle>
+          <DialogDescription>
+            {service ? `Notes for ${service.serviceCategory} - ${service.serviceType} service provided on ${service.serviceDays.join(", ")} (${service.serviceHours} hrs)` : 'Case Note'}
+          </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="noteText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {service ? `Notes for ${service.serviceCategory} - ${service.serviceType} service provided on ${service.serviceDays.join(", ")} (${service.serviceHours} hrs)` : 'Case Note'}
-                  </FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Enter case notes here..."
-                      className="min-h-[200px]"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <div className="space-y-4">
+          <Label htmlFor="case-note">Case Note</Label>
+          <Textarea
+            id="case-note"
+            placeholder="Enter case notes here..."
+            className="min-h-[200px]"
+            ref={noteRef}
+          />
+          <DialogFooter>
             <Button
-              type="submit"
+              onClick={handleSave}
               className="w-full"
               disabled={isLoading}
             >
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Case Note
             </Button>
-          </form>
-        </Form>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

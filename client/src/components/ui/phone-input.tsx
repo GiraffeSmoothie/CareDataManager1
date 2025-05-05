@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -9,14 +9,15 @@ import {
   CommandInput,
   CommandItem,
 } from "../ui/command";
-import { Input } from "./input";
+import { Input } from "@/components/ui/input";
+import { FormControl } from "@/components/ui/form";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "./popover";
 import { Button } from "./button";
-import { FormControl, FormItem, FormLabel, FormMessage } from "./form";
+import { FormItem, FormLabel, FormMessage } from "./form";
 
 // Define country codes with flags
 export const countryCodes = [
@@ -42,11 +43,10 @@ export const countryCodes = [
   { value: "55", label: "Brazil", flag: "🇧🇷" },
 ];
 
-interface PhoneInputProps {
-  value: string;
-  countryCode: string;
-  onValueChange: (value: string) => void;
-  onCountryCodeChange: (value: string) => void;
+export interface PhoneInputProps {
+  defaultCountry?: string;
+  value?: string;
+  onCountryChange?: (country: string) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -55,10 +55,9 @@ interface PhoneInputProps {
 }
 
 export function PhoneInput({
-  value,
-  countryCode,
-  onValueChange,
-  onCountryCodeChange,
+  defaultCountry = "61", // Default to Australia
+  value = "",
+  onCountryChange,
   placeholder,
   disabled,
   className,
@@ -66,11 +65,17 @@ export function PhoneInput({
   error,
 }: PhoneInputProps) {
   const [open, setOpen] = useState(false);
+  const [countryCode, setCountryCode] = useState(defaultCountry);
   
   // Find the selected country from its code
   const selectedCountry = countryCodes.find(
     (country) => country.value === countryCode
-  ) || countryCodes[0]; // Default to Australia (first in the list)
+  ) || countryCodes[0];
+
+  const handleCountryChange = (code: string) => {
+    setCountryCode(code);
+    onCountryChange?.(code);
+  };
 
   return (
     <FormItem className="flex flex-col space-y-2">
@@ -99,10 +104,7 @@ export function PhoneInput({
                   <CommandItem
                     key={country.value}
                     value={country.value}
-                    onSelect={(currentValue) => {
-                      onCountryCodeChange(currentValue);
-                      setOpen(false);
-                    }}
+                    onSelect={handleCountryChange}
                   >
                     <Check
                       className={cn(
@@ -122,7 +124,6 @@ export function PhoneInput({
           <Input
             placeholder={placeholder || "Phone number"}
             value={value}
-            onChange={(e) => onValueChange(e.target.value)}
             className={cn("flex-1 rounded-l-none", className)}
             disabled={disabled}
           />

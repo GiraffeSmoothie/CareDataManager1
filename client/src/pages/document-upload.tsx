@@ -1,44 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AppLayout from "@/layouts/app-layout";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Upload, FileText, ArrowDown, Search, Plus, Eye } from "lucide-react";
-import type { Document, PersonInfo } from "@shared/schema";
-
-// Document types
-const documentTypes = ["Identification", "Consent", "Disclaimer"];
-
-// Define the document form schema
-const documentFormSchema = z.object({
-  memberId: z.string({
-    required_error: "Please select a client"
-  }),
-  documentName: z.string({
-    required_error: "Document name is required"
-  }).min(2, {
-    message: "Document name must be at least 2 characters"
-  }),
-  documentType: z.string({
-    required_error: "Document type is required"
-  }),
-  file: z.instanceof(FileList).refine((files) => files.length > 0, {
-    message: "Please upload a file"
-  })
-});
-
-type DocumentFormValues = z.infer<typeof documentFormSchema>;
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Search } from "lucide-react";
 
 export default function DocumentUpload() {
   const { toast } = useToast();
