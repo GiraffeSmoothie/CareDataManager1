@@ -876,21 +876,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List all users (admin only)
-  app.get("/api/users", async (req, res) => {
+  app.get("/api/users", authMiddleware, async (req, res) => {
     try {
-      // Only allow admin
-      if (!req.session?.user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      const user = await dbStorage.getUserById(req.session.user.id);
+      const user = await dbStorage.getUserById(req.user.id);
       if (!user || user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden" });
+        console.log("Request rejected: User is not admin", {
+          userId: user?.id,
+          userRole: user?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
       const users = await dbStorage.getAllUsers();
-      // Return only id, name, username, role
       return res.status(200).json(users.map(u => ({ id: u.id, name: u.name, username: u.username, role: u.role })));
     } catch (err) {
-      return res.status(500).json({ message: "Failed to fetch users" });
+      console.error("Error fetching users:", err);
+      console.log ("[API /api/users] Failed to fetch users")
+      return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
 

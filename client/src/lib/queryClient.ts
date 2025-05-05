@@ -42,14 +42,17 @@ export async function apiRequest(
   const responseClone = response.clone();
   
   if (!response.ok) {
-    let errorMessage;
     try {
       const errorData = await responseClone.json();
-      errorMessage = errorData.message || response.statusText;
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     } catch (e) {
-      errorMessage = await responseClone.text() || response.statusText;
+      if (e instanceof Error) {
+        throw e;
+      }
+      // If JSON parsing fails, try to get text content
+      const errorText = await responseClone.text();
+      throw new Error(errorText || `HTTP error! status: ${response.status}`);
     }
-    throw new Error(errorMessage);
   }
 
   return response;

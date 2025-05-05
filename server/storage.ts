@@ -63,6 +63,22 @@ export async function initializeDatabase() {
 }
 
 export const storage = {
+  async getAllUsers(): Promise<User[]> {
+    try {
+      const result = await pool.query('SELECT id, name, username, role FROM users');
+      return result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        username: row.username,
+        role: row.role,
+        // We don't return the password for security reasons
+      }));
+    } catch (error) {
+      console.error("Error in getAllUsers:", error);
+      throw error;
+    }
+  },
+
   async getUserByUsername(username: string): Promise<User | null> {
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     return result.rows[0] || null;

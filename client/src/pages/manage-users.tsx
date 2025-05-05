@@ -64,11 +64,35 @@ export default function ManageUsers() {
   const [showDialog, setShowDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof User; direction: 'asc' | 'desc' }>({
+    key: 'username',
+    direction: 'asc'
+  });
+  const itemsPerPage = 10;
 
   // Fetch all users
-  const { data: users = [], isLoading } = useQuery<User[]>({
-    queryKey: ["/api/users"],
-    queryFn: () => apiRequest("GET", "/api/users").then(res => res.json()),
+  const { data: users = [], isLoading, error } = useQuery<User[]>({
+    queryKey: ["users"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("GET", "/api/users");
+        if (!response.ok) {
+          throw new Error("Failed to fetch users");
+        }
+        return response.json();
+      } catch (error: any) {
+        console.error("[client] Error fetching users:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch users",
+          variant: "destructive"
+        });
+        throw error;
+      }
+    },
   });
 
   const form = useForm<UserFormValues>({
@@ -81,12 +105,34 @@ export default function ManageUsers() {
     },
   });
 
-  // Filter users based on search term
-  const filteredUsers = users.filter(user => 
+  // Sort and filter users
+  const sortedUsers = [...users].sort((a, b) => {
+    if (sortConfig.direction === 'asc') {
+      return a[sortConfig.key] > b[sortConfig.key] ? 1 : -1;
+    }
+    return a[sortConfig.key] < b[sortConfig.key] ? 1 : -1;
+  });
+
+  const filteredUsers = sortedUsers.filter(user =>
     searchTerm.length === 0 || 
     user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.name.toLowerCase().includes(searchTerm.toLowerCase())
+    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handleSort = (key: keyof User) => {
+    setSortConfig(current => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
 
   const mutation = useMutation({
     mutationFn: async (data: UserFormValues) => {
@@ -107,7 +153,7 @@ export default function ManageUsers() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       toast({
         title: "Success",
         description: isEditing ? "User updated successfully" : "User created successfully"
@@ -176,30 +222,65 @@ export default function ManageUsers() {
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>{user.username}</TableCell>
-                      <TableCell>{user.name}</TableCell>
-                      <TableCell className="capitalize">{user.role}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
-                          Edit
-                        </Button>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead onClick={() => handleSort('username')} className="cursor-pointer hover:bg-gray-100">
+                        Username {sortConfig.key === 'username' && (
+                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-gray-100">
+                        Name {sortConfig.key === 'name' && (
+                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('role')} className="cursor-pointer hover:bg-gray-100">
+                        Role {sortConfig.key === 'role' && (
+                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.username}</TableCell>
+                        <TableCell>{user.name}</TableCell>
+                        <TableCell className="capitalize">{user.role}</TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
+                            Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {totalPages > 1 && (
+                  <div className="flex justify-center gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="flex items-center px-4">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
