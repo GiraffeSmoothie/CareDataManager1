@@ -40,8 +40,9 @@ jobs:
           NODE_ENV: production
           CI: false
         run: |
-          npm ci
-          npm i -D vite@5.4.14 @vitejs/plugin-react
+          rm -rf node_modules
+          rm -rf package-lock.json
+          npm install
           npm run build
 
       - name: Install Server Dependencies
