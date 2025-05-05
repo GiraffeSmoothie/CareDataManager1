@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
+import { createServer as createViteServer, createLogger, defineConfig } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
@@ -83,3 +83,35 @@ export function serveStatic(app: Express) {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
+
+export default defineConfig({
+  build: {
+    outDir: path.resolve(__dirname, 'dist'), // Explicitly setting the output directory to server/dist
+    emptyOutDir: true,
+    sourcemap: true,
+    rollupOptions: {
+      external: [
+        'express',
+        'pg',
+        'dotenv',
+        'cors',
+        'body-parser'
+      ],
+      output: {
+        format: 'cjs',
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name].[ext]'
+      }
+    }
+  },
+  server: {
+    strictPort: true,
+    host: true,
+    port: 3001,
+    hmr: {
+      server: true
+    },
+    allowedHosts: true
+  }
+});

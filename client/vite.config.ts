@@ -12,7 +12,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: './dist',
+    outDir: './dist', // Ensures client build output is in client/dist
     emptyOutDir: true,
     modulePreload: {
       polyfill: true
