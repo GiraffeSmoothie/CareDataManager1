@@ -39,9 +39,10 @@ jobs:
         env:
           NODE_ENV: production
           CI: false
+          VITE_API_URL: "/api"
         run: |
           npm ci
-          node node_modules/vite/bin/vite.js build
+          npm run build
 
       - name: Install Server Dependencies
         working-directory: ./server
