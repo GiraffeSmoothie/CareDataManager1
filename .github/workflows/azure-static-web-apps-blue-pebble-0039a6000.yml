@@ -40,9 +40,8 @@ jobs:
           NODE_ENV: production
           CI: false
         run: |
-          rm -rf node_modules
-          rm -rf package-lock.json
           npm install
+          npm run typecheck
           npm run build
 
       - name: Install Server Dependencies
