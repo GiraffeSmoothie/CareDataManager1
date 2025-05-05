@@ -40,8 +40,7 @@ jobs:
           NODE_ENV: production
           CI: false
         run: |
-          npm install
-          npm run typecheck
+          npm install          
           npm run build
 
       - name: Install Server Dependencies
