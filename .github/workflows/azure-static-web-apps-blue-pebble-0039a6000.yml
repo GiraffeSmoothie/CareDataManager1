@@ -42,6 +42,11 @@ jobs:
           npm run build
           cp dist/index.html dist/404.html
 
+      - name: Build Server
+        run: |
+          cd server
+          npm run build
+
       - name: Verify Server Build Output
         run: |
           if [ ! -d "server/dist" ]; then
