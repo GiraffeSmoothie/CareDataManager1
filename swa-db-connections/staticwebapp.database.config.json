@@ -13,6 +13,16 @@
       "allow-introspection": true,
       "enabled": true,
       "path": "/api/data/graphql"
+    },
+    "host": {
+      "mode": "production",
+      "cors": {
+        "origins": ["*"],
+        "allow-credentials": false
+      },
+      "authentication": {
+        "provider": "StaticWebApps"
+      }
     }
   },
   "entities": {
