@@ -32,7 +32,11 @@ jobs:
 
       - name: Install Client Dependencies
         working-directory: ./client
-        run: npm install
+        run: |
+          npm install
+          npm install -g vite
+          which vite
+          vite --version
 
       - name: Install Server Dependencies
         working-directory: ./server
