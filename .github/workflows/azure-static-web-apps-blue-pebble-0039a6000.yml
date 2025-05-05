@@ -47,6 +47,10 @@ jobs:
           cd server
           npm run build
 
+      - name: Copy Migrations Folder
+        run: |
+          cp -r migrations server/dist/migrations
+
       - name: Verify Server Build Output
         run: |
           if [ ! -d "server/dist" ]; then
