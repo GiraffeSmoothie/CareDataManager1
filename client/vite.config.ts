@@ -16,6 +16,24 @@ export default defineConfig({
     emptyOutDir: true,
     modulePreload: {
       polyfill: true
+    },
+    sourcemap: true,
+    manifest: true,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]'
+      }
     }
+  },
+  server: {
+    strictPort: true,
+    port: 5173
+  },
+  preview: {
+    strictPort: true,
+    port: 5173
   }
 });
