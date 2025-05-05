@@ -1,6 +1,6 @@
 import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage as dbStorage } from "./storage";
+import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertMemberServiceSchema, insertServiceCaseNoteSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
@@ -10,9 +10,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import pgSession from "connect-pg-simple";
-import pg from "pg";
 import cors from 'cors';
-const { Pool } = pg;
 
 declare module "express-session" {
   interface SessionData {
@@ -63,16 +61,6 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-// Use the pool from storage.ts to ensure we're using the same connection
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'CareDataManager1',
-  password: 'postgres',
-  port: 5432,
-  ssl: false
-});
-
 const PgStore = pgSession(session);
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure CORS
@@ -83,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     allowedHeaders: ["Content-Type"]
   }));
 
-  // Initialize session store with connection check
+  // Initialize session store with connection check using the shared pool
   const pgStore = new PgStore({
     pool: pool,
     tableName: 'session',  // Changed from user_sessions to session

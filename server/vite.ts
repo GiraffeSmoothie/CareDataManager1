@@ -5,6 +5,12 @@ import { createServer as createViteServer, createLogger, defineConfig } from "vi
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { fileURLToPath } from 'url';
+import fsExtra from 'fs-extra';
+const { copySync, existsSync } = fsExtra;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const viteLogger = createLogger();
 
@@ -46,7 +52,7 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       const clientTemplate = path.resolve(
-        import.meta.dirname,
+        __dirname,
         "..",
         "client",
         "index.html",
@@ -68,19 +74,26 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const rootDir = path.resolve(__dirname, '..');
+  const clientDistPath = path.resolve(rootDir, 'client/dist');
+  const serverPublicPath = path.resolve(rootDir, 'server/dist/public');
 
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+  // Create the public directory if it doesn't exist
+  if (!fs.existsSync(serverPublicPath)) {
+    fs.mkdirSync(serverPublicPath, { recursive: true });
+    // Copy client dist contents to server public folder
+    if (fs.existsSync(clientDistPath)) {
+      fsExtra.copySync(clientDistPath, serverPublicPath);
+    } else {
+      throw new Error(`Could not find the client build directory: ${clientDistPath}, make sure to build the client first`);
+    }
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(serverPublicPath));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.sendFile(path.resolve(serverPublicPath, "index.html"));
   });
 }
 
@@ -104,13 +117,22 @@ export default defineConfig({
         assetFileNames: '[name].[ext]'
       }
     },
+    writeBundle() {
+      const clientDist = path.resolve(__dirname, '../../client/dist');
+      const serverPublic = path.resolve(__dirname, 'dist/public');
 
-    
+      if (existsSync(clientDist)) {
+        copySync(clientDist, serverPublic, { overwrite: true });
+        console.log(`Copied client build output from ${clientDist} to ${serverPublic}`);
+      } else {
+        console.warn(`Client build output not found at ${clientDist}. Please build the client first.`);
+      }
+    }
   },
   server: {
     strictPort: true,
     host: true,
-    port: 3000,
+    port: 3001,
     hmr: {
       server: true
     },

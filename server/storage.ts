@@ -1,17 +1,20 @@
 import { Pool } from 'pg';
+import { parse } from 'pg-connection-string';
 import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-// Database pool configuration with error handling
-let pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'CareDataManager1',
-  password: 'postgres',
-  port: 5432,
-  ssl: false
+// Parse the DATABASE_URL to ensure proper handling of credentials
+const dbConfig = parse(process.env.DATABASE_URL || '');
+
+export const pool = new Pool({
+  user: dbConfig.user,
+  password: dbConfig.password?.toString(), // Ensure password is treated as a string
+  host: dbConfig.host ?? undefined,
+  port: dbConfig.port ? parseInt(dbConfig.port, 10) : undefined,
+  database: dbConfig.database ?? undefined,
+  ssl: process.env.NODE_ENV === 'production' ? false : undefined
 });
 
 // Add error handling for the pool
@@ -46,7 +49,7 @@ export async function initializeDatabase() {
     client = await pool.connect();
     
     // Run initial migration if not already applied
-    const initialMigrationPath = path.join(process.cwd(), 'migrations', '01_initial.sql');
+    const initialMigrationPath = path.resolve(process.cwd(), '../migrations/01_initial.sql');
     const initialMigrationSQL = fs.readFileSync(initialMigrationPath, 'utf8');
     
     await client.query(initialMigrationSQL);

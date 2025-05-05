@@ -2,11 +2,24 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import * as dotenv from 'dotenv';
-import { initializeDatabase } from "./storage";
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
+import { pool } from './storage';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables from the appropriate .env file
-const envFile = process.env.NODE_ENV === 'production' ? '.env' : 'development.env';
-dotenv.config({ path: envFile });
+const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
+const rootDir = path.resolve(__dirname, '..', '..');
+const envPath = path.resolve(rootDir, envFile);
+dotenv.config({ path: envPath });
+
+// Log the environment and connection details for verification
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Environment File:', envPath);
+console.log('Connecting to:', process.env.DATABASE_URL);
 
 const app = express();
 app.use(express.json());
@@ -41,6 +54,46 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Initialize database and run migrations
+export async function initializeDatabase() {
+  let client;
+  try {
+    // Connect to the database
+    client = await pool.connect();
+    
+    // Run each migration file in sequence from the dist/migrations folder
+    const migrationsPath = path.resolve(__dirname, 'migrations');
+    console.log('Migrations path:', migrationsPath);
+    const migrationFiles = fs.readdirSync(migrationsPath).sort();
+    
+    for (const migrationFile of migrationFiles) {
+      try {
+        console.log(`Running migration: ${migrationFile}`);
+        const migrationSQL = fs.readFileSync(path.join(migrationsPath, migrationFile), 'utf8');
+        await client.query('BEGIN');
+        await client.query(migrationSQL);
+        await client.query('COMMIT');
+        console.log(`Successfully completed migration: ${migrationFile}`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`Error running migration ${migrationFile}:`, err);
+        if (process.env.NODE_ENV !== 'production') {
+          throw err;
+        }
+      }
+    }
+    
+    console.log('Database migrations completed');
+  } catch (err) {
+    console.error('Database connection error:', err);
+    throw err;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+}
 
 (async () => {
   try {
