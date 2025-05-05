@@ -1,14 +1,33 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import AppLayout from "@/layouts/app-layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Search } from "lucide-react";
+import { Search, Plus, Eye, ArrowDown, Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { apiRequest } from "@/lib/queryClient";
+import { insertDocumentSchema, type InsertDocument, type PersonInfo, type Document } from "@shared/schema";
+
+const documentTypes = [
+  "Identity Document",
+  "Medical Record",
+  "Financial Document",
+  "Legal Document",
+  "Care Plan",
+  "Assessment",
+  "Other"
+];
 
 export default function DocumentUpload() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -53,26 +72,27 @@ export default function DocumentUpload() {
   });
 
   // Form setup
-  const form = useForm<DocumentFormValues>({
-    resolver: zodResolver(documentFormSchema),
+  const form = useForm<InsertDocument & { file: FileList | null }>({
+    resolver: zodResolver(insertDocumentSchema),
     defaultValues: {
-      memberId: "",
+      memberId: 0,
       documentName: "",
       documentType: "",
+      file: null
     },
   });
 
   // Select member handler
   const handleSelectMember = (member: PersonInfo) => {
     setSelectedMember(member);
-    form.setValue("memberId", member.id.toString());
+    form.setValue("memberId", member.id);
   };
 
   // Document upload mutation
   const uploadMutation = useMutation({
-    mutationFn: async (data: DocumentFormValues) => {
+    mutationFn: async (data: InsertDocument & { file: FileList | null }) => {
       const formData = new FormData();
-      formData.append("memberId", data.memberId);
+      formData.append("memberId", data.memberId.toString());
       formData.append("documentName", data.documentName);
       formData.append("documentType", data.documentType);
 
@@ -90,9 +110,10 @@ export default function DocumentUpload() {
       });
 
       form.reset({
-        memberId: selectedMember?.id.toString() || "",
+        memberId: selectedMember?.id || 0,
         documentName: "",
         documentType: "",
+        file: null
       });
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -119,7 +140,7 @@ export default function DocumentUpload() {
   });
 
   // Form submission handler
-  const onSubmit = (data: DocumentFormValues) => {
+  const onSubmit = (data: InsertDocument & { file: FileList | null }) => {
     uploadMutation.mutate(data);
   };
 
@@ -168,7 +189,7 @@ export default function DocumentUpload() {
                         setSelectedMember(client);
                         setSearchTerm(`${client.firstName} ${client.lastName}`);
                         setShowDropdown(false);
-                        form.setValue("memberId", client.id.toString());
+                        form.setValue("memberId", client.id);
                       }}
                     >
                       {client.title ? client.title + " " : ""}

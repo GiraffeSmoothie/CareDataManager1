@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
 import { Button } from "./button";
 import { Textarea } from "./textarea";
 import { Label } from "./label";
 import { useToast } from "@/hooks/use-toast";
-import type { MemberService } from "@/lib/types";
+import { Loader2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import type { MemberService } from "@shared/schema";
 
 export function CaseNotesModal({
   isOpen,

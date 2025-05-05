@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CaseNotesDialog } from "@/components/ui/case-notes-modal";
+import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
@@ -616,11 +616,11 @@ export default function MemberAssignment() {
           </DialogContent>
         </Dialog>
 
-        <CaseNotesDialog
-          open={showCaseNotesDialog}
-          onOpenChange={setShowCaseNotesDialog}
+        <CaseNotesModal
+          isOpen={showCaseNotesDialog}
+          onClose={() => setShowCaseNotesDialog(false)}
           service={selectedService}
-          onSave={() => {
+          onSaved={() => {
             // Refresh the services data
             queryClient.invalidateQueries({ 
               queryKey: ["/api/member-services", selectedMember?.id] 
