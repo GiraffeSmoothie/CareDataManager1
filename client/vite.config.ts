@@ -21,25 +21,20 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name].[ext]'
+        format: 'es',
+        entryFileNames: 'assets/[name].[hash].mjs',
+        chunkFileNames: 'assets/[name].[hash].mjs',
+        assetFileNames: 'assets/[name].[hash].[ext]'
       }
     }
   },
   server: {
     strictPort: true,
     host: true,
-    port: 3000,
-    headers: {
-      'Content-Type': 'text/javascript'
-    }
+    port: 3000
   },
   preview: {
     strictPort: true,
-    port: 5173,
-    headers: {
-      'Content-Type': 'text/javascript'
-    }
+    port: 5173
   }
 });
