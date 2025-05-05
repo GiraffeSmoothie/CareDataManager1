@@ -1,8 +1,116 @@
 {
-  "connections": {
-    "postgres": {
-      "connectionString": "@env('DATABASE_URL')",
-      "type": "postgresql"
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "postgresql",
+    "connection-string": "@env('DATABASE_URL')"
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api/data"
+    },
+    "graphql": {
+      "allow-introspection": true,
+      "enabled": true,
+      "path": "/api/data/graphql"
+    }
+  },
+  "entities": {
+    "User": {
+      "source": "users",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["read"]
+        },
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ]
+    },
+    "Client": {
+      "source": "clients",
+      "permissions": [
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ]
+    },
+    "PersonInfo": {
+      "source": "person_info",
+      "permissions": [
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ],
+      "relationships": {
+        "created_by_user": {
+          "cardinality": "one",
+          "target.entity": "User",
+          "linking.object": "created_by"
+        }
+      }
+    },
+    "MasterData": {
+      "source": "master_data",
+      "permissions": [
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ],
+      "relationships": {
+        "created_by_user": {
+          "cardinality": "one",
+          "target.entity": "User",
+          "linking.object": "created_by"
+        }
+      }
+    },
+    "CaseNote": {
+      "source": "case_notes",
+      "permissions": [
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ],
+      "relationships": {
+        "member": {
+          "cardinality": "one",
+          "target.entity": "PersonInfo",
+          "linking.object": "member_id"
+        },
+        "created_by_user": {
+          "cardinality": "one",
+          "target.entity": "User",
+          "linking.object": "created_by"
+        }
+      }
+    },
+    "Document": {
+      "source": "documents",
+      "permissions": [
+        {
+          "role": "authenticated",
+          "actions": ["create", "read", "update", "delete"]
+        }
+      ],
+      "relationships": {
+        "member": {
+          "cardinality": "one",
+          "target.entity": "PersonInfo",
+          "linking.object": "member_id"
+        },
+        "created_by_user": {
+          "cardinality": "one",
+          "target.entity": "User",
+          "linking.object": "created_by"
+        }
+      }
     }
   }
 }
