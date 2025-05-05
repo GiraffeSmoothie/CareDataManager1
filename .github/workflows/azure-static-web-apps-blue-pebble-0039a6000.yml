@@ -40,8 +40,8 @@ jobs:
           NODE_ENV: production
           CI: false
         run: |
-          npm install
-          npx vite build
+          npm ci
+          node node_modules/vite/bin/vite.js build
 
       - name: Install Server Dependencies
         working-directory: ./server
