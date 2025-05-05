@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npx vite build",
+    "build": "npm install vite@5.4.14 && vite build",
     "preview": "vite preview",
     "typecheck": "tsc"
   },
