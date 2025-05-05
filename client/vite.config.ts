@@ -30,10 +30,16 @@ export default defineConfig({
   server: {
     strictPort: true,
     host: true,
-    port: 3000
+    port: 3000,
+    headers: {
+      'Content-Type': 'text/javascript'
+    }
   },
   preview: {
     strictPort: true,
-    port: 5173
+    port: 5173,
+    headers: {
+      'Content-Type': 'text/javascript'
+    }
   }
 });
