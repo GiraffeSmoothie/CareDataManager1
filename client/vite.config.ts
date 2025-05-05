@@ -21,20 +21,16 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
-        },
-        entryFileNames: 'assets/[name].[hash].mjs',
-        chunkFileNames: 'assets/[name].[hash].mjs',
-        assetFileNames: 'assets/[name].[hash].[ext]'
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
       }
     }
   },
   server: {
     strictPort: true,
-    port: 5173
+    host: true,
+    port: 3000
   },
   preview: {
     strictPort: true,

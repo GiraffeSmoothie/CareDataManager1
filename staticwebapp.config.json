@@ -1,12 +1,14 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/images/*", "/css/*", "/api/*", "/*.{png,jpg,gif,svg,ico}", "/*.{js,css,map,mjs}"]
+    "exclude": ["/images/*.{png,jpg,gif}", "/css/*", "/assets/*"]
   },
   "globalHeaders": {
     "content-security-policy": "default-src 'self' 'unsafe-eval' 'unsafe-inline' data: https:; object-src 'none'",
     "cache-control": "no-cache",
-    "X-Content-Type-Options": "nosniff"
+    "X-Content-Type-Options": "nosniff",
+    "content-type": "text/javascript",
+    "Access-Control-Allow-Origin": "*"
   },
   "mimeTypes": {
     ".html": "text/html",
@@ -23,6 +25,18 @@
     ".txt": "text/plain"
   },
   "routes": [
+    {
+      "route": "/assets/*.mjs",
+      "headers": {
+        "content-type": "text/javascript"
+      }
+    },
+    {
+      "route": "/assets/*.js",
+      "headers": {
+        "content-type": "text/javascript"
+      }
+    },
     {
       "route": "/assets/*.{js,mjs}",
       "headers": {
