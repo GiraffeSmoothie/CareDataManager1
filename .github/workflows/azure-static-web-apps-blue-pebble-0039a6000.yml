@@ -42,6 +42,13 @@ jobs:
           npm run build
           cp dist/index.html dist/404.html
 
+      - name: Verify Server Build Output
+        run: |
+          if [ ! -d "server/dist" ]; then
+            echo "Error: server/dist folder not found!"
+            exit 1
+          fi
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
