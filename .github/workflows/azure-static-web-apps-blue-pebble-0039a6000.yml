@@ -39,6 +39,7 @@ jobs:
           npm install -D typescript
           npm install zod
           npm install @hookform/resolvers
+          npm install lucide-react@0.303.0
 
       - name: Build Client
         working-directory: ./client
