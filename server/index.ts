@@ -32,6 +32,8 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+app.enable('trust proxy');
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -111,11 +113,10 @@ export async function initializeDatabase() {
     const server = await registerRoutes(app);
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error('Error:', err);
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-
       res.status(status).json({ message });
-      throw err;
     });
 
     if (app.get("env") === "development") {
@@ -126,15 +127,31 @@ export async function initializeDatabase() {
 
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
-      // Serve static files from the client build
       const clientPath = path.join(__dirname, '../client/dist');
-      app.use(express.static(clientPath));
+      console.log('Serving static files from:', clientPath);
       
-      // Handle client-side routing
-      app.get('*', (req, res) => {
-        if (!req.path.startsWith('/api')) {
-          res.sendFile(path.join(clientPath, 'index.html'));
+      // Serve static files with proper MIME types
+      app.use(express.static(clientPath, {
+        maxAge: '1d',
+        setHeaders: (res, path) => {
+          if (path.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          }
         }
+      }));
+      
+      // SPA fallback - must be after API routes
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) {
+          return next();
+        }
+        console.log('Serving SPA for path:', req.path);
+        res.sendFile(path.join(clientPath, 'index.html'), err => {
+          if (err) {
+            console.error('Error serving index.html:', err);
+            res.status(500).send('Error loading application');
+          }
+        });
       });
     }
 
