@@ -49,7 +49,7 @@ jobs:
 
       - name: Copy Migrations Folder
         run: |
-          cp -r migrations server/dist/migrations
+          cp -r server/migrations server/dist/migrations
 
       - name: Verify Server Build Output
         run: |
