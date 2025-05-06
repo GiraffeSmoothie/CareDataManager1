@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS documents (
   document_name TEXT NOT NULL,
   document_type TEXT NOT NULL,
   filename TEXT NOT NULL,
+  file_path TEXT,
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_by INTEGER REFERENCES users(id)
 );

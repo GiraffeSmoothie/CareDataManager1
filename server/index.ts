@@ -1,20 +1,20 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import fs from 'fs';
-import { pool } from './storage';
 
+// Load environment variables before anything else
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Load environment variables from the appropriate .env file
-const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
-const rootDir = path.resolve(__dirname, '..', '..');
+const rootDir = path.resolve(__dirname, '..'); // Resolve to the parent directory of the server folder
+const envFile = process.env.NODE_ENV === 'production' ? 'server/production.env' : 'server/development.env';
 const envPath = path.resolve(rootDir, envFile);
 dotenv.config({ path: envPath });
+
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
+import fs from 'fs';
+import { pool } from './storage';
 
 // Log the environment and connection details for verification
 console.log('Environment:', process.env.NODE_ENV);
@@ -62,8 +62,8 @@ export async function initializeDatabase() {
     // Connect to the database
     client = await pool.connect();
     
-    // Run each migration file in sequence from the dist/migrations folder
-    const migrationsPath = path.resolve(__dirname, 'migrations');
+    // Run each migration file in sequence from the migrations folder
+    const migrationsPath = path.resolve(__dirname, 'migrations'); // Fixed the path to avoid appending 'server' twice
     console.log('Migrations path:', migrationsPath);
     const migrationFiles = fs.readdirSync(migrationsPath).sort();
     
@@ -115,6 +115,15 @@ export async function initializeDatabase() {
       await setupVite(app, server);
     } else {
       serveStatic(app);
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      const path = require('path');
+      const express = require('express');
+      app.use(express.static(path.join(__dirname, '../client/dist')));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+      });
     }
 
     const port = 3000;

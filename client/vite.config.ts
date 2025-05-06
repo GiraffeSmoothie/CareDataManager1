@@ -1,6 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import * as dotenv from 'dotenv';
+
+const envFile = process.env.NODE_ENV === 'production' ? 'client/production.env' : 'client/development.env';
+const envPath = path.resolve(__dirname, envFile);
+dotenv.config({ path: envPath });
 
 export default defineConfig({
   plugins: [react()],
@@ -29,9 +34,14 @@ export default defineConfig({
     }
   },
   server: {
-    strictPort: true,
-    host: true,
-    port: 3000
+    port: 5173, // Client development server port for development
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000', // Proxy API requests to the server in development
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   preview: {
     strictPort: true,

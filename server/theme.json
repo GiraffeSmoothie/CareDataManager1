@@ -1,0 +1,14 @@
+{
+  "theme": {
+    "colors": {
+      "primary": "#3498db",
+      "secondary": "#2ecc71",
+      "background": "#ffffff",
+      "text": "#333333"
+    },
+    "fonts": {
+      "body": "Arial, sans-serif",
+      "heading": "Georgia, serif"
+    }
+  }
+}

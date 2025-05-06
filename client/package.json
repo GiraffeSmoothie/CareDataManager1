@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "start": "npm run dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

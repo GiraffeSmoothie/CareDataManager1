@@ -4,8 +4,20 @@ import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote 
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 
-// Parse the DATABASE_URL to ensure proper handling of credentials
+// Define __dirname for ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const rootDir = path.resolve(__dirname, '..'); // Resolve to the parent directory of the server folder
+const envFile = process.env.NODE_ENV === 'production' ? 'server/production.env' : 'server/development.env';
+const envPath = path.resolve(rootDir, envFile);
+dotenv.config({ path: envPath });
+
+console.log('DATABASE_URL:', process.env.DATABASE_URL); // Debug log to verify DATABASE_URL
+
 const dbConfig = parse(process.env.DATABASE_URL || '');
 
 export const pool = new Pool({

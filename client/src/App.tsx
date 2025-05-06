@@ -105,7 +105,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/">
-        <Redirect to="/homepage" />
+        <Redirect to="/login" />
       </Route>
       <Route path="/homepage">
         <PrivateRoute component={Homepage} />

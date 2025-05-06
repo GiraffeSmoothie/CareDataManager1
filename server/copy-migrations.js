@@ -1,7 +1,11 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const migrationsSrc = path.resolve(process.cwd(), '../migrations');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename); // Use import.meta.url to define __dirname in ES modules
+
+const migrationsSrc = path.resolve(__dirname, 'migrations'); // Corrected path to avoid appending 'server' twice
 const migrationsDest = path.resolve(process.cwd(), 'dist/migrations');
 
 if (fs.existsSync(migrationsSrc)) {

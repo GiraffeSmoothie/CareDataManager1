@@ -1,5 +1,13 @@
--- Add unique constraint to master_data table
-ALTER TABLE master_data ADD CONSTRAINT master_data_service_unique UNIQUE (service_category, service_type, service_provider);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE constraint_name = 'master_data_service_unique'
+  ) THEN
+    ALTER TABLE master_data ADD CONSTRAINT master_data_service_unique UNIQUE (service_category, service_type, service_provider);
+  END IF;
+END $$;
 
 -- Create member_services table
 CREATE TABLE IF NOT EXISTS member_services (
