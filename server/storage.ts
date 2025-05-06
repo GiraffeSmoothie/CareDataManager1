@@ -4,27 +4,63 @@ import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote 
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import * as dotenv from 'dotenv';
 
 // Define __dirname for ES module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const rootDir = path.resolve(__dirname, '..'); // Resolve to the parent directory of the server folder
-const envFile = process.env.NODE_ENV === 'production' ? 'server/production.env' : 'server/development.env';
-const envPath = path.resolve(rootDir, envFile);
-dotenv.config({ path: envPath });
+// Ensure environment variables are loaded
+if (!process.env.DATABASE_URL) {
+  // Try to load from production.env or development.env if not already set
+  const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
+  const possibleEnvPaths = [
+    path.join(__dirname, envFile),               // /dist/production.env
+    path.join(__dirname, '..', envFile),         // ../production.env
+    path.join(process.cwd(), envFile),           // ./production.env
+    path.join(process.cwd(), 'server', envFile)  // ./server/production.env
+  ];
 
-console.log('DATABASE_URL:', process.env.DATABASE_URL); // Debug log to verify DATABASE_URL
-
-const connectionOptions = parse(process.env.DATABASE_URL || '');
-console.log('Parsed connection options:', connectionOptions); // Debug log to verify hostname and other details
-if (!connectionOptions.host || connectionOptions.host === 'base') {
-  throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
+  for (const envPath of possibleEnvPaths) {
+    console.log(`Storage.ts - Checking for env file at: ${envPath}`);
+    if (fs.existsSync(envPath)) {
+      console.log(`Storage.ts - Loading environment variables from: ${envPath}`);
+      const envConfig = dotenv.parse(fs.readFileSync(envPath));
+      for (const k in envConfig) {
+        process.env[k] = envConfig[k];
+      }
+      break;
+    }
+  }
 }
+
+// DATABASE_URL check
+console.log('Storage.ts - DATABASE_URL configured:', process.env.DATABASE_URL ? 'Yes' : 'No');
+
+// Better error handling when parsing the connection string
+let connectionOptions;
+try {
+  connectionOptions = parse(process.env.DATABASE_URL || '');
+  console.log('Parsed connection options:', {
+    user: connectionOptions.user || '',
+    host: connectionOptions.host || '',
+    database: connectionOptions.database,
+    // Not logging password for security reasons
+    port: connectionOptions.port || ''
+  });
+  
+  if (!connectionOptions.host || connectionOptions.host === 'base') {
+    throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
+  }
+} catch (error) {
+  console.error('Error parsing DATABASE_URL:', error);
+  throw new Error('Invalid DATABASE_URL format. Please check your environment configuration.');
+}
+
+// Ensure password is a string to prevent Pool creation errors
 if (connectionOptions.password && typeof connectionOptions.password !== 'string') {
-  connectionOptions.password = String(connectionOptions.password); // Ensure password is a string
+  connectionOptions.password = String(connectionOptions.password);
 }
 
 export const pool = new Pool({

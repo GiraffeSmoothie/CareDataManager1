@@ -16,17 +16,30 @@ npm install
 npm run build
 cd ..
 
-# Create client directory in wwwroot if it doesn't exist
+# Build server
+echo "Building server..."
+cd server
+npm install
+npm run build
+cd ..
+
+# Create directories in wwwroot if they don't exist
 mkdir -p /home/site/wwwroot/client/dist
+mkdir -p /home/site/wwwroot/server/dist
 
 # Copy client build files with proper permissions
 echo "Copying client build files..."
 cp -r client/dist/* /home/site/wwwroot/client/dist/
-chmod -R 755 /home/site/wwwroot/client
 
-# Install server dependencies
-echo "Installing server dependencies..."
-cd server
+# Copy server build files with proper permissions
+echo "Copying server build files..."
+cp -r server/dist/* /home/site/wwwroot/server/dist/
+cp server/web.config /home/site/wwwroot/server/
+cp server/package.json /home/site/wwwroot/server/
+
+# Install server production dependencies in the deployment location
+echo "Installing server production dependencies..."
+cd /home/site/wwwroot/server
 npm install --production
 
 # Set proper permissions for the application
@@ -41,7 +54,7 @@ if [ -n "$DATABASE_URL" ]; then
   done
 fi
 
-# Start the application
+# Start the application from the correct dist location
 export PORT=8080
 pm2 delete care-data-manager || true
-pm2 start index.js --name care-data-manager -- --port $PORT
+pm2 start dist/index.js --name care-data-manager -- --port $PORT

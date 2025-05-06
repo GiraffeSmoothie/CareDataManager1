@@ -6,23 +6,48 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Force load production environment variables
-if (process.env.NODE_ENV === 'production') {
-  const envPath = path.join(__dirname, '..', 'production.env');
-  const envConfig = dotenv.parse(fs.readFileSync(envPath));
-  for (const k in envConfig) {
-    process.env[k] = envConfig[k];
+// Enhanced environment variable loading system
+console.log('Current directory:', __dirname);
+console.log('Node Environment:', process.env.NODE_ENV);
+
+// Try to load environment variables from multiple possible locations
+const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
+const possibleEnvPaths = [
+  path.join(__dirname, envFile),               // /dist/production.env
+  path.join(__dirname, '..', envFile),         // ../production.env
+  path.join(__dirname, '..', 'server', envFile), // ../server/production.env
+  path.join(process.cwd(), envFile),           // ./production.env
+  path.join(process.cwd(), 'server', envFile)  // ./server/production.env
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+  console.log(`Checking for env file at: ${envPath}`);
+  if (fs.existsSync(envPath)) {
+    console.log(`Loading environment variables from: ${envPath}`);
+    const envConfig = dotenv.parse(fs.readFileSync(envPath));
+    for (const k in envConfig) {
+      process.env[k] = envConfig[k];
+    }
+    envLoaded = true;
+    break;
   }
+}
+
+if (!envLoaded) {
+  console.warn('No environment file found. Using environment variables as set.');
 }
 
 // Verify DATABASE_URL is loaded
 if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL environment variable is not set. Check your configuration.');
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
 console.log('Environment:', process.env.NODE_ENV);
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
+console.log('Database connection configured:', process.env.DATABASE_URL ? 'Yes' : 'No');
 
+// Import remaining dependencies
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -127,7 +152,19 @@ export async function initializeDatabase() {
 
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
-      const clientPath = path.join(__dirname, '../client/dist');
+      // In Azure App Service, the client files will be in /home/site/wwwroot/client
+      // relative to the server directory, that's '../client'
+      let clientPath = path.join(__dirname, '../client');
+      
+      // Check if the directory exists, if not try the alternative path
+      if (!fs.existsSync(clientPath)) {
+        clientPath = path.join(__dirname, '../../client');
+        if (!fs.existsSync(clientPath)) {
+          console.warn('Client path not found at expected locations, using fallback path');
+          clientPath = path.join(process.cwd(), 'client');
+        }
+      }
+      
       console.log('Serving static files from:', clientPath);
       
       // Serve static files with proper MIME types
@@ -146,12 +183,18 @@ export async function initializeDatabase() {
           return next();
         }
         console.log('Serving SPA for path:', req.path);
-        res.sendFile(path.join(clientPath, 'index.html'), err => {
-          if (err) {
-            console.error('Error serving index.html:', err);
-            res.status(500).send('Error loading application');
-          }
-        });
+        const indexPath = path.join(clientPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath, err => {
+            if (err) {
+              console.error('Error serving index.html:', err);
+              res.status(500).send('Error loading application');
+            }
+          });
+        } else {
+          console.error('index.html not found at:', indexPath);
+          res.status(404).send('Application files not found. Please check deployment.');
+        }
       });
     }
 
