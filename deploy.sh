@@ -3,7 +3,23 @@
 # Navigate to the deployment directory
 cd "$DEPLOYMENT_TARGET"
 
-# Install production dependencies
+# Build client
+echo "Building client..."
+cd client
+npm install
+npm run build
+cd ..
+
+# Create client directory in wwwroot if it doesn't exist
+mkdir -p /home/site/wwwroot/client
+
+# Copy client build files
+echo "Copying client build files..."
+cp -r client/dist/* /home/site/wwwroot/client/
+
+# Install server dependencies
+echo "Installing server dependencies..."
+cd server
 npm install --production
 
 # Run database migrations if environment is configured

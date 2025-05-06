@@ -3,4 +3,9 @@ name = "nodejs"
 version = "18"
 
 [build]
-command = "npm install && npm run build"
+command = """
+cd client && npm install && npm run build && cd .. && \
+cd server && npm install && npm run build && cd .. && \
+mkdir -p /home/site/wwwroot/client && \
+cp -r client/dist/* /home/site/wwwroot/client/
+"""
