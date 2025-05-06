@@ -126,19 +126,22 @@ export async function initializeDatabase() {
 
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
+      // Serve static files from the client build
       app.use(express.static(path.join(__dirname, '../client/dist')));
+      
+      // Handle client-side routing
       app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+        // Don't serve the frontend for API routes
+        if (!req.path.startsWith('/api')) {
+          res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+        }
       });
     }
 
-    const port = 3000;
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
-      log(`serving on port ${port}`);
+    // Use port from environment variable (required for Azure App Service) or default to 3000
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => {
+      console.log(`Server running on port ${port}`);
     });
   } catch (err) {
     console.error('Failed to start server:', err);
