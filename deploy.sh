@@ -1,24 +1,19 @@
 #!/bin/bash
 
-# Install dependencies for server
-cd server
-npm install
+# Navigate to the deployment directory
+cd "$DEPLOYMENT_TARGET"
 
-# Build server
-npm run build
+# Install production dependencies
+npm install --production
 
-# Install dependencies for client
-cd ../client
-npm install
-
-# Build client
-npm run build
-
-# Copy client build to server's public folder
-cp -r dist ../server/dist/client/
-
-# Return to server directory
-cd ../server
+# Run database migrations if environment is configured
+if [ -n "$DATABASE_URL" ]; then
+  echo "Running database migrations..."
+  for migration in migrations/*.sql; do
+    echo "Applying migration: $migration"
+    psql "$DATABASE_URL" -f "$migration"
+  done
+fi
 
 # Start the application
-npm run start
+pm2 start index.js --name care-data-manager

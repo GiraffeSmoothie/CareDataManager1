@@ -127,13 +127,12 @@ export async function initializeDatabase() {
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
       // Serve static files from the client build
-      app.use(express.static(path.join(__dirname, '../client/dist')));
+      app.use(express.static(path.join(__dirname, 'client')));
       
       // Handle client-side routing
       app.get('*', (req, res) => {
-        // Don't serve the frontend for API routes
         if (!req.path.startsWith('/api')) {
-          res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+          res.sendFile(path.join(__dirname, 'client/index.html'));
         }
       });
     }

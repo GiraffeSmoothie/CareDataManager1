@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import * as dotenv from 'dotenv';
 
-const envFile = process.env.NODE_ENV === 'production' ? 'client/production.env' : 'client/development.env';
+const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
 const envPath = path.resolve(__dirname, envFile);
 dotenv.config({ path: envPath });
 
@@ -17,34 +17,18 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: './dist', // Ensures client build output is in client/dist
+    outDir: 'dist',
     emptyOutDir: true,
-    modulePreload: {
-      polyfill: true
-    },
-    sourcemap: true,
-    manifest: true,
-    rollupOptions: {
-      output: {
-        format: 'es',
-        entryFileNames: 'assets/[name].[hash].mjs',
-        chunkFileNames: 'assets/[name].[hash].mjs',
-        assetFileNames: 'assets/[name].[hash].[ext]'
-      }
-    }
+    sourcemap: process.env.NODE_ENV !== 'production'
   },
   server: {
-    port: 5173, // Client development server port for development
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000', // Proxy API requests to the server in development
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false,
-      },
-    },
-  },
-  preview: {
-    strictPort: true,
-    port: 5173
+        secure: false
+      }
+    }
   }
 });
