@@ -19,7 +19,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: process.env.NODE_ENV !== 'production'
+    sourcemap: process.env.NODE_ENV !== 'production',
+    rollupOptions: {
+      external: [
+        'drizzle-orm/pg-core',
+        'drizzle-orm',
+        'drizzle-zod',
+        /^drizzle-orm\/.*/  // This will match all drizzle-orm subpaths
+      ]
+    }
   },
   server: {
     port: 5173,
