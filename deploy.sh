@@ -35,10 +35,21 @@ echo "Client build completed"
 echo "Switching to project root..."
 cd ..
 
-# Copy server build output to root (index.js and all required files)
-echo "Copying server build output to root..."
-cp server/dist/index.js ./index.js
-cp -r server/dist/* ./
+# Create a CommonJS wrapper for the ESM entry point (for iisnode compatibility)
+echo "Creating entry point wrapper for iisnode..."
+cat > ./index.js << 'EOL'
+// This file is a CommonJS wrapper to load ESM modules in iisnode
+import('./server/dist/index.js').catch(err => {
+  console.error('Failed to load application:', err);
+  process.exit(1);
+});
+EOL
+echo "Entry point wrapper created"
+
+# Ensure server build is in place
+echo "Copying server build output..."
+mkdir -p ./server/dist
+cp -r server/dist/* ./server/dist/
 echo "Server build copied"
 
 # Copy client build to public/
