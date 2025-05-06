@@ -18,9 +18,17 @@ dotenv.config({ path: envPath });
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL); // Debug log to verify DATABASE_URL
 
+const connectionOptions = parse(process.env.DATABASE_URL || '');
+console.log('Parsed connection options:', connectionOptions); // Debug log to verify hostname and other details
+if (!connectionOptions.host || connectionOptions.host === 'base') {
+  throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
+}
+if (connectionOptions.password && typeof connectionOptions.password !== 'string') {
+  connectionOptions.password = String(connectionOptions.password); // Ensure password is a string
+}
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  
+  ...connectionOptions,
 });
 
 // Add error handling for the pool
