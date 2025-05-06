@@ -1,22 +1,16 @@
+# oryx.toml configuration for Node.js application on Azure App Service
 [language]
 name = "nodejs"
 version = "18"
 
 [build]
 command = """
-# Build client
-cd client && npm install && npm run build && cd .. && \
-
-# Build server
-cd server && npm install && npm run build && \
-cp -r dist /home/site/wwwroot/ && \
-cp web.config /home/site/wwwroot/ && \
-cp -r migrations /home/site/wwwroot/ && \
-cp production.env /home/site/wwwroot/ && \
-cp package.json /home/site/wwwroot/ && \
-cd /home/site/wwwroot && npm install --production && cd /tmp/build && \
-
-# Copy client build to wwwroot
-mkdir -p /home/site/wwwroot/client && \
-cp -r client/dist/* /home/site/wwwroot/client/
+chmod +x ./deploy.sh && 
+./deploy.sh
 """
+
+# Indicate where the application's output is created
+outputLocation = "server/dist"
+
+# Set the startup command
+run.command = "node server/dist/index.js"

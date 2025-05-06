@@ -3,58 +3,49 @@
 # Exit on error
 set -e
 
-# Navigate to the deployment directory
-cd "$DEPLOYMENT_TARGET"
+echo "Starting deployment script"
 
-# Ensure NODE_ENV is set to production
-export NODE_ENV=production
+# Log Node and NPM versions
+echo "Node version: $(node -v)"
+echo "NPM version: $(npm -v)"
 
-# Build client
-echo "Building client..."
-cd client
-npm install
-npm run build
-cd ..
+# Install dependencies for server
+echo "Installing server dependencies..."
+cd server
+npm install --production
+echo "Server dependencies installed"
 
 # Build server
 echo "Building server..."
-cd server
-npm install
 npm run build
-cd ..
+echo "Server build completed"
 
-# Create directories in wwwroot if they don't exist
-mkdir -p /home/site/wwwroot/client/dist
-mkdir -p /home/site/wwwroot/server/dist
-
-# Copy client build files with proper permissions
-echo "Copying client build files..."
-cp -r client/dist/* /home/site/wwwroot/client/dist/
-
-# Copy server build files with proper permissions
-echo "Copying server build files..."
-cp -r server/dist/* /home/site/wwwroot/server/dist/
-cp server/web.config /home/site/wwwroot/server/
-cp server/package.json /home/site/wwwroot/server/
-
-# Install server production dependencies in the deployment location
-echo "Installing server production dependencies..."
-cd /home/site/wwwroot/server
+# Install dependencies for client
+echo "Installing client dependencies..."
+cd ../client
 npm install --production
+echo "Client dependencies installed"
 
-# Set proper permissions for the application
-chmod -R 755 /home/site/wwwroot
+# Build client
+echo "Building client..."
+npm run build
+echo "Client build completed"
 
-# Run database migrations if environment is configured
-if [ -n "$DATABASE_URL" ]; then
-  echo "Running database migrations..."
-  for migration in migrations/*.sql; do
-    echo "Applying migration: $migration"
-    psql "$DATABASE_URL" -f "$migration"
-  done
-fi
+# Copy client build to server's public directory
+echo "Copying client build to server's public directory..."
+mkdir -p ../server/dist/public
+cp -r dist/* ../server/dist/public/
+echo "Client build copied to server's public directory"
 
-# Start the application from the correct dist location
-export PORT=8080
-pm2 delete care-data-manager || true
-pm2 start dist/index.js --name care-data-manager -- --port $PORT
+# Copy production.env to server's dist directory
+echo "Copying environment files..."
+cp production.env ../server/dist/
+echo "Environment files copied"
+
+# Copy web.config to the right place
+echo "Copying web.config..."
+cp ../web.config ../server/dist/
+echo "web.config copied"
+
+# Final log
+echo "Deployment build completed"
