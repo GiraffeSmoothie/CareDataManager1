@@ -1,25 +1,32 @@
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
-// Load environment variables before anything else
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..'); // Resolve to the parent directory of the server folder
-const envFile = process.env.NODE_ENV === 'production' ? '../production.env' : 'server/development.env'; // Corrected path for production.env
-const envPath = path.resolve(__dirname, envFile);
-dotenv.config({ path: envPath });
+
+// Force load production environment variables
+if (process.env.NODE_ENV === 'production') {
+  const envPath = path.join(__dirname, '..', 'production.env');
+  const envConfig = dotenv.parse(fs.readFileSync(envPath));
+  for (const k in envConfig) {
+    process.env[k] = envConfig[k];
+  }
+}
+
+// Verify DATABASE_URL is loaded
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is not set');
+}
+
+console.log('Environment:', process.env.NODE_ENV);
+console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import fs from 'fs';
 import { pool } from './storage';
-
-// Log the environment and connection details for verification
-console.log('Environment:', process.env.NODE_ENV);
-console.log('Environment File:', envPath);
-console.log('Connecting to:', process.env.DATABASE_URL);
 
 const app = express();
 app.use(express.json());
@@ -117,9 +124,8 @@ export async function initializeDatabase() {
       serveStatic(app);
     }
 
+    // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
-      const path = require('path');
-      const express = require('express');
       app.use(express.static(path.join(__dirname, '../client/dist')));
       app.get('*', (req, res) => {
         res.sendFile(path.join(__dirname, '../client/dist/index.html'));

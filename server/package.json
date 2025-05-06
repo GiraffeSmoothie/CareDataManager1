@@ -6,7 +6,7 @@
     "dev": "tsx index.ts",
     "prebuild": "npm install -g esbuild",
     "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "start": "cross-env NODE_ENV=production DATABASE_URL=postgres://postgres:Dbkne123@ptahcasecarepostgressqlsrvrv10alpha.postgres.database.azure.com:5432/CareDataManager1 node dist/index.js",
     "postbuild": "node copy-migrations.js"
   },
   "dependencies": {
