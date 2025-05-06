@@ -10,7 +10,7 @@ chmod +x ./deploy.sh &&
 """
 
 # Indicate where the application's output is created
-outputLocation = "server/dist"
+outputLocation = "dist"
 
 # Set the startup command
-run.command = "node server/dist/index.js"
+run.command = "node dist/index.js"

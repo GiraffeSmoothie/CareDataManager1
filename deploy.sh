@@ -31,20 +31,29 @@ echo "Building client..."
 npm run build
 echo "Client build completed"
 
-# Copy client build to server's public directory
-echo "Copying client build to server's public directory..."
-mkdir -p ../server/dist/public
-cp -r dist/* ../server/dist/public/
-echo "Client build copied to server's public directory"
+# Create the deployment structure
+echo "Creating deployment structure..."
+cd ..
+mkdir -p dist/public
 
-# Copy production.env to server's dist directory
+# Copy server build to dist
+echo "Copying server build to dist..."
+cp -r server/dist/* dist/
+echo "Server build copied"
+
+# Copy client build to public directory
+echo "Copying client build to public directory..."
+cp -r client/dist/* dist/public/
+echo "Client build copied"
+
+# Copy environment files
 echo "Copying environment files..."
-cp production.env ../server/dist/
+cp server/production.env dist/
 echo "Environment files copied"
 
 # Copy web.config to the right place
 echo "Copying web.config..."
-cp ../web.config ../server/dist/
+cp web.config dist/
 echo "web.config copied"
 
 # Final log
