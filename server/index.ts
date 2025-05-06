@@ -6,8 +6,8 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..'); // Resolve to the parent directory of the server folder
-const envFile = process.env.NODE_ENV === 'production' ? 'server/production.env' : 'server/development.env';
-const envPath = path.resolve(rootDir, envFile);
+const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'server/development.env';
+const envPath = path.resolve(__dirname, envFile);
 dotenv.config({ path: envPath });
 
 import express, { type Request, Response, NextFunction } from "express";
