@@ -18,15 +18,9 @@ dotenv.config({ path: envPath });
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL); // Debug log to verify DATABASE_URL
 
-const dbConfig = parse(process.env.DATABASE_URL || '');
-
 export const pool = new Pool({
-  user: dbConfig.user,
-  password: dbConfig.password?.toString(), // Ensure password is treated as a string
-  host: dbConfig.host ?? undefined,
-  port: dbConfig.port ? parseInt(dbConfig.port, 10) : undefined,
-  database: dbConfig.database ?? undefined,
-  ssl: process.env.NODE_ENV === 'production' ? false : undefined
+  connectionString: process.env.DATABASE_URL,
+  
 });
 
 // Add error handling for the pool
