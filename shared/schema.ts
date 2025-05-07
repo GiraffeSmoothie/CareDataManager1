@@ -1,120 +1,97 @@
-import { pgTable, text, serial, integer, boolean, jsonb, date, timestamp } from "drizzle-orm/pg-core";
-import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  role: text("role").default("user"),
-  name: text("name").default(""),
-});
+// Define only types and schemas for client-side usage
+export type User = {
+  id: number;
+  username: string;
+  password: string;
+  role: string;
+  name: string;
+};
 
-export const personInfo = pgTable("person_info", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  firstName: text("first_name").notNull(),
-  middleName: text("middle_name").default(""),
-  lastName: text("last_name").notNull(),
-  dateOfBirth: text("date_of_birth").notNull(),
-  email: text("email").notNull(),
-  homePhoneCountryCode: text("home_phone_country_code").default("+61"),
-  homePhone: text("home_phone").default(""),
-  mobilePhoneCountryCode: text("mobile_phone_country_code").default("+61"),
-  mobilePhone: text("mobile_phone").notNull(),
-  // Home Address
-  addressLine1: text("address_line1").notNull(),
-  addressLine2: text("address_line2").default(""),
-  addressLine3: text("address_line3").default(""),
-  postCode: text("post_code").notNull(),
-  // Mailing Address
-  mailingAddressLine1: text("mailing_address_line1").default(""),
-  mailingAddressLine2: text("mailing_address_line2").default(""),
-  mailingAddressLine3: text("mailing_address_line3").default(""),
-  mailingPostCode: text("mailing_post_code").default(""),
-  useHomeAddress: boolean("use_home_address").default(true),
-  // Next of Kin Information
-  nextOfKinName: text("next_of_kin_name").default(""),
-  nextOfKinAddress: text("next_of_kin_address").default(""),
-  nextOfKinEmail: text("next_of_kin_email").default(""),
-  nextOfKinPhoneCountryCode: text("next_of_kin_phone_country_code").default("+61"),
-  nextOfKinPhone: text("next_of_kin_phone").default(""),
-  // HCP Information
-  hcpLevel: text("hcp_level").default(""),
-  hcpEndDate: text("hcp_end_date").default(""),
-  status: text("status").default("New"),
-  createdBy: integer("created_by").references(() => users.id),
-});
+export type PersonInfo = {
+  id: number;
+  title: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  dateOfBirth: string;
+  email: string;
+  homePhoneCountryCode?: string;
+  homePhone?: string;
+  mobilePhoneCountryCode?: string;
+  mobilePhone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  postCode: string;
+  mailingAddressLine1?: string;
+  mailingAddressLine2?: string;
+  mailingAddressLine3?: string;
+  mailingPostCode?: string;
+  useHomeAddress?: boolean;
+  nextOfKinName?: string;
+  nextOfKinAddress?: string;
+  nextOfKinEmail?: string;
+  nextOfKinPhoneCountryCode?: string;
+  nextOfKinPhone?: string;
+  hcpLevel?: string;
+  hcpEndDate?: string;
+  status?: string;
+};
 
-export const masterData = pgTable("master_data", {
-  id: serial("id").primaryKey(),
-  serviceCategory: text("service_category").notNull(),
-  serviceType: text("service_type").notNull(),
-  serviceProvider: text("service_provider").notNull(),  
-  active: boolean("active").notNull().default(true),
-  createdBy: integer("created_by").references(() => users.id),
-});
+export type Document = {
+  id: number;
+  memberId: number;
+  documentName: string;
+  documentType: string;
+  filename: string;
+  filePath?: string;
+  uploadedAt?: Date;
+  createdBy?: number;
+};
 
-export const documents = pgTable("documents", {
-  id: serial("id").primaryKey(),
-  memberId: integer("member_id").references(() => personInfo.id).notNull(),
-  documentName: text("document_name").notNull(),
-  documentType: text("document_type").notNull(),
-  filename: text("filename").notNull(),
-  filePath: text("file_path"),
-  uploadedAt: timestamp("uploaded_at").defaultNow(),
-  createdBy: integer("created_by").references(() => users.id),
-});
+export type MemberService = {
+  id: number;
+  memberId: number;
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  serviceStartDate: string;
+  serviceDays: string[];
+  serviceHours: number;
+  status?: string;
+  createdAt?: Date;
+  createdBy?: number;
+};
 
-export const memberServices = pgTable("member_services", {
-  id: serial("id").primaryKey(),
-  memberId: integer("member_id").references(() => personInfo.id).notNull(),
-  serviceCategory: text("service_category").notNull(),
-  serviceType: text("service_type").notNull(),
-  serviceProvider: text("service_provider").notNull(),
-  serviceStartDate: date("service_start_date").notNull(),
-  serviceDays: text("service_days").array().notNull(),
-  serviceHours: integer("service_hours").notNull(),
-  status: text("status").default("New"),
-  createdAt: timestamp("created_at").defaultNow(),
-  createdBy: integer("created_by").references(() => users.id),
-});
+export type ServiceCaseNote = {
+  id: number;
+  serviceId: number;
+  noteText: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  createdBy: number;
+  updatedBy: number;
+};
 
-export const serviceCaseNotes = pgTable("service_case_notes", {
-  id: serial("id").primaryKey(),
-  serviceId: integer("service_id").references(() => memberServices.id).notNull(),
-  noteText: text("note_text").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  createdBy: integer("created_by").notNull().references(() => users.id),
-  updatedBy: integer("updated_by").notNull().references(() => users.id),
-});
+export type MasterData = {
+  id: number;
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  active: boolean;
+  createdBy?: number;
+};
 
-// User schemas
+// Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
   name: z.string().min(1, "Name is required"),
-  role: z.enum(["admin", "user"]).default("user")
+  role: z.enum(["admin", "user"]).default("user"),
 });
 
-// Master data schemas
-export const insertMasterDataSchema = z.object({
-  serviceCategory: z.string({
-    required_error: "Service Category is required",
-  }),
-  serviceType: z.string({
-    required_error: "Service Type is required",
-  }),
-  serviceProvider: z.string({
-    required_error: "Service Provider is required",
-  }),
-  active: z.boolean().default(true),
-  createdBy: z.number().optional(),
-});
-
-// Person info schemas
 export const insertPersonInfoSchema = z.object({
   title: z.string().min(1, "Title is required"),
   firstName: z.string().min(1, "First name is required"),
@@ -147,15 +124,19 @@ export const insertPersonInfoSchema = z.object({
   status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
 });
 
-// Document schema
-export const insertDocumentSchema = createInsertSchema(documents).omit({
-  id: true,
-  uploadedAt: true,
-  createdBy: true,
-  filename: true, // This will be handled by the server
+export const insertDocumentSchema = z.object({
+  memberId: z.number({
+    required_error: "Member ID is required",
+  }),
+  documentName: z.string({
+    required_error: "Document name is required",
+  }),
+  documentType: z.string({
+    required_error: "Document type is required",
+  }),
+  filePath: z.string().optional(),
 });
 
-// Member services schema
 export const insertMemberServiceSchema = z.object({
   memberId: z.number({
     required_error: "Member ID is required",
@@ -177,46 +158,18 @@ export const insertMemberServiceSchema = z.object({
     .min(1, "Hours must be at least 1")
     .max(24, "Hours cannot exceed 24"),
   status: z.enum(["Planned", "In Progress", "Closed"]).default("Planned"),
-  createdBy: z.number().optional(),
 });
 
-// Service case notes schema
 export const insertServiceCaseNoteSchema = z.object({
   serviceId: z.number(),
   noteText: z.string(),
-  createdBy: z.number()
+  createdBy: z.number(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = InferSelectModel<typeof users>;
-
-export type InsertMasterData = z.infer<typeof insertMasterDataSchema>;
-export type MasterData = {
-  id: number;
-  serviceCategory: string;
-  serviceType: string;
-  serviceProvider?: string;
-  active: boolean;
-  createdBy: number;
-  createdAt?: Date;
-};
-
-export type InsertPersonInfo = z.infer<typeof insertPersonInfoSchema>;
-export type PersonInfo = InferSelectModel<typeof personInfo>;
-
-export type InsertDocument = z.infer<typeof insertDocumentSchema>;
-export type Document = InferSelectModel<typeof documents>;
-
-export type InsertMemberService = z.infer<typeof insertMemberServiceSchema>;
-export type MemberService = InferSelectModel<typeof memberServices>;
-
-export type ServiceCaseNote = InferSelectModel<typeof serviceCaseNotes>;
-export type InsertServiceCaseNote = InferInsertModel<typeof serviceCaseNotes>;
-
-export type NewServiceCaseNote = InferInsertModel<typeof serviceCaseNotes>;
-
-// Login session type
-export interface Session {
-  userId: number;
-  username: string;
-}
+export const insertMasterDataSchema = z.object({
+  serviceCategory: z.string({ required_error: "Please select a service category" }),
+  serviceType: z.string({ required_error: "Please select a service type" }),
+  serviceProvider: z.string({ required_error: "Please select or enter a service provider" }),
+  active: z.boolean().default(true),
+  createdBy: z.number().optional(),
+});
