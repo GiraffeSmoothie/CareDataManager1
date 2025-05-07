@@ -31,25 +31,28 @@ echo "Building client..."
 npm run build
 echo "Client build completed"
 
-# Consolidate files into dist folder
-echo "Consolidating files into dist folder..."
+# Create deployment directory structure
+echo "Creating deployment structure..."
 cd ..
+rm -rf dist
 mkdir -p dist/client
 mkdir -p dist/migrations
 
-# Copy client build files to dist/client
-cp -r client/dist/* dist/client/
+# Copy built files to deployment directory
+echo "Copying files to deployment directory..."
 
-# Copy server build files to dist
-cp -r server/dist/* dist/
+# Copy server's index.js to root level of dist
+cp server/dist/index.js dist/index.js
+
+# Copy client files to dist/client
+cp -r server/dist/client/* dist/client/
 
 # Copy migrations to dist/migrations
-cp -r server/migrations/* dist/migrations/
+cp -r server/dist/migrations/* dist/migrations/
 
-# Copy production.env to dist
+# Copy configuration files
 cp server/production.env dist/production.env
-
-# Copy package.json to dist
 cp package.json dist/package.json
+cp web.config dist/web.config
 
-echo "Deployment build completed with Structure B."
+echo "Deployment build completed with Azure App Service structure"
