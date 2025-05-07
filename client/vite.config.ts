@@ -17,7 +17,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist',
+    outDir: path.resolve(__dirname, '../server/dist/client'), // Output to server/dist/client
     emptyOutDir: true,
     sourcemap: process.env.NODE_ENV !== 'production'
   },

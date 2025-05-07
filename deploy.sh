@@ -31,42 +31,25 @@ echo "Building client..."
 npm run build
 echo "Client build completed"
 
-# Go to project root
-echo "Switching to project root..."
+# Consolidate files into dist folder
+echo "Consolidating files into dist folder..."
 cd ..
+mkdir -p dist/client
+mkdir -p dist/migrations
 
-# Create a CommonJS wrapper for the ESM entry point (for iisnode compatibility)
-echo "Creating entry point wrapper for iisnode..."
-cat > ./index.js << 'EOL'
-// This file is a CommonJS wrapper to load ESM modules in iisnode
-import('./server/dist/index.js').catch(err => {
-  console.error('Failed to load application:', err);
-  process.exit(1);
-});
-EOL
-echo "Entry point wrapper created"
+# Copy client build files to dist/client
+cp -r client/dist/* dist/client/
 
-# Ensure server build is in place
-echo "Copying server build output..."
-mkdir -p ./server/dist
-cp -r server/dist/* ./server/dist/
-echo "Server build copied"
+# Copy server build files to dist
+cp -r server/dist/* dist/
 
-# Copy client build to public/
-echo "Copying client build to public/ ..."
-mkdir -p public
-cp -r client/dist/* public/
-echo "Client build copied"
+# Copy migrations to dist/migrations
+cp -r server/migrations/* dist/migrations/
 
-# Copy environment files if needed
-echo "Copying environment files..."
-cp server/production.env ./production.env
-echo "Environment files copied"
+# Copy production.env to dist
+cp server/production.env dist/production.env
 
-# Copy web.config to root
-echo "Copying web.config..."
-cp web.config ./
-echo "web.config copied"
+# Copy package.json to dist
+cp package.json dist/package.json
 
-# Final log
-echo "Deployment build completed"
+echo "Deployment build completed with Structure B."

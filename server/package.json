@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx index.ts",
     "prebuild": "npm install -g esbuild",
-    "build": "cross-env NODE_ENV=production esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "cross-env NODE_ENV=production esbuild index.ts --platform=node --bundle --format=esm --outdir=dist --packages=external --external:fs --external:path --external:url --external:crypto",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "postbuild": "node copy-migrations.js"
   },

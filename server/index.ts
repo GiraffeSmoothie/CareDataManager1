@@ -1,4 +1,4 @@
-import * as dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
@@ -10,33 +10,9 @@ const __dirname = path.dirname(__filename);
 console.log('Current directory:', __dirname);
 console.log('Node Environment:', process.env.NODE_ENV);
 
-// Try to load environment variables from multiple possible locations
+// Load environment variables
 const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
-const possibleEnvPaths = [
-  path.join(__dirname, envFile),               // /dist/production.env
-  path.join(__dirname, '..', envFile),         // ../production.env
-  path.join(__dirname, '..', 'server', envFile), // ../server/production.env
-  path.join(process.cwd(), envFile),           // ./production.env
-  path.join(process.cwd(), 'server', envFile)  // ./server/production.env
-];
-
-let envLoaded = false;
-for (const envPath of possibleEnvPaths) {
-  console.log(`Checking for env file at: ${envPath}`);
-  if (fs.existsSync(envPath)) {
-    console.log(`Loading environment variables from: ${envPath}`);
-    const envConfig = dotenv.parse(fs.readFileSync(envPath));
-    for (const k in envConfig) {
-      process.env[k] = envConfig[k];
-    }
-    envLoaded = true;
-    break;
-  }
-}
-
-if (!envLoaded) {
-  console.warn('No environment file found. Using environment variables as set.');
-}
+dotenv.config({ path: envFile });
 
 // Verify DATABASE_URL is loaded
 if (!process.env.DATABASE_URL) {
@@ -152,22 +128,10 @@ export async function initializeDatabase() {
 
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
-      // In Azure App Service, the client files will be in /home/site/wwwroot/client
-      // relative to the server directory, that's '../client'
-      let clientPath = path.join(__dirname, '../client');
-      
-      // Check if the directory exists, if not try the alternative path
-      if (!fs.existsSync(clientPath)) {
-        clientPath = path.join(__dirname, '../../client');
-        if (!fs.existsSync(clientPath)) {
-          console.warn('Client path not found at expected locations, using fallback path');
-          clientPath = path.join(process.cwd(), 'client');
-        }
-      }
-      
+      // Serve static files from server/dist/client
+      const clientPath = path.resolve(__dirname, 'client');
       console.log('Serving static files from:', clientPath);
-      
-      // Serve static files with proper MIME types
+
       app.use(express.static(clientPath, {
         maxAge: '1d',
         setHeaders: (res, path) => {
@@ -176,13 +140,12 @@ export async function initializeDatabase() {
           }
         }
       }));
-      
-      // SPA fallback - must be after API routes
+
+      // SPA fallback
       app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api')) {
           return next();
         }
-        console.log('Serving SPA for path:', req.path);
         const indexPath = path.join(clientPath, 'index.html');
         if (fs.existsSync(indexPath)) {
           res.sendFile(indexPath, err => {
