@@ -122,16 +122,16 @@ const blobStorage = new BlobStorageService();
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure CORS
   app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type"]
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Cookie", "Authorization"]
   }));
 
   // Initialize session store with connection check using the shared pool
   const pgStore = new PgStore({
     pool: pool,
-    tableName: 'session',  // Changed from user_sessions to session
+    tableName: 'session',
     createTableIfMissing: true
   });
 
@@ -546,64 +546,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Modified document upload endpoint
   app.post("/api/documents", upload.single("file"), createHandler(async (req, res) => {
     console.log("Document upload request received");
-    
-    if (!req.file) {
-      console.log("No file uploaded");
-      return res.status(400).json({ message: "No file uploaded" });
-    }
+    console.log("Headers:", req.headers);
+    console.log("Body:", req.body);
+    console.log("File:", req.file);
 
-    const { memberId, documentName, documentType } = req.body;
-    
-    // Validation
-    if (!memberId || !documentName || !documentType) {
-      console.log("Missing required fields:", { memberId, documentName, documentType });
-      return res.status(400).json({ message: "Member ID, document name, and document type are required" });
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const { memberId, documentName, documentType } = req.body;
+      
+      if (!memberId || !documentName || !documentType) {
+        return res.status(400).json({ 
+          message: "Missing required fields: memberId, documentName, and documentType are required" 
+        });
+      }
+      
+      // Check if member exists
+      const memberIdNum = parseInt(memberId);
+      if (isNaN(memberIdNum)) {
+        return res.status(400).json({ message: "Invalid member ID format" });
+      }
+      
+      const member = await dbStorage.getPersonInfoById(memberIdNum);
+      if (!member) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      // Use original filename but sanitize it by removing any path components
+      const originalFilename = req.file.originalname;
+      const sanitizedFilename = originalFilename.replace(/^.*[\\\/]/, '');
+      const memberDirName = `${memberIdNum}_${member.firstName}_${member.lastName}`;
+      const blobPath = `${memberDirName}/${sanitizedFilename}`;
+
+      // Upload to blob storage
+      const fileBuffer = req.file.buffer;
+      await blobStorage.uploadFile(fileBuffer, blobPath, req.file.mimetype);
+      
+      // Create document record in database
+      const documentRecord = await dbStorage.createDocument({
+        memberId: memberIdNum,
+        documentName,
+        documentType,
+        filename: sanitizedFilename,
+        filePath: blobPath,
+        createdBy: req.user.id,
+        uploadedAt: new Date()
+      });
+      
+      return res.status(201).json(documentRecord);
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      return res.status(500).json({ 
+        message: "Failed to upload document",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    
-    // Check if member exists
-    const memberIdNum = parseInt(memberId);
-    if (isNaN(memberIdNum)) {
-      console.log("Invalid member ID format:", memberId);
+  }));
+
+  // Add documents fetch endpoint for member
+  app.get("/api/documents/member/:memberId", createHandler(async (req, res) => {
+    const memberId = parseInt(req.params.memberId);
+    if (isNaN(memberId)) {
       return res.status(400).json({ message: "Invalid member ID format" });
     }
-    
-    const member = await dbStorage.getPersonInfoById(memberIdNum);
-    if (!member) {
-      console.log("Member not found:", memberIdNum);
-      return res.status(404).json({ message: "Member not found" });
-    }
-    
-    // Generate blob name (same structure as before but for blob storage)
-    const blobName = `${member.id}_${member.firstName}_${member.lastName}/${req.file.originalname}`;
-    
-    // Upload to blob storage
-    const blobUrl = await blobStorage.uploadFile(
-      req.file.buffer,
-      blobName,
-      req.file.mimetype
-    );
-    
-    // Create document entry with blob URL
-    const documentData = {
-      memberId: memberIdNum,
-      documentName,
-      documentType,
-      createdBy: req.user.id,
-      filename: req.file.originalname,
-      filePath: blobName, // Store the blob path instead of local file path
-      uploadedAt: new Date()
-    };
 
-    console.log("Creating document with data:", documentData);
-    const createdDocument = await dbStorage.createDocument(documentData);
-    
-    return res.status(201).json(createdDocument);
+    try {
+      const documents = await dbStorage.getDocumentsByMemberId(memberId);
+      return res.status(200).json(documents);
+    } catch (error) {
+      console.error("Error fetching member documents:", error);
+      return res.status(500).json({ 
+        message: "Failed to fetch documents",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
   }));
 
   // Modified document download endpoint
-  app.get("/api/documents/:filename", createHandler(async (req, res) => {
-    const { filename } = req.params;
-    const document = await dbStorage.getDocumentByFilename(filename);
+  app.get("/api/documents/:filePath(*)", createHandler(async (req, res) => {
+    const filePath = req.params.filePath;
+    const document = await dbStorage.getDocumentByFilePath(filePath);
     
     if (!document) {
       return res.status(404).json({ message: "Document not found" });
@@ -613,23 +637,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Document file path not found" });
     }
     
-    // Download from blob storage
-    const fileBuffer = await blobStorage.downloadFile(document.filePath);
-    
-    // Set content type based on file extension
-    const ext = path.extname(filename).toLowerCase();
-    const contentType = {
-      '.pdf': 'application/pdf',
-      '.doc': 'application/msword',
-      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png'
-    }[ext] || 'application/octet-stream';
+    try {
+      // Download from blob storage
+      const fileBuffer = await blobStorage.downloadFile(document.filePath);
+      
+      // Get the original filename from the filePath
+      const originalFilename = document.filename;
+      
+      // Set content type based on file extension
+      const ext = path.extname(originalFilename).toLowerCase();
+      const contentType = {
+        '.pdf': 'application/pdf',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png'
+      }[ext] || 'application/octet-stream';
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${document.documentName}"`);
-    res.send(fileBuffer);
+      res.setHeader('Content-Type', contentType);
+      // Use original filename in Content-Disposition
+      res.setHeader('Content-Disposition', `attachment; filename="${originalFilename}"`);
+      res.send(fileBuffer);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      return res.status(404).json({ message: "Document not found in blob storage" });
+    }
   }));
 
   // Member services routes

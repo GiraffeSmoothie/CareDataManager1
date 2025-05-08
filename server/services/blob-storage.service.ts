@@ -1,8 +1,11 @@
-import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+import { BlobServiceClient, ContainerClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } from '@azure/storage-blob';
 
 export class BlobStorageService {
     private containerClient: ContainerClient;
     private blobServiceClient: BlobServiceClient;
+    private accountName: string;
+    private accountKey: string;
+    private containerName: string;
 
     constructor() {
         const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -10,18 +13,39 @@ export class BlobStorageService {
             throw new Error('Azure Storage connection string not found in environment variables');
         }
 
+        // Extract account name and key from connection string
+        this.accountName = this.extractAccountName(connectionString);
+        this.accountKey = this.extractAccountKey(connectionString);
+
         this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
-        const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documents';
-        this.containerClient = this.blobServiceClient.getContainerClient(containerName);
+        this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documents';
+        this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
         this.initializeContainer();
+    }
+
+    // Extract account name from connection string
+    private extractAccountName(connectionString: string): string {
+        const matches = connectionString.match(/AccountName=([^;]+)/i);
+        if (!matches || matches.length < 2) {
+            throw new Error('Account name not found in connection string');
+        }
+        return matches[1];
+    }
+
+    // Extract account key from connection string
+    private extractAccountKey(connectionString: string): string {
+        const matches = connectionString.match(/AccountKey=([^;]+)/i);
+        if (!matches || matches.length < 2) {
+            throw new Error('Account key not found in connection string');
+        }
+        return matches[1];
     }
 
     private async initializeContainer(): Promise<void> {
         try {
-            // Create the container if it doesn't exist
-            await this.containerClient.createIfNotExists({
-                access: 'blob' // This makes the blobs public readable
-            });
+            // Create the container if it doesn't exist, with no public access
+            await this.containerClient.createIfNotExists();
+            console.log(`Container ${this.containerName} initialized without public access`);
         } catch (error) {
             console.error('Error initializing blob container:', error);
             throw error;
@@ -38,7 +62,9 @@ export class BlobStorageService {
                 }
             });
 
-            return blockBlobClient.url;
+            // Generate a SAS URL with read access for 1 hour
+            const sasUrl = this.generateSasUrl(blobName);
+            return sasUrl;
         } catch (error) {
             console.error('Error uploading to blob storage:', error);
             throw error;
@@ -80,5 +106,28 @@ export class BlobStorageService {
             console.error('Error checking file existence in blob storage:', error);
             throw error;
         }
+    }
+
+    // Generate a SAS URL for a blob with read access
+    generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
+        const sharedKeyCredential = new StorageSharedKeyCredential(
+            this.accountName,
+            this.accountKey
+        );
+        
+        const sasOptions = {
+            containerName: this.containerName,
+            blobName: blobName,
+            permissions: BlobSASPermissions.parse("r"), // Read permission only
+            startsOn: new Date(),
+            expiresOn: new Date(new Date().valueOf() + expiryMinutes * 60 * 1000),
+        };
+        
+        const sasToken = generateBlobSASQueryParameters(
+            sasOptions,
+            sharedKeyCredential
+        ).toString();
+        
+        return `https://${this.accountName}.blob.core.windows.net/${this.containerName}/${blobName}?${sasToken}`;
     }
 }

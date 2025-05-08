@@ -611,6 +611,24 @@ export const storage = {
     };
   },
 
+  async getDocumentByFilePath(filePath: string): Promise<Document | null> {
+    const result = await pool.query('SELECT * FROM documents WHERE file_path = $1 LIMIT 1', [filePath]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      memberId: row.member_id,
+      documentName: row.document_name,
+      documentType: row.document_type,
+      filename: row.filename,
+      filePath: row.file_path,
+      uploadedAt: row.uploaded_at,
+      createdBy: row.created_by
+    };
+  },
+
   async createMemberService(data: Omit<MemberService, 'id'>): Promise<MemberService> {
     try {
       console.log("Creating member service with data:", data);

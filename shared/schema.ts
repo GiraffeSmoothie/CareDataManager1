@@ -136,6 +136,7 @@ export const insertDocumentSchema = z.object({
     required_error: "Document type is required",
   }),
   filePath: z.string().optional(),
+  file: z.any().refine((val) => val instanceof FileList && val.length > 0, "File is required")
 });
 
 export const insertMemberServiceSchema = z.object({

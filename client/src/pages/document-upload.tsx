@@ -13,8 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
-import { insertDocumentSchema, type InsertDocument, type PersonInfo, type Document } from "@shared/schema";
+import { insertDocumentSchema, type PersonInfo, type Document } from "@shared/schema";
+import type { z } from "zod";
 
+// Define the type based on the schema
+type DocumentFormData = z.infer<typeof insertDocumentSchema> & { file: FileList | null };
+
+// Document types for dropdown
 const documentTypes = [
   "Identity Document",
   "Medical Record",
@@ -65,14 +70,19 @@ export default function DocumentUpload() {
   // Fetch documents for selected member
   const { data: documents = [], isLoading: loadingDocuments } = useQuery<Document[]>({
     queryKey: ["/api/documents/member", selectedMember?.id],
-    queryFn: () => selectedMember 
-      ? apiRequest("GET", `/api/documents/member/${selectedMember.id}`).then(res => res.json())
-      : Promise.resolve([]),
+    queryFn: async () => {
+      if (!selectedMember) return [];
+      const response = await apiRequest("GET", `/api/documents/member/${selectedMember.id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
+      }
+      return response.json();
+    },
     enabled: !!selectedMember,
   });
 
   // Form setup
-  const form = useForm<InsertDocument & { file: FileList | null }>({
+  const form = useForm<DocumentFormData>({
     resolver: zodResolver(insertDocumentSchema),
     defaultValues: {
       memberId: 0,
@@ -90,18 +100,35 @@ export default function DocumentUpload() {
 
   // Document upload mutation
   const uploadMutation = useMutation({
-    mutationFn: async (data: InsertDocument & { file: FileList | null }) => {
+    mutationFn: async (data: DocumentFormData) => {
+      if (!data.file || data.file.length === 0) {
+        throw new Error("No file selected");
+      }
+
       const formData = new FormData();
       formData.append("memberId", data.memberId.toString());
       formData.append("documentName", data.documentName);
       formData.append("documentType", data.documentType);
+      formData.append("file", data.file[0]);
 
-      if (data.file && data.file.length > 0) {
-        formData.append("file", data.file[0]);
+      console.log("Uploading file:", data.file[0].name);
+      
+      // Debug log of form data
+      for (const pair of formData.entries()) {
+        console.log(pair[0], pair[1]);
       }
 
-      const res = await apiRequest("POST", "http://localhost:3000/api/documents", formData, true);
-      return await res.json();
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        body: formData,
+        credentials: "include"
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to upload document");
+      }
+      return await response.json();
     },
     onSuccess: () => {
       toast({
@@ -129,6 +156,8 @@ export default function DocumentUpload() {
           refetchType: 'active'
         });
       }
+      
+      setShowDialog(false);
     },
     onError: (error: Error) => {
       toast({
@@ -140,7 +169,16 @@ export default function DocumentUpload() {
   });
 
   // Form submission handler
-  const onSubmit = (data: InsertDocument & { file: FileList | null }) => {
+  const onSubmit = (data: DocumentFormData) => {
+    if (!selectedMember) {
+      toast({
+        title: "Error",
+        description: "Please select a member first",
+        variant: "destructive",
+      });
+      return;
+    }
+    console.log("Form data before mutation:", data);
     uploadMutation.mutate(data);
   };
 
@@ -239,14 +277,14 @@ export default function DocumentUpload() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/api/documents/${doc.filename}`, '_blank')}
+                              onClick={() => window.open(`/api/documents/${encodeURIComponent(doc.filePath || '')}`, '_blank')}
                               title="View Document"
                             >
                               <Eye className="h-4 w-4 text-blue-600" />
                             </Button>
                             <a
-                              href={`/api/documents/${doc.filename}`}
-                              download
+                              href={`/api/documents/${encodeURIComponent(doc.filePath || '')}`}
+                              download={doc.documentName}
                               className="inline-flex items-center justify-center text-sm font-medium text-primary hover:text-primary/80"
                             >
                               <ArrowDown className="h-4 w-4" />
@@ -264,102 +302,111 @@ export default function DocumentUpload() {
 
         {/* Upload Dialog */}
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl" aria-describedby="dialog-description">
             <DialogHeader>
               <DialogTitle>Upload New Document</DialogTitle>
+              <p id="dialog-description" className="text-sm text-muted-foreground">
+                Upload a document for {selectedMember?.firstName} {selectedMember?.lastName}
+              </p>
             </DialogHeader>
             <div className="mt-4">
               <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="memberId"
-                        render={({ field }) => (
-                          <FormItem className="hidden">
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="memberId"
+                    render={({ field }) => (
+                      <FormItem className="hidden">
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="documentName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Document Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Enter document name" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                  <FormField
+                    control={form.control}
+                    name="documentName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Document Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter document name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="documentType"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Document Type</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select document type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {documentTypes.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                  <FormField
+                    control={form.control}
+                    name="documentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Document Type</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select document type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {documentTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="file"
-                        render={({ field: { onChange, value, ...field } }) => (
-                          <FormItem>
-                            <FormLabel>Upload File</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="file"
-                                onChange={(e) => onChange(e.target.files)}
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                  <FormField
+                    control={form.control}
+                    name="file"
+                    render={({ field: { onChange, value, ...field } }) => (
+                      <FormItem>
+                        <FormLabel>Upload File</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="file"
+                            onChange={(e) => {
+                              const files = e.target.files;
+                              if (files) {
+                                onChange(files);
+                                console.log("File selected:", files[0]?.name);
+                              }
+                            }}
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <Button type="submit" className="w-full" disabled={uploadMutation.isPending}>
-                        {uploadMutation.isPending ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>Upload Document</>
-                        )}
-                      </Button>
-                    </form>
-                  </Form>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+                  <Button type="submit" className="w-full" disabled={uploadMutation.isPending}>
+                    {uploadMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>Upload Document</>
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </AppLayout>
   );
 }
