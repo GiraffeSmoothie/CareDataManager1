@@ -11,6 +11,15 @@ import path from "path";
 import fs from "fs";
 import pgSession from "connect-pg-simple";
 import cors from 'cors';
+import { BlobStorageService } from "./services/blob-storage.service";
+import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
+
+// Base response type for consistent error handling
+interface ApiResponse<T = undefined> {
+  message?: string;
+  data?: T;
+}
 
 declare module "express-session" {
   interface SessionData {
@@ -33,6 +42,50 @@ declare module "express" {
     filePath?: string;
   }
 }
+
+// Define authenticated request type
+interface AuthenticatedRequest<
+  P = ParamsDictionary,
+  B = any,
+  Q = ParsedQs
+> extends Request<P, any, B, Q> {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
+// Type guard for authenticated requests
+const isAuthenticated = (
+  req: Request<ParamsDictionary, any, any, ParsedQs>
+): req is AuthenticatedRequest => {
+  return 'user' in req && req.user !== undefined;
+};
+
+// Helper to create typed request handlers
+const createHandler = <
+  P extends ParamsDictionary = ParamsDictionary,
+  ResBody extends ApiResponse = ApiResponse,
+  ReqBody = any,
+  ReqQuery extends ParsedQs = ParsedQs
+>(
+  handler: (
+    req: AuthenticatedRequest<P, ReqBody, ReqQuery>,
+    res: Response<ResBody>
+  ) => Promise<any>
+): RequestHandler<P, ResBody, ReqBody, ReqQuery> => {
+  return async (req, res, next) => {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({ message: 'Unauthorized' } as ResBody);
+    }
+    try {
+      await handler(req as AuthenticatedRequest<P, ReqBody, ReqQuery>, res);
+    } catch (error) {
+      next(error);
+    }
+  };
+};
 
 // Initialize users if none exist
 async function initializeUsers() {
@@ -62,6 +115,10 @@ function hashPassword(password: string): string {
 }
 
 const PgStore = pgSession(session);
+
+// Initialize blob storage service
+const blobStorage = new BlobStorageService();
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure CORS
   app.use(cors({
@@ -176,64 +233,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup file upload
   const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
   
-  // Create uploads directory if it doesn't exist
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  
-  // Configure multer for file uploads
-  const storage = multer.diskStorage({
-    destination: async function (req, file, cb) {
-      try {
-        // Get member details for folder creation
-        const memberId = req.body.memberId;
-        const member = await dbStorage.getPersonInfoById(parseInt(memberId));
-        
-        if (!member) {
-          return cb(new Error("Member not found"), "");
-        }
-
-        // Create member-specific folder name
-        const memberFolder = `${member.id}_${member.firstName}_${member.lastName}`;
-        const memberPath = path.join(uploadsDir, memberFolder);
-
-        // Create member folder if it doesn't exist
-        if (!fs.existsSync(memberPath)) {
-          fs.mkdirSync(memberPath, { recursive: true });
-        }
-
-        // Store the member path for use in filename callback
-        req.memberPath = memberPath;
-        cb(null, memberPath);
-      } catch (error) {
-        cb(error as Error, "");
-      }
-    },
-    filename: function (req, file, cb) {
-      let originalName = file.originalname;
-      const ext = path.extname(originalName);
-      const nameWithoutExt = path.basename(originalName, ext);
-      let counter = 1;
-      let newFilename = originalName;
-      
-      // Check if file exists and append number if it does
-      if (req.memberPath) {
-        while (fs.existsSync(path.join(req.memberPath, newFilename))) {
-          newFilename = `${nameWithoutExt} (${counter})${ext}`;
-          counter++;
-        }
-      }
-      
-      // Store the relative path for database
-      if (req.memberPath) {
-        const memberFolder = path.basename(req.memberPath);
-        req.filePath = path.join(memberFolder, newFilename);
-      }
-      
-      cb(null, newFilename);
-    }
-  });
-  
+  // Configure multer for memory storage (for blob uploads)
+  const storage = multer.memoryStorage();
   const upload = multer({ 
     storage: storage,
     limits: {
@@ -542,131 +543,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Endpoint to serve uploaded files
-  app.get("/api/documents/:filename", async (req: Request, res: Response) => {
-    try {
-      const { filename } = req.params;
-      const document = await dbStorage.getDocumentByFilename(filename);
-      
-      if (!document) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-      
-      if (!document.filePath) {
-        return res.status(404).json({ message: "Document file path not found" });
-      }
-      
-      const fullPath = path.join(uploadsDir, document.filePath);
-      
-      // Check if file exists
-      if (!fs.existsSync(fullPath)) {
-        return res.status(404).json({ message: "Document file not found" });
-      }
-      
-      // Send the file
-      res.download(fullPath, document.documentName);
-    } catch (error) {
-      console.error("Error serving document:", error);
-      res.status(500).json({ message: "Internal server error" });
+  // Modified document upload endpoint
+  app.post("/api/documents", upload.single("file"), createHandler(async (req, res) => {
+    console.log("Document upload request received");
+    
+    if (!req.file) {
+      console.log("No file uploaded");
+      return res.status(400).json({ message: "No file uploaded" });
     }
-  });
 
-  // Document management routes
-  app.post("/api/documents", upload.single("file"), async (req: Request, res: Response) => {
-    try {
-      console.log("Document upload request received");
-      console.log("Request body:", req.body);
-      console.log("File:", req.file);
-      console.log("File path:", req.filePath);
-
-      if (!req.file) {
-        console.log("No file uploaded");
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
-      if (!req.filePath) {
-        console.error("File path not set by multer");
-        return res.status(500).json({ message: "File path not set correctly" });
-      }
-
-      const { memberId, documentName, documentType } = req.body;
-      
-      // Validation
-      if (!memberId || !documentName || !documentType) {
-        console.log("Missing required fields:", { memberId, documentName, documentType });
-        return res.status(400).json({ message: "Member ID, document name, and document type are required" });
-      }
-      
-      // Check if member exists
-      const memberIdNum = parseInt(memberId);
-      if (isNaN(memberIdNum)) {
-        console.log("Invalid member ID format:", memberId);
-        return res.status(400).json({ message: "Invalid member ID format" });
-      }
-      
-      console.log("Looking up member:", memberIdNum);
-      const member = await dbStorage.getPersonInfoById(memberIdNum);
-      if (!member) {
-        console.log("Member not found:", memberIdNum);
-        return res.status(404).json({ message: "Member not found" });
-      }
-      
-      console.log("Member found:", member);
-      
-      // Create document entry with file path
-      const documentData = {
-        memberId: memberIdNum,
-        documentName,
-        documentType,
-        createdBy: req.user!.id,
-        filename: req.file.filename,
-        filePath: req.filePath,
-        uploadedAt: new Date()
-      };
-
-      console.log("Creating document with data:", documentData);
-      
-      const createdDocument = await dbStorage.createDocument(documentData);
-      console.log("Document created successfully:", createdDocument);
-      
-      return res.status(201).json(createdDocument);
-    } catch (error) {
-      console.error("Error uploading document:", error);
-      if (error instanceof z.ZodError) {
-        const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
-      }
-      return res.status(500).json({ 
-        message: "Failed to upload document", 
-        details: error instanceof Error ? error.message : 'Unknown error' 
-      });
+    const { memberId, documentName, documentType } = req.body;
+    
+    // Validation
+    if (!memberId || !documentName || !documentType) {
+      console.log("Missing required fields:", { memberId, documentName, documentType });
+      return res.status(400).json({ message: "Member ID, document name, and document type are required" });
     }
-  });
-
-  app.get("/api/documents/member/:memberId", async (req: Request, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const memberId = parseInt(req.params.memberId);
-      if (isNaN(memberId)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
-      }
-      
-      // Check if member exists
-      const member = await dbStorage.getPersonInfoById(memberId);
-      if (!member) {
-        return res.status(404).json({ message: "Member not found" });
-      }
-      
-      const documents = await dbStorage.getDocumentsByMemberId(memberId);
-      return res.status(200).json(documents);
-    } catch (error) {
-      console.error("Error fetching documents for member:", error);
-      return res.status(500).json({ message: "Failed to fetch documents for member" });
+    
+    // Check if member exists
+    const memberIdNum = parseInt(memberId);
+    if (isNaN(memberIdNum)) {
+      console.log("Invalid member ID format:", memberId);
+      return res.status(400).json({ message: "Invalid member ID format" });
     }
-  });
+    
+    const member = await dbStorage.getPersonInfoById(memberIdNum);
+    if (!member) {
+      console.log("Member not found:", memberIdNum);
+      return res.status(404).json({ message: "Member not found" });
+    }
+    
+    // Generate blob name (same structure as before but for blob storage)
+    const blobName = `${member.id}_${member.firstName}_${member.lastName}/${req.file.originalname}`;
+    
+    // Upload to blob storage
+    const blobUrl = await blobStorage.uploadFile(
+      req.file.buffer,
+      blobName,
+      req.file.mimetype
+    );
+    
+    // Create document entry with blob URL
+    const documentData = {
+      memberId: memberIdNum,
+      documentName,
+      documentType,
+      createdBy: req.user.id,
+      filename: req.file.originalname,
+      filePath: blobName, // Store the blob path instead of local file path
+      uploadedAt: new Date()
+    };
+
+    console.log("Creating document with data:", documentData);
+    const createdDocument = await dbStorage.createDocument(documentData);
+    
+    return res.status(201).json(createdDocument);
+  }));
+
+  // Modified document download endpoint
+  app.get("/api/documents/:filename", createHandler(async (req, res) => {
+    const { filename } = req.params;
+    const document = await dbStorage.getDocumentByFilename(filename);
+    
+    if (!document) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    
+    if (!document.filePath) {
+      return res.status(404).json({ message: "Document file path not found" });
+    }
+    
+    // Download from blob storage
+    const fileBuffer = await blobStorage.downloadFile(document.filePath);
+    
+    // Set content type based on file extension
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = {
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png'
+    }[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${document.documentName}"`);
+    res.send(fileBuffer);
+  }));
 
   // Member services routes
   app.get("/api/member-services", async (req: Request, res: Response) => {
@@ -968,4 +932,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// Member service interfaces
+interface MemberService {
+  id: number;
+  memberId: number;
+  serviceType: string;
+  startDate: Date;
+  endDate: Date | null;
+  status: string;
+}
+
+// Extend storage interface with member service methods
+declare module './storage' {
+  interface Storage {
+    getAllMemberServices(): Promise<MemberService[]>;
+    getMemberServiceById(id: number): Promise<MemberService | null>;
+    // ... other member service related methods
+  }
+}
+
+// Update PersonInfo interface to include HCP dates
+interface PersonInfo {
+  // ... existing fields ...
+  hcpStartDate?: string;
+  hcpEndDate?: string;
 }

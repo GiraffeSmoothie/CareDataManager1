@@ -12,6 +12,7 @@ import ManageClient from "@/pages/manage-client";
 import Homepage from "@/pages/homepage";
 import Settings from "@/pages/settings";
 import ManageUsers from "@/pages/manage-users";
+import Profile from "@/pages/profile";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
@@ -130,6 +131,9 @@ function Router() {
       </Route>
       <Route path="/manage-users">
         <AdminRoute component={ManageUsers} />
+      </Route>
+      <Route path="/profile">
+        <PrivateRoute component={Profile} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

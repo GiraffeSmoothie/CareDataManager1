@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -61,6 +61,7 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   email: z.string().optional(),
   mobilePhone: z.string().optional(),
   postCode: z.string().optional(),    
+  hcpStartDate: z.string().min(1, "HCP Start Date is required"),
   hcpEndDate: z.string().optional(),
   nextOfKinEmail: z.string().email({ message: "Please enter a valid email address" }).optional().or(z.literal('')),
 });
@@ -97,6 +98,7 @@ export default function PersonInfo() {
       nextOfKinEmail: "",
       nextOfKinPhone: "",
       hcpLevel: "",
+      hcpStartDate: "",
       hcpEndDate: ""
     },
   });
@@ -573,6 +575,48 @@ export default function PersonInfo() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="hcpStartDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>HCP Start Date</FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                      "w-full pl-3 text-left font-normal",
+                                      !field.value && "text-muted-foreground"
+                                    )}
+                                  >
+                                    {field.value ? (
+                                      format(new Date(field.value), "PPP")
+                                    ) : (
+                                      <span>Pick a date</span>
+                                    )}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value ? new Date(field.value) : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      field.onChange(date.toISOString().split('T')[0]);
+                                    }
+                                  }}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
                             <FormMessage />
                           </FormItem>
                         )}

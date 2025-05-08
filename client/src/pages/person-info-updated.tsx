@@ -53,8 +53,7 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   mobilePhone: z.string()
     .min(8, { message: "Phone number must be at least 8 digits" }),
   mobilePhoneCountryCode: z.string().default("61"),
-  postCode: z.string()
-    .min(4, { message: "Post code must be at least 4 characters" }),
+  hcpStartDate: z.string().min(1, "HCP Start Date is required")
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;

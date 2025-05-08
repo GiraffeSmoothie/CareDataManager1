@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -22,15 +22,9 @@ import { Button } from "../components/ui/button";
 import { 
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle 
 } from "../components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../components/ui/popover";
 import { Checkbox } from "../components/ui/checkbox";
 import {
   Select,
@@ -47,7 +41,6 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
@@ -60,12 +53,12 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   homePhone: z.string().optional().or(z.literal("")),
   addressLine2: z.string().optional().or(z.literal("")),
   addressLine3: z.string().optional().or(z.literal("")),
-  hcpEndDate: z.string().min(1, "HCP End Date is required"),
   nextOfKinEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
   nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
   nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
   hcpLevel: z.string().min(1, "HCP Level is required"),
+  hcpStartDate: z.string().min(1, "HCP Start Date is required"),
   status: z.enum(["New", "Active", "Paused", "Closed"]).default("New")
 });
 
@@ -76,13 +69,11 @@ export default function ManageClient() {
   const queryClient = useQueryClient();
   const [useHomeAddress, setUseHomeAddress] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [buttonLabel, setButtonLabel] = useState("Add client");
   const [isEditing, setIsEditing] = useState(false);
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
-  const firstErrorRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -115,7 +106,7 @@ export default function ManageClient() {
       nextOfKinEmail: "",
       nextOfKinPhone: "",
       hcpLevel: "",
-      hcpEndDate: "",
+      hcpStartDate: "",
       status: "New", 
     },
   });
@@ -298,7 +289,7 @@ export default function ManageClient() {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>HCP Level</TableHead>
-                  <TableHead>HCP End Date</TableHead>
+                  <TableHead>HCP Start Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -310,10 +301,10 @@ export default function ManageClient() {
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.mobilePhone}</TableCell>
                     <TableCell>{client.hcpLevel ? `Level ${client.hcpLevel}` : '-'}</TableCell>
-                    <TableCell>{client.hcpEndDate ? new Date(client.hcpEndDate).toLocaleDateString() : '-'}</TableCell>
+                    <TableCell>{client.hcpStartDate ? new Date(client.hcpStartDate).toLocaleDateString() : '-'}</TableCell>
                     <TableCell>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(client.status)}`}>
-                        {client.status}
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(client.status || 'New')}`}>
+                        {client.status || 'New'}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -738,10 +729,10 @@ export default function ManageClient() {
                     />
                     <FormField
                       control={form.control}
-                      name="hcpEndDate"
+                      name="hcpStartDate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>HCP End Date</FormLabel>
+                          <FormLabel>HCP Start Date</FormLabel>
                           <FormControl>
                             <Input type="date" {...field} />
                           </FormControl>

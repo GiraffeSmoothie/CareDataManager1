@@ -11,6 +11,7 @@ interface Member {
   status: string
   hcpLevel?: string
   hcpEndDate?: string
+  hcpStartDate?: string
 }
 
 export default function Homepage() {
@@ -73,7 +74,13 @@ export default function Homepage() {
               </h3>
               <p className="text-sm text-gray-500">ID: {member.id}</p>
               <p className="text-sm text-gray-500">
-                HCP: {member.hcpLevel || "-"} {member.hcpEndDate ? `(End: ${new Date(member.hcpEndDate).toLocaleDateString()})` : ""}
+                HCP Level: {member.hcpLevel || "-"}
+              </p>
+              <p className="text-sm text-gray-500">
+                HCP Start Date: {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : "-"}
+              </p>
+              <p className="text-sm text-gray-500">
+                {member.hcpEndDate ? `(End: ${new Date(member.hcpEndDate).toLocaleDateString()})` : ""}
               </p>
               <p className="text-sm mt-2">
                 <span className={`inline-block px-2 py-1 rounded-full ${getStatusBadgeColors(member.status)}`}>

@@ -35,9 +35,12 @@ export type PersonInfo = {
   nextOfKinEmail?: string;
   nextOfKinPhoneCountryCode?: string;
   nextOfKinPhone?: string;
-  hcpLevel?: string;
-  hcpEndDate?: string;
+  hcpLevel: string;
+  hcpStartDate: string;
   status?: string;
+  createdBy?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export type Document = {
@@ -82,6 +85,7 @@ export type MasterData = {
   serviceProvider: string;
   active: boolean;
   createdBy?: number;
+  createdAt?: Date;
 };
 
 // Export zod schemas if needed for validation on client
@@ -101,27 +105,24 @@ export const insertPersonInfoSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .refine((date) => !isNaN(Date.parse(date)), "Invalid date format"),
   email: z.string().email("Invalid email address"),
-  homePhoneCountryCode: z.string().default("+61"),
-  homePhone: z.string().optional().default(""),
-  mobilePhoneCountryCode: z.string().default("+61"),
-  mobilePhone: z.string().min(10, "Mobile phone must be at least 10 digits"),
-  addressLine1: z.string().min(1, "Address line 1 is required"),
-  addressLine2: z.string().optional().default(""),
-  addressLine3: z.string().optional().default(""),
-  postCode: z.string().min(1, "Post code is required"),
-  mailingAddressLine1: z.string().optional().default(""),
-  mailingAddressLine2: z.string().optional().default(""),
-  mailingAddressLine3: z.string().optional().default(""),
-  mailingPostCode: z.string().optional().default(""),
-  useHomeAddress: z.boolean().default(true),
-  nextOfKinName: z.string().optional().default(""),
-  nextOfKinAddress: z.string().optional().default(""),
-  nextOfKinEmail: z.string().email("Invalid email address").optional().default(""),
-  nextOfKinPhoneCountryCode: z.string().default("+61"),
-  nextOfKinPhone: z.string().optional().default(""),
-  hcpLevel: z.string().optional().default(""),
-  hcpEndDate: z.string().optional().default(""),
-  status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
+  homePhone: z.string().optional(),
+  mobilePhone: z.string(),
+  addressLine1: z.string().min(1, "Address Line 1 is required"),
+  addressLine2: z.string().optional(),
+  addressLine3: z.string().optional(),
+  postCode: z.string().min(1, "Post Code is required"),
+  mailingAddressLine1: z.string().optional(),
+  mailingAddressLine2: z.string().optional(),
+  mailingAddressLine3: z.string().optional(),
+  mailingPostCode: z.string().optional(),
+  useHomeAddress: z.boolean().optional(),
+  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
+  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
+  nextOfKinEmail: z.string().email().optional().or(z.literal("")),
+  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
+  hcpLevel: z.string().min(1, "HCP Level is required"),
+  hcpStartDate: z.string().min(1, "HCP Start Date is required"),
+  status: z.string().optional()
 });
 
 export const insertDocumentSchema = z.object({

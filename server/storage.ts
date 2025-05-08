@@ -115,10 +115,16 @@ export async function initializeDatabase() {
   }
 }
 
+export interface NewServiceCaseNote {
+  serviceId: number;
+  noteText: string;
+  createdBy: number;
+}
+
 export const storage = {
   async getAllUsers(): Promise<User[]> {
     try {
-      const result = await pool.query('SELECT id, name, username, role FROM users');
+      const result = await pool.query('SELECT * FROM users');
       return result.rows.map(row => ({
         id: row.id,
         name: row.name,
@@ -210,7 +216,7 @@ export const storage = {
         nextOfKinEmail,
         nextOfKinPhone,
         hcpLevel,
-        hcpEndDate,
+        hcpStartDate,
         status,
         createdBy
       } = data;
@@ -222,7 +228,7 @@ export const storage = {
           home_phone, mobile_phone, address_line1, address_line2, address_line3,
           post_code, mailing_address_line1, mailing_address_line2, mailing_address_line3,
           mailing_post_code, use_home_address, next_of_kin_name, next_of_kin_address,
-          next_of_kin_email, next_of_kin_phone, hcp_level, hcp_end_date, status, created_by
+          next_of_kin_email, next_of_kin_phone, hcp_level, hcp_start_date, status, created_by
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         RETURNING *`,
         [
@@ -248,7 +254,7 @@ export const storage = {
           nextOfKinEmail,
           nextOfKinPhone,
           hcpLevel,
-          hcpEndDate,
+          hcpStartDate,
           status,
           createdBy
         ]
@@ -294,7 +300,7 @@ export const storage = {
       nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
       nextOfKinPhone: row.next_of_kin_phone || null,
       hcpLevel: row.hcp_level || null,
-      hcpEndDate: row.hcp_end_date || null,
+      hcpStartDate: row.hcp_start_date || null,
       status: row.status || 'New',
       createdBy: row.created_by || null
     }));
@@ -332,7 +338,7 @@ export const storage = {
       nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
       nextOfKinPhone: row.next_of_kin_phone || null,
       hcpLevel: row.hcp_level || null,
-      hcpEndDate: row.hcp_end_date || null,
+      hcpStartDate: row.hcp_start_date || null,
       status: row.status || 'New',
       createdBy: row.created_by || null
     };
@@ -363,7 +369,7 @@ export const storage = {
         nextOfKinEmail,
         nextOfKinPhone,
         hcpLevel,
-        hcpEndDate,
+        hcpStartDate,
         status,
         createdBy
       } = data;
@@ -376,7 +382,7 @@ export const storage = {
           post_code = $12, mailing_address_line1 = $13, mailing_address_line2 = $14,
           mailing_address_line3 = $15, mailing_post_code = $16, use_home_address = $17,
           next_of_kin_name = $18, next_of_kin_address = $19, next_of_kin_email = $20,
-          next_of_kin_phone = $21, hcp_level = $22, hcp_end_date = $23, status = $24
+          next_of_kin_phone = $21, hcp_level = $22, hcp_start_date = $23, status = $24
         WHERE id = $25
         RETURNING *`,
         [
@@ -402,7 +408,7 @@ export const storage = {
           nextOfKinEmail || '',
           nextOfKinPhone || '',
           hcpLevel || '',
-          hcpEndDate || '',
+          hcpStartDate || '',
           status || 'New',
           id
         ]
@@ -437,7 +443,7 @@ export const storage = {
         nextOfKinEmail: row.next_of_kin_email,
         nextOfKinPhone: row.next_of_kin_phone,
         hcpLevel: row.hcp_level,
-        hcpEndDate: row.hcp_end_date,
+        hcpStartDate: row.hcp_start_date,
         status: row.status,
         createdBy: row.created_by
       };
