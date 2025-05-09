@@ -88,11 +88,23 @@ export type MasterData = {
   createdAt?: Date;
 };
 
-export type CompanySegment = {
+export type Company = {
   company_id: number;
-  segment_id: number;
   company_name: string;
+  registered_address: string;
+  postal_address?: string;
+  contact_person_name: string;
+  contact_person_phone: string;
+  contact_person_email: string;
+  created_at?: Date;
+  created_by?: number;
+};
+
+export type CompanySegment = {
+  segment_id: number;
+  company_id: number;
   segment_name: string;
+  company_name: string;
   created_at?: Date;
   created_by?: number;
 };
@@ -185,8 +197,14 @@ export const insertMasterDataSchema = z.object({
   createdBy: z.number().optional(),
 });
 
+export const insertSegmentSchema = z.object({
+  company_name: z.string({ required_error: "Company name is required" }),
+  segment_name: z.string({ required_error: "Segment name is required" }),
+  created_by: z.number().optional()
+});
+
 export const insertCompanySegmentSchema = z.object({
   company_name: z.string().min(1, "Company name is required"),
   segment_name: z.string().min(1, "Segment name is required"),
-  created_by: z.number().optional(),
+  created_by: z.number()
 });

@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation, Redirect } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,10 +13,11 @@ import Homepage from "@/pages/homepage";
 import Settings from "@/pages/settings";
 import ManageUsers from "@/pages/manage-users";
 import Profile from "@/pages/profile";
-import CompanySegmentManagement from "@/pages/company-segment-management";
+import Company from "@/pages/company";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
+import { Loading } from "@/components/ui/loading";
 
 interface AuthData {
   authenticated: boolean;
@@ -28,38 +29,35 @@ interface AuthData {
 }
 
 function PrivateRoute({ component: Component, ...rest }: any) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [location, setLocation] = useLocation();
+  const [_, setLocation] = useLocation();
+
+  const { data: authData, isLoading } = useQuery<AuthData>({
+    queryKey: ["authStatus"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/status", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Unauthorized");
+      }
+      return response.json();
+    },
+    retry: false,
+    staleTime: 5000 // Consider data fresh for 5 seconds
+  });
 
   useEffect(() => {
-    // Check if the user is authenticated
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/status", {
-          credentials: "include",
-        });
-        if (response.ok) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-          setLocation("/login");
-        }
-      } catch (error) {
-        setIsAuthenticated(false);
-        setLocation("/login");
-      }
-    };
+    if (!isLoading && !authData?.authenticated) {
+      setLocation("/login");
+    }
+  }, [authData, isLoading, setLocation]);
 
-    checkAuth();
-  }, [setLocation]);
-
-  if (isAuthenticated === null) {
-    // Loading state
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  if (isLoading) {
+    return <Loading text="Loading..." />;
   }
 
-  if (!isAuthenticated && location !== "/login") {
-    return <Redirect to="/login" />;
+  if (!authData?.authenticated) {
+    return null;
   }
 
   return <Component {...rest} />;
@@ -92,7 +90,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }, [authData]);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return <Loading text="Loading..." />;
   }
 
   if (!authData?.user || authData.user.role !== "admin") {
@@ -102,51 +100,14 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   return <Component />;
 }
 
-function ProtectedRoute({ allowedRoles, children }: { allowedRoles: string[], children: React.ReactNode }) {
-  const [loading, setLoading] = useState(true);
-  const [_, setLocation] = useLocation();
-
-  const { data: authData } = useQuery<AuthData>({
-    queryKey: ["authStatus"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    retry: false
-  });
-
-  useEffect(() => {
-    if (!loading) {
-      if (!authData?.user) {
-        setLocation("/login");
-      } else if (!allowedRoles.includes(authData.user.role)) {
-        setLocation("/");
-      }
-    }
-  }, [authData, loading, allowedRoles, setLocation]);
-
-  useEffect(() => {
-    if (authData !== undefined) {
-      setLoading(false);
-    }
-  }, [authData]);
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  }
-
-  if (!authData?.user || !allowedRoles.includes(authData.user.role)) {
-    return null;
-  }
-
-  return <>{children}</>;
-}
-
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/">
-        <Redirect to="/login" />
-      </Route>
       <Route path="/homepage">
+        <PrivateRoute component={Homepage} />
+      </Route>
+      <Route path="/">
         <PrivateRoute component={Homepage} />
       </Route>
       <Route path="/master-data">
@@ -173,10 +134,9 @@ function Router() {
       <Route path="/profile">
         <PrivateRoute component={Profile} />
       </Route>
-      <Route path="/company-segment">
-        <AdminRoute component={CompanySegmentManagement} />
+      <Route path="/company">
+        <AdminRoute component={Company} />
       </Route>
-      {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
   );

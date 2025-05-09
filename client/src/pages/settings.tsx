@@ -8,6 +8,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Loading, ButtonLoading } from "@/components/ui/loading";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -103,7 +104,11 @@ export default function Settings() {
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Changing..." : "Change Password"}
+                  {loading ? (
+                    <ButtonLoading text="Changing password..." />
+                  ) : (
+                    "Change Password"
+                  )}
                 </Button>
               </form>
             </Form>

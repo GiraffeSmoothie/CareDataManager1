@@ -17,7 +17,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: path.resolve(__dirname, '../server/dist/client'), // Output to server/dist/client
+    outDir: path.resolve(__dirname, '../server/dist/client'),
     emptyOutDir: true,
     sourcemap: process.env.NODE_ENV !== 'production'
   },
@@ -27,7 +27,19 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.log('proxy error', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req) => {
+            console.log('Sending Request:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes) => {
+            console.log('Received Response:', proxyRes.statusCode);
+          });
+        }
       }
     }
   }

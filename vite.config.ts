@@ -1,21 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import * as dotenv from 'dotenv';
+
+const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
+const envPath = path.resolve(__dirname, envFile);
+dotenv.config({ path: envPath });
 
 export default defineConfig({
-  plugins: [
-    react(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
-  ],
+  plugins: [react()],
   server: {
     proxy: {
       "/api": {
@@ -31,22 +24,21 @@ export default defineConfig({
             console.log('Sending Request to the Target:', req.method, req.url);
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+            console.log('Received Response from the Target:', proxyRes.statusCode);
           });
         }
-      },
-    },
+      }
+    }
   },
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-    },
+      '@': path.resolve(__dirname, './src'),
+      '@shared': path.resolve(__dirname, '../shared')
+    }
   },
-  root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(__dirname, '../server/dist/client'),
     emptyOutDir: true,
-  },
+    sourcemap: process.env.NODE_ENV !== 'production'
+  }
 });

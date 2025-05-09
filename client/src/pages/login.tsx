@@ -44,20 +44,47 @@ export default function Login() {
       });
 
       if (!response.ok) {
-        throw new Error("Invalid username or password");
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || "Invalid username or password");
       }
 
-      const result = await response.json();
+      // Parse the response first
+      const loginResponse = await response.json();
+      console.log("Login response:", loginResponse);
+
+      // First invalidate and remove the old auth status
+      await queryClient.invalidateQueries({ queryKey: ["authStatus"] });
+      await queryClient.removeQueries({ queryKey: ["authStatus"] });
       
-      // Invalidate auth status query to trigger refetch
-      queryClient.invalidateQueries({ queryKey: ["authStatus"] });
-      
-      toast({
-        title: "Success",
-        description: "Successfully logged in",
-        variant: "default",
+      // Wait for the new auth status to be fetched
+      const authData = await queryClient.fetchQuery({ 
+        queryKey: ["authStatus"],
+        queryFn: async () => {
+          const res = await fetch("/api/auth/status", {
+            credentials: "include"
+          });
+          if (!res.ok) throw new Error("Failed to fetch auth status");
+          return res.json();
+        }
       });
-      setLocation("/homepage");
+
+      if (authData.authenticated) {
+        toast({
+          title: "Success",
+          description: "Successfully logged in",
+          variant: "default",
+        });
+        
+        // Force a refetch of auth status before navigation
+        await queryClient.refetchQueries({ queryKey: ["authStatus"] });
+        
+        // Small delay to ensure state is synchronized
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        setLocation("/");
+      } else {
+        throw new Error("Authentication failed");
+      }
     } catch (error) {
       toast({
         title: "Error",

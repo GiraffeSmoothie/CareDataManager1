@@ -12,8 +12,8 @@ export class AuthService {
       return null;
     }
 
-    const hashedPassword = this.hashPassword(password);
-    if (user.password !== hashedPassword) {
+    const isValid = await storage.verifyPassword(username, password);
+    if (!isValid) {
       return null;
     }
 

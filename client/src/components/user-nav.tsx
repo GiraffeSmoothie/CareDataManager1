@@ -82,9 +82,9 @@ export default function UserNav() {
               <User className="mr-2 h-4 w-4" />
               <span>Manage Users</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/company-segment")}>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/company")}>
               <Building2 className="mr-2 h-4 w-4" />
-              <span>Company Segments</span>
+              <span>Companies</span>
             </DropdownMenuItem>
           </>
         )}

@@ -3,6 +3,7 @@ import AppLayout from "@/layouts/app-layout"
 import { useQuery } from "@tanstack/react-query"
 import axios from "axios"
 import { useLocation } from "wouter"
+import { CLIENT_STATUSES, STATUS_STYLES, type ClientStatus } from "@/lib/constants"
 
 interface Member {
   id: number
@@ -21,7 +22,7 @@ export default function Homepage() {
     queryFn: async () => {
       const response = await axios.get("/api/person-info");
       // Filter for active members only
-      return (response.data as Member[]).filter(m => m.status === "Active" || m.status === "Paused" || m.status === "New");
+      return (response.data as Member[]).filter(m => m.status === CLIENT_STATUSES.ACTIVE || m.status === CLIENT_STATUSES.PAUSED || m.status === CLIENT_STATUSES.NEW);
     },
   });
 
@@ -32,24 +33,15 @@ export default function Homepage() {
 
   // Get badge colors based on status
   const getStatusBadgeColors = (status: string): string => {
-    switch (status) {
-      case "Active":
-        return "bg-green-100 text-green-800"; // Keep active as green
-      case "New":
-        return "bg-blue-100 text-blue-800";   // Blue for new
-      case "Paused":
-        return "bg-amber-100 text-amber-800"; // Amber/yellow for paused
-      default:
-        return "bg-gray-100 text-gray-800";   // Default fallback
-    }
+    return STATUS_STYLES[status as ClientStatus] || STATUS_STYLES[CLIENT_STATUSES.CLOSED];
   };
 
   // Sort members by status order: Active, New, Paused
   const sortedMembers = members?.sort((a, b) => {
     const statusOrder: {[key: string]: number} = {
-      "Active": 0,
-      "New": 1,
-      "Paused": 2,
+      [CLIENT_STATUSES.ACTIVE]: 0,
+      [CLIENT_STATUSES.NEW]: 1,
+      [CLIENT_STATUSES.PAUSED]: 2,
     };
     return statusOrder[a.status] - statusOrder[b.status];
   });

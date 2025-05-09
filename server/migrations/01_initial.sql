@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS master_data (
 -- Create documents table
 CREATE TABLE IF NOT EXISTS documents (
   id SERIAL PRIMARY KEY,
-  member_id INTEGER REFERENCES person_info(id) NOT NULL,
+  client_id INTEGER REFERENCES person_info(id) NOT NULL,
   document_name TEXT NOT NULL,
   document_type TEXT NOT NULL,
   filename TEXT NOT NULL,

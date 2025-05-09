@@ -6,10 +6,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Loading } from "@/components/ui/loading";
+import { Error } from "@/components/ui/error";
 
 export default function Profile() {
   // Fetch user data from the auth status endpoint
-  const { data: authData, isLoading } = useQuery({
+  const { data: authData, isLoading, error } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
       const res = await fetch("/api/auth/status");
@@ -21,9 +23,20 @@ export default function Profile() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="flex justify-center items-center min-h-[60vh]">
-          Loading...
-        </div>
+        <Loading text="Loading profile..." />
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <Error
+          variant="card"
+          fullPage
+          title="Failed to Load Profile"
+          message={error instanceof Error ? error.message : "Could not load your profile information"}
+        />
       </AppLayout>
     );
   }

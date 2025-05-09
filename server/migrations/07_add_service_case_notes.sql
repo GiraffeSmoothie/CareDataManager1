@@ -7,7 +7,7 @@ BEGIN
   ) THEN
     CREATE TABLE service_case_notes (
         id SERIAL PRIMARY KEY,
-        service_id INTEGER NOT NULL REFERENCES member_services(id) ON DELETE CASCADE,
+        service_id INTEGER NOT NULL REFERENCES client_services(id) ON DELETE CASCADE,
         note_text TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         created_by INTEGER NOT NULL REFERENCES users(id),

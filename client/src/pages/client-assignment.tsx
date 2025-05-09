@@ -3,20 +3,23 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { ColumnDef } from "@tanstack/react-table";
 import { useToast } from "@/hooks/use-toast";
-import DashboardLayout from "@/layouts/app-layout";
+import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SERVICE_STATUSES } from "@/lib/constants";
+import { Error } from "@/components/ui/error";
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -270,9 +273,104 @@ export default function ClientAssignment() {
     `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Define columns for services table
+  const columns: ColumnDef<ClientService>[] = [
+    {
+      accessorKey: "serviceCategory",
+      header: "Category",
+    },
+    {
+      accessorKey: "serviceType",
+      header: "Type",
+    },
+    {
+      accessorKey: "serviceProvider",
+      header: "Provider",
+    },
+    {
+      accessorKey: "serviceStartDate",
+      header: "Start Date",
+      cell: ({ row }) => new Date(row.getValue("serviceStartDate")).toLocaleDateString(),
+    },
+    {
+      accessorKey: "serviceDays",
+      header: "Days",
+      cell: ({ row }) => (row.getValue("serviceDays") as string[]).join(", "),
+    },
+    {
+      accessorKey: "serviceHours",
+      header: "Hours",
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Select
+          value={row.getValue("status")}
+          onValueChange={async (value) => {
+            try {
+              await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
+                status: value
+              });
+              await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+              toast({
+                title: "Success",
+                description: "Service status updated",
+              });
+            } catch (error) {
+              toast({
+                title: "Error",
+                description: "Failed to update status",
+                variant: "destructive",
+              });
+            }
+          }}
+        >
+          <SelectTrigger className="w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(SERVICE_STATUSES).map(status => (
+              <SelectItem key={status} value={status}>{status}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      id: "caseNotes",
+      header: "Case Notes",
+      cell: ({ row }) => (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            setSelectedService(row.original);
+            setShowCaseNotesDialog(true);
+          }}
+        >
+          View/Edit Notes
+        </Button>
+      ),
+    },
+  ];
+
+  if (servicesError) {
+    return (
+      <AppLayout>
+        <Error
+          variant="card"
+          fullPage
+          title="Error Loading Data"
+          message={servicesError?.message || "Failed to load client assignment data"}
+        />
+      </AppLayout>
+    );
+  }
+
   return (
-    <DashboardLayout>
-      <div className="container mx-auto p-4">
+    <AppLayout>
+      <div className="container mx-auto py-6">
         {/* Search Section */}
         <Card className="mb-6">
           <CardHeader>
@@ -323,85 +421,12 @@ export default function ClientAssignment() {
             </CardHeader>
             <CardContent>
               {isServicesLoading && <div>Loading assigned services...</div>}
-              {servicesError && <div className="text-red-500">Error loading services: {servicesError.message}</div>}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Case Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clientServices.length > 0 ? (
-                    clientServices.map((service: ClientService) => (
-                      <TableRow key={service.id}>
-                        <TableCell>{service.serviceCategory}</TableCell>
-                        <TableCell>{service.serviceType}</TableCell>
-                        <TableCell>{service.serviceProvider}</TableCell>
-                        <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
-                        <TableCell>{service.serviceDays.join(", ")}</TableCell>
-                        <TableCell>{service.serviceHours}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={service.status}
-                            onValueChange={async (value) => {
-                              try {
-                                await apiRequest("PATCH", `/api/client-services/${service.id}`, {
-                                  status: value
-                                });
-                                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
-                                toast({
-                                  title: "Success",
-                                  description: "Service status updated",
-                                });
-                              } catch (error) {
-                                toast({
-                                  title: "Error",
-                                  description: "Failed to update status",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-[130px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Planned">Planned</SelectItem>
-                              <SelectItem value="In Progress">In Progress</SelectItem>
-                              <SelectItem value="Closed">Closed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => {
-                              setSelectedService(service);
-                              setShowCaseNotesDialog(true);
-                            }}
-                          >
-                            View/Edit Notes
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-4">
-                        No services assigned yet
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <DataTable
+                columns={columns}
+                data={clientServices}
+                searchKey="serviceCategory"
+                searchPlaceholder="Search services..."
+              />
             </CardContent>
           </Card>
         )}
@@ -446,6 +471,38 @@ export default function ClientAssignment() {
                   console.log("[Form] Form submission failed with errors:", errors);
                 })(e);
               }} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="clientId"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Client</FormLabel>
+                      <FormControl>
+                        <Select
+                          onValueChange={(value) => field.onChange(Number(value))}
+                          value={field.value ? String(field.value) : undefined}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a client" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {clients.map((client) => (
+                              <SelectItem
+                                key={client.id}
+                                value={String(client.id)}
+                              >
+                                {client.firstName} {client.lastName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      {fieldState.error && (
+                        <Error variant="inline" message={fieldState.error.message} />
+                      )}
+                    </FormItem>
+                  )}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
@@ -624,6 +681,6 @@ export default function ClientAssignment() {
           }}
         />
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }
