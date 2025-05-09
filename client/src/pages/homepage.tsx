@@ -27,7 +27,7 @@ export default function Homepage() {
 
   const handleMemberClick = (member: Member) => {
     const memberName = `${member.firstName} ${member.lastName}`;
-    setLocation(`/member-assignment?memberId=${member.id}&name=${encodeURIComponent(memberName)}`);
+    setLocation(`/client-assignment?clientId=${member.id}&name=${encodeURIComponent(memberName)}`);
   };
 
   // Get badge colors based on status
@@ -61,7 +61,7 @@ export default function Homepage() {
   return (
     <AppLayout>
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Active Members Dashboard</h1>
+        <h1 className="text-2xl font-bold mb-6">Active Clients Dashboard</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedMembers?.map((member) => (
             <Card 

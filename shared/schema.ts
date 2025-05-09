@@ -45,7 +45,7 @@ export type PersonInfo = {
 
 export type Document = {
   id: number;
-  memberId: number;
+  clientId: number;
   documentName: string;
   documentType: string;
   filename: string;
@@ -54,9 +54,9 @@ export type Document = {
   createdBy?: number;
 };
 
-export type MemberService = {
+export type ClientService = {
   id: number;
-  memberId: number;
+  clientId: number;
   serviceCategory: string;
   serviceType: string;
   serviceProvider: string;
@@ -126,8 +126,8 @@ export const insertPersonInfoSchema = z.object({
 });
 
 export const insertDocumentSchema = z.object({
-  memberId: z.number({
-    required_error: "Member ID is required",
+  clientId: z.number({
+    required_error: "Client ID is required",
   }),
   documentName: z.string({
     required_error: "Document name is required",
@@ -139,9 +139,9 @@ export const insertDocumentSchema = z.object({
   file: z.any().refine((val) => val instanceof FileList && val.length > 0, "File is required")
 });
 
-export const insertMemberServiceSchema = z.object({
-  memberId: z.number({
-    required_error: "Member ID is required",
+export const insertClientServiceSchema = z.object({
+  clientId: z.number({
+    required_error: "Client ID is required",
   }),
   serviceCategory: z.string({
     required_error: "Service Category is required",
@@ -156,10 +156,10 @@ export const insertMemberServiceSchema = z.object({
     required_error: "Start date is required",
   }),
   serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
-  serviceHours: z.number()
-    .min(1, "Hours must be at least 1")
-    .max(24, "Hours cannot exceed 24"),
-  status: z.enum(["Planned", "In Progress", "Closed"]).default("Planned"),
+  serviceHours: z.number().min(1).max(24),
+  status: z.string().optional(),
+  createdBy: z.number().optional(),
+  createdAt: z.date().optional()
 });
 
 export const insertServiceCaseNoteSchema = z.object({

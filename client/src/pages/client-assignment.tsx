@@ -18,10 +18,8 @@ import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
 
-import { getServiceTypesByCategory } from "@/lib/data";
-
-const memberAssignmentSchema = z.object({
-  memberId: z.string().min(1, "Please select a member"),
+const clientAssignmentSchema = z.object({
+  clientId: z.string().min(1, "Please select a client"),
   careCategory: z.string().min(1, "Service category is required"),
   careType: z.string().min(1, "Service type is required"),
   serviceProvider: z.string().min(1, "Service provider is required"),
@@ -33,7 +31,7 @@ const memberAssignmentSchema = z.object({
   }, "Hours must be between 1 and 24")
 });
 
-type MemberAssignmentFormValues = z.infer<typeof memberAssignmentSchema>;
+type ClientAssignmentFormValues = z.infer<typeof clientAssignmentSchema>;
 
 interface MasterDataType {
   serviceCategory: string;
@@ -42,9 +40,9 @@ interface MasterDataType {
   active: boolean;
 }
 
-interface MemberService {
+interface ClientService {
   id: number;
-  memberId: number;
+  clientId: number;
   serviceCategory: string;
   serviceType: string;
   serviceProvider: string;
@@ -56,16 +54,15 @@ interface MemberService {
   createdBy: number;
 }
 
-export default function MemberAssignment() {
+export default function ClientAssignment() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
+  const [selectedClient, setSelectedClient] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedType, setSelectedType] = useState<string>("");
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [selectedService, setSelectedService] = useState<MemberService | null>(null);
+  const [selectedService, setSelectedService] = useState<ClientService | null>(null);
   const [showCaseNotesDialog, setShowCaseNotesDialog] = useState(false);
 
   const days = [
@@ -105,42 +102,42 @@ export default function MemberAssignment() {
     .map(item => item.serviceProvider)
   ));
 
-  // Fetch all members
-  const { data: members = [] } = useQuery<PersonInfo[]>({
+  // Fetch all clients
+  const { data: clients = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  // Get URL parameters after members are fetched
+  // Get URL parameters after clients are fetched
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const memberId = params.get("memberId");
-    const memberName = params.get("name");
+    const clientId = params.get("clientId");
+    const clientName = params.get("name");
 
-    if (memberId && memberName && members.length > 0) {
-      setSearchTerm(decodeURIComponent(memberName));
-      const member = members.find(m => m.id === parseInt(memberId));
-      if (member) {
-        handleSelectMember(member);
+    if (clientId && clientName && clients.length > 0) {
+      setSearchTerm(decodeURIComponent(clientName));
+      const client = clients.find(c => c.id === parseInt(clientId));
+      if (client) {
+        handleSelectClient(client);
       }
     }
-  }, [members]);
+  }, [clients]);
 
-  // Fetch member services
-  const { data: memberServices = [], isLoading: isServicesLoading, error: servicesError } = useQuery<MemberService[]>({
-    queryKey: ["/api/member-services/member", selectedMember?.id],
+  // Fetch client services
+  const { data: clientServices = [], isLoading: isServicesLoading, error: servicesError } = useQuery<ClientService[]>({
+    queryKey: ["/api/client-services/client", selectedClient?.id],
     queryFn: () => 
-      selectedMember 
-        ? apiRequest("GET", `/api/member-services/member/${selectedMember.id}`).then(res => res.json())
+      selectedClient 
+        ? apiRequest("GET", `/api/client-services/client/${selectedClient.id}`).then(res => res.json())
         : Promise.resolve([]),
-    enabled: !!selectedMember,
+    enabled: !!selectedClient,
   });
 
   // Form setup
-  const form = useForm<MemberAssignmentFormValues>({
-    resolver: zodResolver(memberAssignmentSchema),
+  const form = useForm<ClientAssignmentFormValues>({
+    resolver: zodResolver(clientAssignmentSchema),
     defaultValues: {
-      memberId: "",
+      clientId: "",
       careCategory: "",
       careType: "",
       serviceProvider: "",
@@ -150,23 +147,23 @@ export default function MemberAssignment() {
     },
   });
 
-  // Handle member selection
-  const handleSelectMember = (member: PersonInfo) => {
-    console.log("Selected member:", member); // DEBUG LOG
-    setSelectedMember(member);
-    setSearchTerm(`${member.firstName} ${member.lastName}`);
+  // Handle client selection
+  const handleSelectClient = (client: PersonInfo) => {
+    console.log("Selected client:", client);
+    setSelectedClient(client);
+    setSearchTerm(`${client.firstName} ${client.lastName}`);
     setShowDropdown(false);
-    form.setValue("memberId", member.id.toString());
+    form.setValue("clientId", client.id.toString());
   };
 
   // Effect to handle search filtering
   useEffect(() => {
-    if (searchTerm.length >= 4 && !selectedMember) {
+    if (searchTerm.length >= 4 && !selectedClient) {
       setShowDropdown(true);
     } else {
       setShowDropdown(false);
     }
-  }, [searchTerm, selectedMember]);
+  }, [searchTerm, selectedClient]);
 
   // Watch for changes in the category field
   const watchedCategory = form.watch("careCategory");
@@ -205,9 +202,9 @@ export default function MemberAssignment() {
 
   // Mutation for submitting the form
   const createAssignmentMutation = useMutation({
-    mutationFn: async (data: MemberAssignmentFormValues) => {
-      if (!selectedMember) {
-        throw new Error("No member selected");
+    mutationFn: async (data: ClientAssignmentFormValues) => {
+      if (!selectedClient) {
+        throw new Error("No client selected");
       }
       console.log("[Assign Service] Submitting form data:", data);
       
@@ -225,7 +222,7 @@ export default function MemberAssignment() {
       }
       
       const serviceData = {
-        memberId: parseInt(selectedMember.id.toString()),
+        clientId: parseInt(selectedClient.id.toString()),
         serviceCategory: data.careCategory,
         serviceType: data.careType,
         serviceProvider: data.serviceProvider,
@@ -235,7 +232,7 @@ export default function MemberAssignment() {
         status: "Planned"
       };
       console.log("[Assign Service] Sending serviceData to API:", serviceData);
-      const response = await apiRequest("POST", "/api/member-services", serviceData);
+      const response = await apiRequest("POST", "/api/client-services", serviceData);
       console.log("[Assign Service] API response:", response);
       if (!response.ok) {
         const errorData = await response.json();
@@ -256,7 +253,7 @@ export default function MemberAssignment() {
       });
       form.reset();
       setShowDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/member-services/member", selectedMember?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
     },
     onError: (error: Error) => {
       toast({
@@ -267,10 +264,10 @@ export default function MemberAssignment() {
     },
   });
 
-  // Filter members based on search
-  const filteredMembers = members.filter(member =>
+  // Filter clients based on search
+  const filteredClients = clients.filter(client =>
     searchTerm.length >= 4 &&
-    `${member.firstName} ${member.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+    `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -283,7 +280,7 @@ export default function MemberAssignment() {
               <div>
                 <CardTitle>Client Services</CardTitle>
               </div>
-              <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
+              <Button onClick={() => setShowDialog(true)} disabled={!selectedClient}>
                 <Plus className="h-4 w-4 mr-2" />
                 Assign Service
               </Button>
@@ -302,15 +299,15 @@ export default function MemberAssignment() {
                   className="border-0 focus-ring-0"
                 />
               </div>
-              {showDropdown && filteredMembers.length > 0 && (
+              {showDropdown && filteredClients.length > 0 && (
                 <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10">
-                  {filteredMembers.map((member) => (
+                  {filteredClients.map((client) => (
                     <div
-                      key={member.id}
+                      key={client.id}
                       className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => handleSelectMember(member)}
+                      onClick={() => handleSelectClient(client)}
                     >
-                      {member.title} {member.firstName} {member.lastName}
+                      {client.title} {client.firstName} {client.lastName}
                     </div>
                   ))}
                 </div>
@@ -319,7 +316,7 @@ export default function MemberAssignment() {
           </CardContent>
         </Card>
 
-        {selectedMember && (
+        {selectedClient && (
           <Card>
             <CardHeader>
               <CardTitle>Client Services</CardTitle>
@@ -341,8 +338,8 @@ export default function MemberAssignment() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {memberServices.length > 0 ? (
-                    memberServices.map((service: MemberService) => (
+                  {clientServices.length > 0 ? (
+                    clientServices.map((service: ClientService) => (
                       <TableRow key={service.id}>
                         <TableCell>{service.serviceCategory}</TableCell>
                         <TableCell>{service.serviceType}</TableCell>
@@ -355,10 +352,10 @@ export default function MemberAssignment() {
                             value={service.status}
                             onValueChange={async (value) => {
                               try {
-                                await apiRequest("PATCH", `/api/member-services/${service.id}`, {
+                                await apiRequest("PATCH", `/api/client-services/${service.id}`, {
                                   status: value
                                 });
-                                await queryClient.refetchQueries({ queryKey: ["/api/member-services/member", selectedMember?.id] });
+                                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
                                 toast({
                                   title: "Success",
                                   description: "Service status updated",
@@ -419,9 +416,9 @@ export default function MemberAssignment() {
                 e.preventDefault();
                 console.log("[Form] Starting form submission");
                 
-                // Set the memberId before handling submission
-                if (selectedMember) {
-                  form.setValue("memberId", selectedMember.id.toString());
+                // Set the clientId before handling submission
+                if (selectedClient) {
+                  form.setValue("clientId", selectedClient.id.toString());
                 }
 
                 const formState = form.getValues();
@@ -434,16 +431,16 @@ export default function MemberAssignment() {
                   return;
                 }
                 
-                form.handleSubmit((formData: MemberAssignmentFormValues) => {
+                form.handleSubmit((formData: ClientAssignmentFormValues) => {
                   console.log("[Form] Inside onSubmit handler");
                   console.log("[Form] Form data before mutation:", formData);
-                  if (!selectedMember) {
-                    console.log("[Form] No member selected, returning");
+                  if (!selectedClient) {
+                    console.log("[Form] No client selected, returning");
                     return;
                   }
                   createAssignmentMutation.mutate({
                     ...formData,
-                    memberId: selectedMember.id.toString()
+                    clientId: selectedClient.id.toString()
                   });
                 }, (errors) => {
                   console.log("[Form] Form submission failed with errors:", errors);
@@ -621,9 +618,8 @@ export default function MemberAssignment() {
           onClose={() => setShowCaseNotesDialog(false)}
           service={selectedService}
           onSaved={() => {
-            // Refresh the services data
             queryClient.invalidateQueries({ 
-              queryKey: ["/api/member-services", selectedMember?.id] 
+              queryKey: ["/api/client-services", selectedClient?.id] 
             });
           }}
         />

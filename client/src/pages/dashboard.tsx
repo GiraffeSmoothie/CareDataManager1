@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PersonInfo, MemberService } from "@shared/schema";
+import { PersonInfo, ClientService } from "@shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
 import { Loader2, Users, Activity, Search } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
@@ -24,7 +24,7 @@ import { SimpleBarChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 
 export default function Dashboard() {
-  const [combinedData, setCombinedData] = useState<Array<PersonInfo & { memberService?: MemberService }>>([]);
+  const [combinedData, setCombinedData] = useState<Array<PersonInfo & { clientService?: ClientService }>>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch person info data
@@ -37,40 +37,40 @@ export default function Dashboard() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  // Fetch member services data
+  // Fetch client services data
   const {
-    data: memberServices = [],
+    data: clientServices = [],
     isLoading: isLoadingServices,
     error: servicesError,
-  } = useQuery<MemberService[]>({
-    queryKey: ["/api/member-services"],
+  } = useQuery<ClientService[]>({
+    queryKey: ["/api/client-services"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
   // Combine data when both queries complete
   useEffect(() => {
-    if (personData && memberServices) {
+    if (personData && clientServices) {
       const combinedData = personData.map(person => {
-        const memberService = memberServices.find(ms => ms.memberId === person.id);
+        const clientService = clientServices.find(cs => cs.clientId === person.id);
         return {
           ...person,
-          memberService
+          clientService
         };
       });
       setCombinedData(combinedData);
     }
-  }, [personData, memberServices]);
+  }, [personData, clientServices]);
 
   // Filter members and calculate statistics
   const filteredMembers = combinedData
-    .filter(member => member.memberService?.status !== 'Closed')
+    .filter(member => member.clientService?.status !== 'Closed')
     .filter(member => 
       (member.firstName + " " + member.lastName).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.memberService?.status?.toLowerCase().includes(searchTerm.toLowerCase())
+      member.clientService?.status?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
   const activeMembers = filteredMembers.filter(member => 
-    member.memberService?.status === 'In Progress'
+    member.clientService?.status === 'In Progress'
   );
 
   const statistics = {
@@ -82,7 +82,7 @@ export default function Dashboard() {
       return acc;
     }, {} as Record<string, number>),
     serviceStatusStats: combinedData.reduce((acc, member) => {
-      const status = member.memberService?.status || 'Not Assigned';
+      const status = member.clientService?.status || 'Not Assigned';
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>)
@@ -185,11 +185,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Active Members Table */}
+        {/* Active Clients Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Active Members</CardTitle>
-            <CardDescription>Members with active services and their HCP details</CardDescription>
+            <CardTitle>Active Clients</CardTitle>
+            <CardDescription>Clients with active services and their HCP details</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -197,7 +197,7 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>HCP Level</TableHead>
-                  <TableHead>HCP End Date</TableHead>
+                  <TableHead>HCP Start Date - End Date</TableHead>
                   <TableHead>Service Days</TableHead>
                   <TableHead>Service Hours</TableHead>
                   <TableHead>Status</TableHead>
@@ -210,7 +210,7 @@ export default function Dashboard() {
                       key={member.id} 
                       className="cursor-pointer hover:bg-gray-100"
                       onClick={() => {
-                        window.location.href = `/member-assignment?memberId=${member.id}&name=${encodeURIComponent(`${member.firstName} ${member.lastName}`)}`;
+                        window.location.href = `/client-assignment?clientId=${member.id}&name=${encodeURIComponent(`${member.firstName} ${member.lastName}`)}`;
                       }}
                     >
                       <TableCell className="font-medium">
@@ -220,20 +220,22 @@ export default function Dashboard() {
                         {member.hcpLevel ? `Level ${member.hcpLevel}` : 'Unassigned'}
                       </TableCell>
                       <TableCell>
-                        {member.hcpEndDate ? new Date(member.hcpEndDate).toLocaleDateString() : 'Not set'}
+                        {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : 'Not set'}
+                        {member.hcpStartDate && ' - '}
+                        {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : ''}
                       </TableCell>
                       <TableCell>
-                        {member.memberService?.serviceDays?.join(', ') || 'Not set'}
+                        {member.clientService?.serviceDays?.join(', ') || 'Not set'}
                       </TableCell>
                       <TableCell>
-                        {member.memberService?.serviceHours || 'Not set'} hours
+                        {member.clientService?.serviceHours || 'Not set'} hours
                       </TableCell>
                       <TableCell>
                         <Badge 
-                          variant={member.memberService?.status === 'In Progress' ? 'default' : 'secondary'}
-                          className={member.memberService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
+                          variant={member.clientService?.status === 'In Progress' ? 'default' : 'secondary'}
+                          className={member.clientService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
                         >
-                          {member.memberService?.status || 'Not Assigned'}
+                          {member.clientService?.status || 'Not Assigned'}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -241,7 +243,7 @@ export default function Dashboard() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No members found matching your search.
+                      No clients found matching your search.
                     </TableCell>
                   </TableRow>
                 )}

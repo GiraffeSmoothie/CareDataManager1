@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
-import { User, PersonInfo, MasterData, Document, MemberService, ServiceCaseNote } from '@shared/schema';
+import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -558,14 +558,14 @@ export const storage = {
     try {
       console.log("Creating document with data:", data);
       const result = await pool.query(
-        'INSERT INTO documents (member_id, document_name, document_type, filename, file_path, created_by, uploaded_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [data.memberId, data.documentName, data.documentType, data.filename, data.filePath, data.createdBy, data.uploadedAt]
+        'INSERT INTO documents (client_id, document_name, document_type, filename, file_path, created_by, uploaded_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [data.clientId, data.documentName, data.documentType, data.filename, data.filePath, data.createdBy, data.uploadedAt]
       );
       
       console.log("Document created successfully:", result.rows[0]);
       return {
         id: result.rows[0].id,
-        memberId: result.rows[0].member_id,
+        clientId: result.rows[0].client_id,
         documentName: result.rows[0].document_name,
         documentType: result.rows[0].document_type,
         filename: result.rows[0].filename,
@@ -579,11 +579,11 @@ export const storage = {
     }
   },
 
-  async getDocumentsByMemberId(memberId: number): Promise<Document[]> {
-    const result = await pool.query('SELECT * FROM documents WHERE member_id = $1', [memberId]);
+  async getDocumentsByClientId(clientId: number): Promise<Document[]> {
+    const result = await pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
     return result.rows.map(row => ({
       id: row.id,
-      memberId: row.member_id,
+      clientId: row.client_id,
       documentName: row.document_name,
       documentType: row.document_type,
       filename: row.filename,
@@ -601,7 +601,7 @@ export const storage = {
     const row = result.rows[0];
     return {
       id: row.id,
-      memberId: row.member_id,
+      clientId: row.client_id,
       documentName: row.document_name,
       documentType: row.document_type,
       filename: row.filename,
@@ -619,7 +619,7 @@ export const storage = {
     const row = result.rows[0];
     return {
       id: row.id,
-      memberId: row.member_id,
+      clientId: row.client_id,
       documentName: row.document_name,
       documentType: row.document_type,
       filename: row.filename,
@@ -629,24 +629,24 @@ export const storage = {
     };
   },
 
-  async createMemberService(data: Omit<MemberService, 'id'>): Promise<MemberService> {
+  async createClientService(data: Omit<ClientService, 'id'>): Promise<ClientService> {
     try {
-      console.log("Creating member service with data:", data);
+      console.log("Creating client service with data:", data);
       
       // Ensure serviceDays is properly formatted as a PostgreSQL array
       const serviceDaysArray = Array.isArray(data.serviceDays) ? data.serviceDays : [data.serviceDays];
       
       const result = await pool.query(
-        `INSERT INTO member_services (
-          member_id, service_category, service_type, service_provider,
+        `INSERT INTO client_services (
+          client_id, service_category, service_type, service_provider,
           service_start_date, service_days, service_hours, status, created_by
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
         [
-          data.memberId,
+          data.clientId,
           data.serviceCategory,
           data.serviceType,
           data.serviceProvider,
-          new Date(data.serviceStartDate), // Properly parse the date
+          new Date(data.serviceStartDate),
           serviceDaysArray,
           data.serviceHours,
           data.status || 'Planned',
@@ -654,11 +654,11 @@ export const storage = {
         ]
       );
 
-      console.log("Member service created:", result.rows[0]);
+      console.log("Client service created:", result.rows[0]);
       
       return {
         id: result.rows[0].id,
-        memberId: result.rows[0].member_id,
+        clientId: result.rows[0].client_id,
         serviceCategory: result.rows[0].service_category,
         serviceType: result.rows[0].service_type,
         serviceProvider: result.rows[0].service_provider,
@@ -670,16 +670,16 @@ export const storage = {
         createdBy: result.rows[0].created_by
       };
     } catch (error) {
-      console.error("Error in createMemberService:", error);
+      console.error("Error in createClientService:", error);
       throw error;
     }
   },
 
-  async getMemberServicesByMemberId(memberId: number): Promise<MemberService[]> {
-    const result = await pool.query('SELECT * FROM member_services WHERE member_id = $1', [memberId]);
+  async getClientServicesByClientId(clientId: number): Promise<ClientService[]> {
+    const result = await pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
     return result.rows.map(row => ({
       id: row.id,
-      memberId: row.member_id,
+      clientId: row.client_id,
       serviceCategory: row.service_category,
       serviceType: row.service_type,
       serviceProvider: row.service_provider,
@@ -692,9 +692,9 @@ export const storage = {
     }));
   },
 
-  async updateMemberServiceStatus(id: number, status: string): Promise<void> {
+  async updateClientServiceStatus(id: number, status: string): Promise<void> {
     await pool.query(
-      'UPDATE member_services SET status = $1 WHERE id = $2',
+      'UPDATE client_services SET status = $1 WHERE id = $2',
       [status, id]
     );
   },

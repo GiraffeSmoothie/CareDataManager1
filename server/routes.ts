@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertMemberServiceSchema, insertServiceCaseNoteSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -474,8 +474,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Update member assignment status
-  app.patch("/api/member-assignment/:id", async (req: Request, res: Response) => {
+  // Update client assignment status
+  app.patch("/api/client-assignment/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { status } = req.body;
@@ -484,7 +484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status value" });
       }
       
-      await dbStorage.updateMasterDataStatus(id, status);
+      await dbStorage.updateClientServiceStatus(id, status);
       return res.status(200).json({ message: "Status updated successfully" });
     } catch (error) {
       console.error("Error updating assignment status:", error);
@@ -492,34 +492,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Member Assignment route with file upload  
-  app.post("/api/member-assignment", upload.single("document"), async (req: Request, res: Response) => {
+  // Client Assignment route with file upload  
+  app.post("/api/client-assignment", upload.single("document"), async (req: Request, res: Response) => {
     try {
-      const { memberId, careCategory, careType, notes } = req.body;
+      const { clientId, careCategory, careType, notes } = req.body;
       
       // Validation
-      if (!memberId || !careCategory || !careType) {
-        return res.status(400).json({ message: "Member ID, care category, and care type are required" });
+      if (!clientId || !careCategory || !careType) {
+        return res.status(400).json({ message: "Client ID, care category, and care type are required" });
       }
       
-      // Check if member exists
-      const memberIdNum = parseInt(memberId);
-      if (isNaN(memberIdNum)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
+      // Check if client exists
+      const clientIdNum = parseInt(clientId);
+      if (isNaN(clientIdNum)) {
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
       
-      const member = await dbStorage.getPersonInfoById(memberIdNum);
-      if (!member) {
-        return res.status(404).json({ message: "Member not found" });
+      const client = await dbStorage.getPersonInfoById(clientIdNum);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
       }
       
-      // Create master data entry for this member
+      // Create master data entry for this client
       const masterDataEntry = {
         serviceCategory: careCategory,
         serviceType: careType,
         serviceProvider: "",
         active: true,
-        memberId: memberIdNum,
+        clientId: clientIdNum,
         createdBy: req.user!.id,
         notes: notes || ""
       };
@@ -538,8 +538,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         documentUploaded: !!req.file,
       });
     } catch (error) {
-      console.error("Error creating member assignment:", error);
-      return res.status(500).json({ message: "Failed to create member assignment" });
+      console.error("Error creating client assignment:", error);
+      return res.status(500).json({ message: "Failed to create client assignment" });
     }
   });
   
@@ -555,30 +555,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const { memberId, documentName, documentType } = req.body;
+      const { clientId, documentName, documentType } = req.body;
       
-      if (!memberId || !documentName || !documentType) {
+      if (!clientId || !documentName || !documentType) {
         return res.status(400).json({ 
-          message: "Missing required fields: memberId, documentName, and documentType are required" 
+          message: "Missing required fields: clientId, documentName, and documentType are required" 
         });
       }
       
-      // Check if member exists
-      const memberIdNum = parseInt(memberId);
-      if (isNaN(memberIdNum)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
+      // Check if client exists
+      const clientIdNum = parseInt(clientId);
+      if (isNaN(clientIdNum)) {
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
       
-      const member = await dbStorage.getPersonInfoById(memberIdNum);
-      if (!member) {
-        return res.status(404).json({ message: "Member not found" });
+      const client = await dbStorage.getPersonInfoById(clientIdNum);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
       }
 
       // Use original filename but sanitize it by removing any path components
       const originalFilename = req.file.originalname;
       const sanitizedFilename = originalFilename.replace(/^.*[\\\/]/, '');
-      const memberDirName = `${memberIdNum}_${member.firstName}_${member.lastName}`;
-      const blobPath = `${memberDirName}/${sanitizedFilename}`;
+      const clientDirName = `${clientIdNum}_${client.firstName}_${client.lastName}`;
+      const blobPath = `${clientDirName}/${sanitizedFilename}`;
 
       // Upload to blob storage
       const fileBuffer = req.file.buffer;
@@ -586,7 +586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create document record in database
       const documentRecord = await dbStorage.createDocument({
-        memberId: memberIdNum,
+        clientId: clientIdNum,
         documentName,
         documentType,
         filename: sanitizedFilename,
@@ -600,25 +600,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error uploading document:", error);
       return res.status(500).json({ 
         message: "Failed to upload document",
-        details: error instanceof Error ? error.message : "Unknown error"
-      });
-    }
-  }));
-
-  // Add documents fetch endpoint for member
-  app.get("/api/documents/member/:memberId", createHandler(async (req, res) => {
-    const memberId = parseInt(req.params.memberId);
-    if (isNaN(memberId)) {
-      return res.status(400).json({ message: "Invalid member ID format" });
-    }
-
-    try {
-      const documents = await dbStorage.getDocumentsByMemberId(memberId);
-      return res.status(200).json(documents);
-    } catch (error) {
-      console.error("Error fetching member documents:", error);
-      return res.status(500).json({ 
-        message: "Failed to fetch documents",
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }
@@ -665,42 +646,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
-  // Member services routes
-  app.get("/api/member-services", async (req: Request, res: Response) => {
+  // Add client services routes
+  app.get("/api/client-services", async (req: Request, res: Response) => {
     try {
-      const memberServices = await dbStorage.getAllMemberServices(); // Fetch all member services
-      return res.status(200).json(memberServices);
+      const clientServices = await dbStorage.getClientServices();
+      return res.status(200).json(clientServices);
     } catch (error) {
-      console.error("Error fetching member services:", error);
-      return res.status(500).json({ message: "Failed to fetch member services" });
+      console.error("Error fetching client services:", error);
+      return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
 
-  app.post("/api/member-services", async (req: Request, res: Response) => {
+  app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      console.log("[API] Received member service data:", req.body);
+      console.log("[API] Received client service data:", req.body);
       
-      const validatedData = insertMemberServiceSchema.parse({
+      const validatedData = insertClientServiceSchema.parse({
         ...req.body,
         createdBy: req.session.user.id
       });
       
-      console.log("[API] Validated member service data:", validatedData);
+      console.log("[API] Validated client service data:", validatedData);
       
-      const memberServiceWithUser = {
+      const clientServiceWithUser = {
         ...validatedData,
         createdBy: req.session.user.id,
         status: validatedData.status || 'Planned',
-        createdAt: new Date() // Add createdAt property
+        createdAt: new Date()
       };
       
-      console.log("[API] Creating member service with:", memberServiceWithUser);
-      const createdService = await dbStorage.createMemberService(memberServiceWithUser);
-      console.log("[API] Member service created:", createdService);
+      console.log("[API] Creating client service with:", clientServiceWithUser);
+      const createdService = await dbStorage.createClientService(clientServiceWithUser);
+      console.log("[API] Client service created:", createdService);
       return res.status(201).json(createdService);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -708,47 +689,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("[API] Validation error:", validationError);
         return res.status(400).json({ message: validationError.message, details: validationError.details });
       }
-      console.error("[API] Error creating member service:", error);
-      return res.status(500).json({ message: "Failed to create member service" });
+      console.error("[API] Error creating client service:", error);
+      return res.status(500).json({ message: "Failed to create client service" });
     }
   });
 
-  app.get("/api/member-services/member/:memberId", async (req: Request, res: Response) => {
-    console.log("[API] Getting existing services for member:", req.body);
+  app.get("/api/client-services/client/:clientId", async (req: Request, res: Response) => {
+    console.log("[API] Getting existing services for client:", req.params.clientId);
     try {
-      const memberId = parseInt(req.params.memberId);
-      if (isNaN(memberId)) {
-        return res.status(400).json({ message: "Invalid member ID format" });
+      const clientId = parseInt(req.params.clientId);
+      if (isNaN(clientId)) {
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
 
-      const services = await dbStorage.getMemberServicesByMemberId(memberId);
+      const services = await dbStorage.getClientServicesByClientId(clientId);
       return res.status(200).json(services);
     } catch (error) {
-      console.error("Error fetching member services:", error);
-      return res.status(500).json({ message: "Failed to fetch member services" });
+      console.error("Error fetching client services:", error);
+      return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
 
-  app.get("/api/member-services/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid ID format" });
-      }
-      
-      const memberService = await dbStorage.getMemberServiceById(id) || null;
-      if (!memberService) {
-        return res.status(404).json({ message: "Member service not found" });
-      }
-      
-      return res.status(200).json(memberService);
-    } catch (error) {
-      console.error("Error fetching member service:", error);
-      return res.status(500).json({ message: "Failed to fetch member service" });
-    }
-  });
-
-  app.patch("/api/member-services/:id", async (req: Request, res: Response) => {
+  app.patch("/api/client-services/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -760,7 +722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status value" });
       }
 
-      await dbStorage.updateMemberServiceStatus(id, status);
+      await dbStorage.updateClientServiceStatus(id, status);
       return res.status(200).json({ message: "Service status updated successfully" });
     } catch (error) {
       console.error("Error updating service status:", error);
@@ -967,22 +929,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Member service interfaces
-interface MemberService {
+// Update client service interfaces
+interface ClientService {
   id: number;
-  memberId: number;
+  clientId: number;
   serviceType: string;
   startDate: Date;
   endDate: Date | null;
   status: string;
 }
 
-// Extend storage interface with member service methods
+// Extend storage interface with client service methods
 declare module './storage' {
   interface Storage {
-    getAllMemberServices(): Promise<MemberService[]>;
-    getMemberServiceById(id: number): Promise<MemberService | null>;
-    // ... other member service related methods
+    getAllClientServices(): Promise<ClientService[]>;
+    getClientServiceById(id: number): Promise<ClientService | null>;
+    // ... other client service related methods
   }
 }
 

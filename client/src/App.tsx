@@ -6,7 +6,7 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import MasterData from "@/pages/master-data";
 import PersonInfo from "@/pages/person-info";
-import MemberAssignment from "@/pages/member-assignment";
+import ClientAssignment from "@/pages/client-assignment";
 import DocumentUpload from "@/pages/document-upload";
 import ManageClient from "@/pages/manage-client";
 import Homepage from "@/pages/homepage";
@@ -120,8 +120,8 @@ function Router() {
       <Route path="/manage-client">
         <PrivateRoute component={ManageClient} />
       </Route>
-      <Route path="/member-assignment">
-        <PrivateRoute component={MemberAssignment} />
+      <Route path="/client-assignment">
+        <PrivateRoute component={ClientAssignment} />
       </Route>
       <Route path="/document-upload">
         <PrivateRoute component={DocumentUpload} />

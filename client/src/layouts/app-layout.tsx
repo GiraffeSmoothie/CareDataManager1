@@ -51,10 +51,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <span>Client Details</span>
               </div>
             </Link>
-            <Link href="/member-assignment">
+            <Link href="/client-assignment">
               <div className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/member-assignment" 
+                location === "/client-assignment" 
                   ? "border-primary text-primary" 
                   : "border-transparent text-gray-600"
               )}>

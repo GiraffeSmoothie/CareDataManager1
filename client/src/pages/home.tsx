@@ -203,10 +203,10 @@ export default function Home() {
                 <span>Upload Document</span>
               </Button>
             </Link>
-            <Link href="/member-assignment">
+            <Link href="/client-assignment">
               <Button className="w-full h-24 flex flex-col items-center justify-center space-y-2" variant="outline">
                 <Users className="h-6 w-6" />
-                <span>Assign Members</span>
+                <span>Assign Services</span>
               </Button>
             </Link>
             <Link href="/master-data">
