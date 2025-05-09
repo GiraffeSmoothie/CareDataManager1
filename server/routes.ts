@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySegmentSchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -922,6 +922,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error stack:", err.stack);
       }
       return res.status(500).json({ message: "Failed to add user" });
+    }
+  });
+
+  // Company Segment routes
+  app.post("/api/company-segments", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No active session found" });
+      }
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Only admin users can manage company segments" });
+      }
+
+      console.log("Received company segment data:", req.body);
+      const validatedData = insertCompanySegmentSchema.parse(req.body);
+      
+      const segmentWithUser = {
+        ...validatedData,
+        created_by: req.user.id
+      };
+      
+      const createdData = await dbStorage.createCompanySegment(segmentWithUser);
+      return res.status(201).json(createdData);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      
+      if (error instanceof Error && error.message.includes('already exists')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      console.error("Error creating company segment:", error);
+      return res.status(500).json({ message: "Failed to create company segment" });
+    }
+  });
+
+  app.get("/api/company-segments", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No active session found" });
+      }
+
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Only admin users can view company segments" });
+      }
+
+      const segments = await dbStorage.getAllCompanySegments();
+      return res.status(200).json(segments);
+    } catch (error) {
+      console.error("Error fetching company segments:", error);
+      return res.status(500).json({ message: "Failed to fetch company segments" });
+    }
+  });
+
+  app.put("/api/company-segments/:companyId/:segmentId", async (req: Request, res: Response) => {
+    try {
+      if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Only admin users can update company segments" });
+      }
+
+      const companyId = parseInt(req.params.companyId);
+      const segmentId = parseInt(req.params.segmentId);
+      
+      if (isNaN(companyId) || isNaN(segmentId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      const validatedData = insertCompanySegmentSchema.parse(req.body);
+      const updatedSegment = await dbStorage.updateCompanySegment(companyId, segmentId, validatedData);
+      
+      return res.status(200).json(updatedSegment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      
+      if (error instanceof Error && error.message.includes('already exists')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      console.error("Error updating company segment:", error);
+      return res.status(500).json({ message: "Failed to update company segment" });
+    }
+  });
+
+  app.delete("/api/company-segments/:companyId/:segmentId", async (req: Request, res: Response) => {
+    try {
+      if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Only admin users can delete company segments" });
+      }
+
+      const companyId = parseInt(req.params.companyId);
+      const segmentId = parseInt(req.params.segmentId);
+      
+      if (isNaN(companyId) || isNaN(segmentId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      await dbStorage.deleteCompanySegment(companyId, segmentId);
+      return res.status(200).json({ message: "Company segment deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting company segment:", error);
+      return res.status(500).json({ message: "Failed to delete company segment" });
     }
   });
 

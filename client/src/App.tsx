@@ -13,6 +13,7 @@ import Homepage from "@/pages/homepage";
 import Settings from "@/pages/settings";
 import ManageUsers from "@/pages/manage-users";
 import Profile from "@/pages/profile";
+import CompanySegmentManagement from "@/pages/company-segment-management";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
@@ -101,6 +102,43 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   return <Component />;
 }
 
+function ProtectedRoute({ allowedRoles, children }: { allowedRoles: string[], children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [_, setLocation] = useLocation();
+
+  const { data: authData } = useQuery<AuthData>({
+    queryKey: ["authStatus"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false
+  });
+
+  useEffect(() => {
+    if (!loading) {
+      if (!authData?.user) {
+        setLocation("/login");
+      } else if (!allowedRoles.includes(authData.user.role)) {
+        setLocation("/");
+      }
+    }
+  }, [authData, loading, allowedRoles, setLocation]);
+
+  useEffect(() => {
+    if (authData !== undefined) {
+      setLoading(false);
+    }
+  }, [authData]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  if (!authData?.user || !allowedRoles.includes(authData.user.role)) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
@@ -134,6 +172,9 @@ function Router() {
       </Route>
       <Route path="/profile">
         <PrivateRoute component={Profile} />
+      </Route>
+      <Route path="/company-segment">
+        <AdminRoute component={CompanySegmentManagement} />
       </Route>
       {/* Fallback to 404 */}
       <Route component={NotFound} />

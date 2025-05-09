@@ -88,6 +88,15 @@ export type MasterData = {
   createdAt?: Date;
 };
 
+export type CompanySegment = {
+  company_id: number;
+  segment_id: number;
+  company_name: string;
+  segment_name: string;
+  created_at?: Date;
+  created_by?: number;
+};
+
 // Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -174,4 +183,10 @@ export const insertMasterDataSchema = z.object({
   serviceProvider: z.string({ required_error: "Please select or enter a service provider" }),
   active: z.boolean().default(true),
   createdBy: z.number().optional(),
+});
+
+export const insertCompanySegmentSchema = z.object({
+  company_name: z.string().min(1, "Company name is required"),
+  segment_name: z.string().min(1, "Segment name is required"),
+  created_by: z.number().optional(),
 });

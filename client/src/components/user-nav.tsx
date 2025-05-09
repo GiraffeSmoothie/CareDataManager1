@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronDown, User, Settings, LogOut } from "lucide-react";
+import { ChevronDown, User, Settings, LogOut, Building2 } from "lucide-react";
 
 export default function UserNav() {
   const [_, setLocation] = useLocation();
@@ -77,10 +77,16 @@ export default function UserNav() {
           <span>Settings</span>
         </DropdownMenuItem>
         {userRole === "admin" && (
-          <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/manage-users")}>
-            <User className="mr-2 h-4 w-4" />
-            <span>Manage Users</span>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/manage-users")}>
+              <User className="mr-2 h-4 w-4" />
+              <span>Manage Users</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/company-segment")}>
+              <Building2 className="mr-2 h-4 w-4" />
+              <span>Company Segments</span>
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem

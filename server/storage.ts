@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
-import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote } from '@shared/schema';
+import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, CompanySegment } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -777,6 +777,79 @@ export const storage = {
     } catch (error) {
       console.error("Error in updateServiceCaseNote:", error);
       throw error;
+    }
+  },
+
+  async createCompanySegment(data: {
+    company_name: string;
+    segment_name: string;
+    created_by?: number;
+  }): Promise<CompanySegment> {
+    const query = `
+      INSERT INTO company_segment (company_name, segment_name, created_by)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+    const values = [data.company_name, data.segment_name, data.created_by];
+    
+    try {
+      const result = await pool.query(query, values);
+      return result.rows[0];
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique violation
+        throw new Error('This company and segment combination already exists');
+      }
+      throw error;
+    }
+  },
+
+  async getAllCompanySegments(): Promise<CompanySegment[]> {
+    const query = `
+      SELECT * FROM company_segment 
+      ORDER BY company_name, segment_name
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  },
+
+  async updateCompanySegment(
+    company_id: number,
+    segment_id: number,
+    data: {
+      company_name: string;
+      segment_name: string;
+    }
+  ): Promise<CompanySegment> {
+    const query = `
+      UPDATE company_segment 
+      SET company_name = $1, segment_name = $2
+      WHERE company_id = $3 AND segment_id = $4
+      RETURNING *
+    `;
+    const values = [data.company_name, data.segment_name, company_id, segment_id];
+    
+    try {
+      const result = await pool.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error('Company segment not found');
+      }
+      return result.rows[0];
+    } catch (error: any) {
+      if (error.code === '23505') {
+        throw new Error('This company and segment combination already exists');
+      }
+      throw error;
+    }
+  },
+
+  async deleteCompanySegment(company_id: number, segment_id: number): Promise<void> {
+    const query = `
+      DELETE FROM company_segment 
+      WHERE company_id = $1 AND segment_id = $2
+    `;
+    const result = await pool.query(query, [company_id, segment_id]);
+    if (result.rowCount === 0) {
+      throw new Error('Company segment not found');
     }
   },
 };
