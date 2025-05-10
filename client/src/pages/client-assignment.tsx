@@ -10,13 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -270,10 +270,90 @@ export default function ClientAssignment() {
     `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const columns: DataTableColumnDef<ClientService>[] = [
+    {
+      accessorKey: "serviceCategory",
+      header: "Category"
+    },
+    {
+      accessorKey: "serviceType",
+      header: "Type"
+    },
+    {
+      accessorKey: "serviceProvider",
+      header: "Provider"
+    },
+    {
+      accessorKey: "serviceStartDate",
+      header: "Start Date",
+      cell: ({ row }) => new Date(row.original.serviceStartDate).toLocaleDateString()
+    },
+    {
+      accessorKey: "serviceDays",
+      header: "Days",
+      cell: ({ row }) => row.original.serviceDays.join(", ")
+    },
+    {
+      accessorKey: "serviceHours",
+      header: "Hours"
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Select
+          value={row.original.status}
+          onValueChange={async (value) => {
+            try {
+              await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
+                status: value
+              });
+              await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+              toast({
+                title: "Success",
+                description: "Service status updated",
+              });
+            } catch (error) {
+              toast({
+                title: "Error",
+                description: "Failed to update status",
+                variant: "destructive",
+              });
+            }
+          }}
+        >
+          <SelectTrigger className="w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Planned">Planned</SelectItem>
+            <SelectItem value="In Progress">In Progress</SelectItem>
+            <SelectItem value="Closed">Closed</SelectItem>
+          </SelectContent>
+        </Select>
+      )
+    },
+    {
+      id: "caseNotes",
+      header: "Case Notes",
+      cell: ({ row }) => (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            setSelectedService(row.original);
+            setShowCaseNotesDialog(true);
+          }}
+        >
+          View/Edit Notes
+        </Button>
+      )
+    }
+  ];
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-4">
-        {/* Search Section */}
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -324,84 +404,13 @@ export default function ClientAssignment() {
             <CardContent>
               {isServicesLoading && <div>Loading assigned services...</div>}
               {servicesError && <div className="text-red-500">Error loading services: {servicesError.message}</div>}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>Days</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Case Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clientServices.length > 0 ? (
-                    clientServices.map((service: ClientService) => (
-                      <TableRow key={service.id}>
-                        <TableCell>{service.serviceCategory}</TableCell>
-                        <TableCell>{service.serviceType}</TableCell>
-                        <TableCell>{service.serviceProvider}</TableCell>
-                        <TableCell>{new Date(service.serviceStartDate).toLocaleDateString()}</TableCell>
-                        <TableCell>{service.serviceDays.join(", ")}</TableCell>
-                        <TableCell>{service.serviceHours}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={service.status}
-                            onValueChange={async (value) => {
-                              try {
-                                await apiRequest("PATCH", `/api/client-services/${service.id}`, {
-                                  status: value
-                                });
-                                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
-                                toast({
-                                  title: "Success",
-                                  description: "Service status updated",
-                                });
-                              } catch (error) {
-                                toast({
-                                  title: "Error",
-                                  description: "Failed to update status",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-[130px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Planned">Planned</SelectItem>
-                              <SelectItem value="In Progress">In Progress</SelectItem>
-                              <SelectItem value="Closed">Closed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => {
-                              setSelectedService(service);
-                              setShowCaseNotesDialog(true);
-                            }}
-                          >
-                            View/Edit Notes
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-4">
-                        No services assigned yet
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              {!isServicesLoading && !servicesError && (
+                <DataTable
+                  data={clientServices}
+                  columns={columns}
+                  searchPlaceholder="Search services..."
+                />
+              )}
             </CardContent>
           </Card>
         )}

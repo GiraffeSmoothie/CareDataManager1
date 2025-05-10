@@ -7,7 +7,8 @@ import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import DashboardLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
-import { Loader2, Search, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 
 import {
   Form,
@@ -26,13 +27,6 @@ import {
   CardTitle 
 } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { cn } from "../lib/utils";
 import {
   Dialog,
@@ -40,7 +34,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
@@ -68,7 +68,6 @@ export default function ManageClient() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [useHomeAddress, setUseHomeAddress] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [buttonLabel, setButtonLabel] = useState("Add client");
@@ -113,9 +112,6 @@ export default function ManageClient() {
 
   // Filter clients based on search term
   const filteredClients = members.filter(client => 
-    searchTerm.length === 0 || 
-    `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-  ).filter(client => 
     !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
   );
 
@@ -243,6 +239,53 @@ export default function ManageClient() {
   const hcpLevels = ["1", "2", "3", "4"];
   const statusOptions = ["New", "Active", "Paused", "Closed"];
 
+  const columns: DataTableColumnDef<PersonInfo>[] = [
+    {
+      accessorKey: "firstName",
+      header: "Name",
+      cell: ({ row }) => `${row.original.firstName} ${row.original.lastName}`
+    },
+    {
+      accessorKey: "email",
+      header: "Email"
+    },
+    {
+      accessorKey: "mobilePhone",
+      header: "Phone"
+    },
+    {
+      accessorKey: "hcpLevel",
+      header: "HCP Level",
+      cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : '-'
+    },
+    {
+      accessorKey: "hcpStartDate",
+      header: "HCP Start Date",
+      cell: ({ row }) => row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : '-'
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(row.original.status || 'New')}`}>
+          {row.original.status || 'New'}
+        </span>
+      )
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => handleEdit(row.original)}
+        >
+          Edit
+        </Button>
+      )
+    }
+  ];
+
   return (
     <DashboardLayout>
       <div className="container py-6">
@@ -251,16 +294,6 @@ export default function ManageClient() {
             <div className="flex justify-between items-center">
               <CardTitle>Clients</CardTitle>
               <div className="flex gap-2">
-                <div className="relative flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search clients..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
                 <Button onClick={handleAddNew}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
@@ -282,40 +315,11 @@ export default function ManageClient() {
                 Hide closed and paused clients
               </label>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>HCP Level</TableHead>
-                  <TableHead>HCP Start Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClients.map((client) => (
-                  <TableRow key={client.id}>
-                    <TableCell>{`${client.firstName} ${client.lastName}`}</TableCell>
-                    <TableCell>{client.email}</TableCell>
-                    <TableCell>{client.mobilePhone}</TableCell>
-                    <TableCell>{client.hcpLevel ? `Level ${client.hcpLevel}` : '-'}</TableCell>
-                    <TableCell>{client.hcpStartDate ? new Date(client.hcpStartDate).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(client.status || 'New')}`}>
-                        {client.status || 'New'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(client)}>
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              data={filteredClients}
+              columns={columns}
+              searchPlaceholder="Search clients..."
+            />
           </CardContent>
         </Card>
 

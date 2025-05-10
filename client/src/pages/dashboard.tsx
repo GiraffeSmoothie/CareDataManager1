@@ -7,14 +7,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PersonInfo, ClientService } from "@shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
@@ -22,9 +14,12 @@ import { Loader2, Users, Activity, Search } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SimpleBarChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+
+type CombinedClientData = PersonInfo & { clientService?: ClientService };
 
 export default function Dashboard() {
-  const [combinedData, setCombinedData] = useState<Array<PersonInfo & { clientService?: ClientService }>>([]);
+  const [combinedData, setCombinedData] = useState<Array<CombinedClientData>>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch person info data
@@ -98,6 +93,56 @@ export default function Dashboard() {
     name: status,
     value: count
   }));
+
+  const columns: DataTableColumnDef<CombinedClientData>[] = [
+    {
+      accessorKey: "firstName",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="font-medium">
+          {row.original.title} {row.original.firstName} {row.original.lastName}
+        </span>
+      )
+    },
+    {
+      accessorKey: "hcpLevel",
+      header: "HCP Level",
+      cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : 'Unassigned'
+    },
+    {
+      accessorKey: "hcpStartDate",
+      header: "HCP Start Date - End Date",
+      cell: ({ row }) => (
+        <>
+          {row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : 'Not set'}
+          {row.original.hcpStartDate && ' - '}
+          {row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : ''}
+        </>
+      )
+    },
+    {
+      accessorKey: "clientService.serviceDays",
+      header: "Service Days",
+      cell: ({ row }) => row.original.clientService?.serviceDays?.join(', ') || 'Not set'
+    },
+    {
+      accessorKey: "clientService.serviceHours",
+      header: "Service Hours",
+      cell: ({ row }) => row.original.clientService?.serviceHours ? `${row.original.clientService.serviceHours} hours` : 'Not set'
+    },
+    {
+      accessorKey: "clientService.status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge 
+          variant={row.original.clientService?.status === 'In Progress' ? 'default' : 'secondary'}
+          className={row.original.clientService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
+        >
+          {row.original.clientService?.status || 'Not Assigned'}
+        </Badge>
+      )
+    }
+  ];
 
   if (isLoadingPersons || isLoadingServices) {
     return (
@@ -192,63 +237,11 @@ export default function Dashboard() {
             <CardDescription>Clients with active services and their HCP details</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>HCP Level</TableHead>
-                  <TableHead>HCP Start Date - End Date</TableHead>
-                  <TableHead>Service Days</TableHead>
-                  <TableHead>Service Hours</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMembers.length > 0 ? (
-                  filteredMembers.map((member) => (
-                    <TableRow 
-                      key={member.id} 
-                      className="cursor-pointer hover:bg-gray-100"
-                      onClick={() => {
-                        window.location.href = `/client-assignment?clientId=${member.id}&name=${encodeURIComponent(`${member.firstName} ${member.lastName}`)}`;
-                      }}
-                    >
-                      <TableCell className="font-medium">
-                        {member.title} {member.firstName} {member.lastName}
-                      </TableCell>
-                      <TableCell>
-                        {member.hcpLevel ? `Level ${member.hcpLevel}` : 'Unassigned'}
-                      </TableCell>
-                      <TableCell>
-                        {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : 'Not set'}
-                        {member.hcpStartDate && ' - '}
-                        {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : ''}
-                      </TableCell>
-                      <TableCell>
-                        {member.clientService?.serviceDays?.join(', ') || 'Not set'}
-                      </TableCell>
-                      <TableCell>
-                        {member.clientService?.serviceHours || 'Not set'} hours
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={member.clientService?.status === 'In Progress' ? 'default' : 'secondary'}
-                          className={member.clientService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
-                        >
-                          {member.clientService?.status || 'Not Assigned'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No clients found matching your search.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <DataTable
+              data={filteredMembers}
+              columns={columns}
+              searchPlaceholder="Search active clients..."
+            />
           </CardContent>
         </Card>
       </div>
