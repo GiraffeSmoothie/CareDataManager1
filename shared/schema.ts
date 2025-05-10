@@ -88,6 +88,18 @@ export type MasterData = {
   createdAt?: Date;
 };
 
+export type Company = {
+  company_id: number;
+  company_name: string;
+  registered_address: string;
+  postal_address: string;
+  contact_person_name: string;
+  contact_person_phone: string;
+  contact_person_email: string;
+  created_at?: Date;
+  created_by?: number;
+};
+
 // Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -174,4 +186,14 @@ export const insertMasterDataSchema = z.object({
   serviceProvider: z.string({ required_error: "Please select or enter a service provider" }),
   active: z.boolean().default(true),
   createdBy: z.number().optional(),
+});
+
+export const insertCompanySchema = z.object({
+  company_name: z.string().min(1, "Company name is required"),
+  registered_address: z.string().min(1, "Registered address is required"),
+  postal_address: z.string().min(1, "Postal address is required"),
+  contact_person_name: z.string().min(1, "Contact person name is required"),
+  contact_person_phone: z.string().min(1, "Contact person phone is required"),
+  contact_person_email: z.string().email("Invalid email address"),
+  created_by: z.number().optional()
 });

@@ -13,6 +13,7 @@ import Homepage from "@/pages/homepage";
 import Settings from "@/pages/settings";
 import ManageUsers from "@/pages/manage-users";
 import Profile from "@/pages/profile";
+import Company from "@/pages/company";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
@@ -135,6 +136,10 @@ function Router() {
       <Route path="/profile">
         <PrivateRoute component={Profile} />
       </Route>
+      <Route path="/company">
+        <AdminRoute component={Company} />
+      </Route>
+
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

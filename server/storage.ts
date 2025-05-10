@@ -1,11 +1,12 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
-import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote } from '@shared/schema';
+import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, Company, insertCompanySchema } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
+import type { z } from 'zod';
 
 // Define __dirname for ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -121,10 +122,16 @@ export interface NewServiceCaseNote {
   createdBy: number;
 }
 
-export const storage = {
+export class Storage {
+  private pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
   async getAllUsers(): Promise<User[]> {
     try {
-      const result = await pool.query('SELECT * FROM users');
+      const result = await this.pool.query('SELECT * FROM users');
       return result.rows.map(row => ({
         id: row.id,
         name: row.name,
@@ -136,29 +143,29 @@ export const storage = {
       console.error("Error in getAllUsers:", error);
       throw error;
     }
-  },
+  }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const result = await this.pool.query('SELECT * FROM users WHERE username = $1', [username]);
     return result.rows[0] || null;
-  },
+  }
 
   async getUserById(id: number): Promise<User | null> {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    const result = await this.pool.query('SELECT * FROM users WHERE id = $1', [id]);
     return result.rows[0] || null;
-  },
+  }
 
   async verifyPassword(username: string, password: string): Promise<boolean> {
-    const user = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = await this.pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (!user.rows[0]) return false;
     const hash = crypto.createHash('sha256').update(password).digest('hex');
     return user.rows[0].password === hash;
-  },
+  }
 
   async updateUserPassword(id: number, newPassword: string): Promise<void> {
     const hash = crypto.createHash('sha256').update(newPassword).digest('hex');
-    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hash, id]);
-  },
+    await this.pool.query('UPDATE users SET password = $1 WHERE id = $2', [hash, id]);
+  }
 
   async createUser(user: { name: string; username: string; password: string; role?: string }): Promise<User> {
     try {
@@ -168,7 +175,7 @@ export const storage = {
         role: user.role || 'user'
       });
 
-      const result = await pool.query(
+      const result = await this.pool.query(
         'INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING *',
         [user.name, user.username, user.password, user.role || 'user']
       );
@@ -188,7 +195,7 @@ export const storage = {
       }
       throw error;
     }
-  },
+  }
 
   async createPersonInfo(data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     try {
@@ -222,7 +229,7 @@ export const storage = {
       } = data;
 
       console.log("Destructured data successfully, executing SQL query...");
-      const result = await pool.query(
+      const result = await this.pool.query(
         `INSERT INTO person_info (
           title, first_name, middle_name, last_name, date_of_birth, email,
           home_phone, mobile_phone, address_line1, address_line2, address_line3,
@@ -269,10 +276,10 @@ export const storage = {
       }
       throw error;
     }
-  },
+  }
 
   async getAllPersonInfo(): Promise<PersonInfo[]> {
-    const result = await pool.query('SELECT * FROM person_info');
+    const result = await this.pool.query('SELECT * FROM person_info');
     return result.rows.map(row => ({
       id: row.id,
       title: row.title,
@@ -304,10 +311,10 @@ export const storage = {
       status: row.status || 'New',
       createdBy: row.created_by || null
     }));
-  },
+  }
 
   async getPersonInfoById(id: number): Promise<PersonInfo | null> {
-    const result = await pool.query('SELECT * FROM person_info WHERE id = $1', [id]);
+    const result = await this.pool.query('SELECT * FROM person_info WHERE id = $1', [id]);
     if (!result.rows[0]) return null;
     
     const row = result.rows[0];
@@ -342,7 +349,7 @@ export const storage = {
       status: row.status || 'New',
       createdBy: row.created_by || null
     };
-  },
+  }
 
   async updatePersonInfo(id: number, data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     try {
@@ -374,7 +381,7 @@ export const storage = {
         createdBy
       } = data;
 
-      const result = await pool.query(
+      const result = await this.pool.query(
         `UPDATE person_info SET
           title = $1, first_name = $2, middle_name = $3, last_name = $4,
           date_of_birth = $5, email = $6, home_phone = $7, mobile_phone = $8,
@@ -451,15 +458,15 @@ export const storage = {
       console.error("Error in updatePersonInfo:", error);
       throw error;
     }
-  },
+  }
 
   async checkDuplicateService(serviceCategory: string, serviceType: string, serviceProvider: string): Promise<boolean> {
-    const result = await pool.query(
+    const result = await this.pool.query(
       'SELECT COUNT(*) FROM master_data WHERE service_category = $1 AND service_type = $2 AND service_provider = $3',
       [serviceCategory, serviceType, serviceProvider || '']
     );
     return parseInt(result.rows[0].count) > 0;
-  },
+  }
 
   async createMasterData(data: Omit<MasterData, 'id'>): Promise<MasterData> {
     try {
@@ -474,7 +481,7 @@ export const storage = {
         throw new Error('A service with this combination of category, type, and provider already exists');
       }
 
-      const result = await pool.query(
+      const result = await this.pool.query(
         'INSERT INTO master_data (service_category, service_type, service_provider, active, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [
           data.serviceCategory,
@@ -498,10 +505,10 @@ export const storage = {
       console.error("Error in createMasterData:", error);
       throw error;
     }
-  },
+  }
 
   async getAllMasterData(): Promise<MasterData[]> {
-    const result = await pool.query('SELECT * FROM master_data ORDER BY id DESC');
+    const result = await this.pool.query('SELECT * FROM master_data ORDER BY id DESC');
     return result.rows.map(row => ({
       id: row.id,
       serviceCategory: row.service_category,
@@ -511,15 +518,15 @@ export const storage = {
       createdBy: row.created_by,
       createdAt: row.created_at
     }));
-  },
+  }
 
   async updateMasterDataStatus(id: number, status: string): Promise<void> {
-    await pool.query('UPDATE master_data SET status = $1 WHERE id = $2', [status, id]);
-  },
+    await this.pool.query('UPDATE master_data SET status = $1 WHERE id = $2', [status, id]);
+  }
 
   async updateMasterData(id: number, data: Omit<MasterData, 'id'>): Promise<MasterData> {
     try {
-      const result = await pool.query(
+      const result = await this.pool.query(
         `UPDATE master_data SET 
           service_category = $1,
           service_type = $2,
@@ -552,12 +559,12 @@ export const storage = {
       console.error("Error in updateMasterData:", error);
       throw error;
     }
-  },
+  }
 
   async createDocument(data: Omit<Document, 'id'>): Promise<Document> {
     try {
       console.log("Creating document with data:", data);
-      const result = await pool.query(
+      const result = await this.pool.query(
         'INSERT INTO documents (client_id, document_name, document_type, filename, file_path, created_by, uploaded_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
         [data.clientId, data.documentName, data.documentType, data.filename, data.filePath, data.createdBy, data.uploadedAt]
       );
@@ -577,10 +584,10 @@ export const storage = {
       console.error("Error in createDocument:", error);
       throw error;
     }
-  },
+  }
 
   async getDocumentsByClientId(clientId: number): Promise<Document[]> {
-    const result = await pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
+    const result = await this.pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
     return result.rows.map(row => ({
       id: row.id,
       clientId: row.client_id,
@@ -591,10 +598,10 @@ export const storage = {
       uploadedAt: row.uploaded_at,
       createdBy: row.created_by
     }));
-  },
+  }
 
   async getDocumentByFilename(filename: string): Promise<Document | null> {
-    const result = await pool.query('SELECT * FROM documents WHERE filename = $1 LIMIT 1', [filename]);
+    const result = await this.pool.query('SELECT * FROM documents WHERE filename = $1 LIMIT 1', [filename]);
     if (result.rows.length === 0) {
       return null;
     }
@@ -609,10 +616,10 @@ export const storage = {
       uploadedAt: row.uploaded_at,
       createdBy: row.created_by
     };
-  },
+  }
 
   async getDocumentByFilePath(filePath: string): Promise<Document | null> {
-    const result = await pool.query('SELECT * FROM documents WHERE file_path = $1 LIMIT 1', [filePath]);
+    const result = await this.pool.query('SELECT * FROM documents WHERE file_path = $1 LIMIT 1', [filePath]);
     if (result.rows.length === 0) {
       return null;
     }
@@ -627,7 +634,7 @@ export const storage = {
       uploadedAt: row.uploaded_at,
       createdBy: row.created_by
     };
-  },
+  }
 
   async createClientService(data: Omit<ClientService, 'id'>): Promise<ClientService> {
     try {
@@ -636,7 +643,7 @@ export const storage = {
       // Ensure serviceDays is properly formatted as a PostgreSQL array
       const serviceDaysArray = Array.isArray(data.serviceDays) ? data.serviceDays : [data.serviceDays];
       
-      const result = await pool.query(
+      const result = await this.pool.query(
         `INSERT INTO client_services (
           client_id, service_category, service_type, service_provider,
           service_start_date, service_days, service_hours, status, created_by
@@ -673,10 +680,10 @@ export const storage = {
       console.error("Error in createClientService:", error);
       throw error;
     }
-  },
+  }
 
   async getClientServicesByClientId(clientId: number): Promise<ClientService[]> {
-    const result = await pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
+    const result = await this.pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
     return result.rows.map(row => ({
       id: row.id,
       clientId: row.client_id,
@@ -690,18 +697,18 @@ export const storage = {
       createdAt: row.created_at,
       createdBy: row.created_by
     }));
-  },
+  }
 
   async updateClientServiceStatus(id: number, status: string): Promise<void> {
-    await pool.query(
+    await this.pool.query(
       'UPDATE client_services SET status = $1 WHERE id = $2',
       [status, id]
     );
-  },
+  }
 
   async getServiceCaseNote(serviceId: number): Promise<ServiceCaseNote | null> {
     try {
-      const result = await pool.query(
+      const result = await this.pool.query(
         'SELECT * FROM service_case_notes WHERE service_id = $1 ORDER BY created_at DESC LIMIT 1',
         [serviceId]
       );
@@ -723,11 +730,11 @@ export const storage = {
       console.error("Error in getServiceCaseNote:", error);
       throw error;
     }
-  },
+  }
 
   async createServiceCaseNote(data: NewServiceCaseNote): Promise<ServiceCaseNote> {
     try {
-      const result = await pool.query(
+      const result = await this.pool.query(
         `INSERT INTO service_case_notes (
           service_id, note_text, created_by
         ) VALUES ($1, $2, $3) RETURNING *`,
@@ -747,11 +754,11 @@ export const storage = {
       console.error("Error in createServiceCaseNote:", error);
       throw error;
     }
-  },
+  }
 
   async updateServiceCaseNote(serviceId: number, data: { noteText: string; updatedBy: number }): Promise<ServiceCaseNote> {
     try {
-      const result = await pool.query(
+      const result = await this.pool.query(
         `UPDATE service_case_notes 
          SET note_text = $1, 
              updated_at = CURRENT_TIMESTAMP, 
@@ -778,5 +785,78 @@ export const storage = {
       console.error("Error in updateServiceCaseNote:", error);
       throw error;
     }
-  },
-};
+  }
+
+  // Company methods
+  async getAllCompanies(): Promise<Company[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM companies ORDER BY company_name'
+    );
+    return result.rows;
+  }
+
+  async getCompanyById(id: number): Promise<Company | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM companies WHERE company_id = $1',
+      [id]
+    );
+    return result.rows[0] || null;
+  }
+
+  async createCompany(data: z.infer<typeof insertCompanySchema>): Promise<Company> {
+    const result = await this.pool.query(
+      `INSERT INTO companies (
+          company_name,
+          registered_address,
+          postal_address,
+          contact_person_name,
+          contact_person_phone,
+          contact_person_email,
+          created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        data.company_name,
+        data.registered_address,
+        data.postal_address,
+        data.contact_person_name,
+        data.contact_person_phone,
+        data.contact_person_email,
+        data.created_by
+      ]
+    );
+    return result.rows[0];
+  }
+
+  async updateCompany(id: number, data: z.infer<typeof insertCompanySchema>): Promise<Company> {
+    const result = await this.pool.query(
+      `UPDATE companies SET 
+          company_name = $1,
+          registered_address = $2,
+          postal_address = $3,
+          contact_person_name = $4,
+          contact_person_phone = $5,
+          contact_person_email = $6
+      WHERE company_id = $7 RETURNING *`,
+      [
+        data.company_name,
+        data.registered_address,
+        data.postal_address,
+        data.contact_person_name,
+        data.contact_person_phone,
+        data.contact_person_email,
+        id
+      ]
+    );
+    return result.rows[0];
+  }
+
+  async deleteCompany(id: number): Promise<void> {
+    await this.pool.query(
+      'DELETE FROM companies WHERE company_id = $1',
+      [id]
+    );
+  }
+}
+
+// Create and export storage instance
+export const storage = new Storage(pool);

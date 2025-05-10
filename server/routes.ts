@@ -1,7 +1,7 @@
 import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema } from "@shared/schema";
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -118,6 +118,26 @@ const PgStore = pgSession(session);
 
 // Initialize blob storage service
 const blobStorage = new BlobStorageService();
+
+// Extend storage interface with client service methods
+declare module './storage' {
+  interface Storage {
+    getAllClientServices(): Promise<ClientService[]>;
+    getClientServiceById(id: number): Promise<ClientService | null>;
+    // ... other client service related methods
+  }
+}
+
+// Extend storage interface with company methods
+declare module './storage' {
+  interface Storage {
+    getAllCompanies(): Promise<Company[]>;
+    getCompanyById(id: number): Promise<Company | null>;
+    createCompany(data: z.infer<typeof insertCompanySchema>): Promise<Company>;
+    updateCompany(id: number, data: z.infer<typeof insertCompanySchema>): Promise<Company>;
+    deleteCompany(id: number): Promise<void>;
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure CORS
@@ -925,6 +945,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Company routes (admin only)
+  app.get("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const companies = await dbStorage.getAllCompanies();
+      return res.status(200).json(companies);
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+      return res.status(500).json({ message: "Failed to fetch companies" });
+    }
+  });
+
+  app.post("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const validatedData = insertCompanySchema.parse({
+        ...req.body,
+        created_by: req.user.id
+      });
+
+      const company = await dbStorage.createCompany(validatedData);
+      return res.status(201).json(company);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating company:", error);
+      return res.status(500).json({ message: "Failed to create company" });
+    }
+  });
+
+  app.put("/api/companies/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const existingCompany = await dbStorage.getCompanyById(id);
+      if (!existingCompany) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      const validatedData = insertCompanySchema.parse({
+        ...req.body,
+        created_by: existingCompany.created_by
+      });
+
+      const company = await dbStorage.updateCompany(id, validatedData);
+      return res.status(200).json(company);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error updating company:", error);
+      return res.status(500).json({ message: "Failed to update company" });
+    }
+  });
+
+  app.delete("/api/companies/:id", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const existingCompany = await dbStorage.getCompanyById(id);
+      if (!existingCompany) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      await dbStorage.deleteCompany(id);
+      return res.status(200).json({ message: "Company deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting company:", error);
+      return res.status(500).json({ message: "Failed to delete company" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
@@ -937,15 +1056,6 @@ interface ClientService {
   startDate: Date;
   endDate: Date | null;
   status: string;
-}
-
-// Extend storage interface with client service methods
-declare module './storage' {
-  interface Storage {
-    getAllClientServices(): Promise<ClientService[]>;
-    getClientServiceById(id: number): Promise<ClientService | null>;
-    // ... other client service related methods
-  }
 }
 
 // Update PersonInfo interface to include HCP dates
