@@ -9,6 +9,7 @@ import DashboardLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 
 import {
   Form,
@@ -114,22 +115,6 @@ export default function ManageClient() {
   const filteredClients = members.filter(client => 
     !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
   );
-
-  // Get badge colors based on status
-  const getStatusBadgeColors = (status: string): string => {
-    switch (status) {
-      case "Active":
-        return "bg-green-100 text-green-800"; // Keep active as green
-      case "New":
-        return "bg-blue-100 text-blue-800";   // Blue for new
-      case "Paused":
-        return "bg-amber-100 text-amber-800"; // Amber/yellow for paused
-      case "Closed":
-        return "bg-gray-100 text-gray-800";   // Gray for closed
-      default:
-        return "bg-gray-100 text-gray-800";   // Default fallback
-    }
-  };
 
   // Handle edit client
   const handleEdit = (client: PersonInfo) => {
@@ -237,7 +222,7 @@ export default function ManageClient() {
   };
 
   const hcpLevels = ["1", "2", "3", "4"];
-  const statusOptions = ["New", "Active", "Paused", "Closed"];
+  const statusOptions = Object.keys(STATUS_CONFIGS);
 
   const columns: DataTableColumnDef<PersonInfo>[] = [
     {

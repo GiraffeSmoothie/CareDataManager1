@@ -15,6 +15,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SimpleBarChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS } from "@/lib/constants";
 
 type CombinedClientData = PersonInfo & { clientService?: ClientService };
 
@@ -133,14 +134,18 @@ export default function Dashboard() {
     {
       accessorKey: "clientService.status",
       header: "Status",
-      cell: ({ row }) => (
-        <Badge 
-          variant={row.original.clientService?.status === 'In Progress' ? 'default' : 'secondary'}
-          className={row.original.clientService?.status === 'In Progress' ? 'bg-green-100 text-green-800' : ''}
-        >
-          {row.original.clientService?.status || 'Not Assigned'}
-        </Badge>
-      )
+      cell: ({ row }) => {
+        const status = row.original.clientService?.status || 'Not Assigned';
+        const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] || STATUS_CONFIGS.Closed;
+        return (
+          <Badge 
+            variant={config.badge}
+            className={config.color}
+          >
+            {status}
+          </Badge>
+        );
+      }
     }
   ];
 

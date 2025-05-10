@@ -17,6 +17,7 @@ import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS } from "@/lib/constants";
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -270,6 +271,9 @@ export default function ClientAssignment() {
     `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const statusOptions = Object.keys(STATUS_CONFIGS)
+    .filter(status => ["Active", "Paused", "In Progress", "Closed"].includes(status));
+
   const columns: DataTableColumnDef<ClientService>[] = [
     {
       accessorKey: "serviceCategory",
@@ -300,38 +304,44 @@ export default function ClientAssignment() {
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <Select
-          value={row.original.status}
-          onValueChange={async (value) => {
-            try {
-              await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
-                status: value
-              });
-              await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
-              toast({
-                title: "Success",
-                description: "Service status updated",
-              });
-            } catch (error) {
-              toast({
-                title: "Error",
-                description: "Failed to update status",
-                variant: "destructive",
-              });
-            }
-          }}
-        >
-          <SelectTrigger className="w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Planned">Planned</SelectItem>
-            <SelectItem value="In Progress">In Progress</SelectItem>
-            <SelectItem value="Closed">Closed</SelectItem>
-          </SelectContent>
-        </Select>
-      )
+      cell: ({ row }) => {
+        const status = row.original.status || 'Not Assigned';
+        const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] || STATUS_CONFIGS.Closed;
+        return (
+          <Select
+            value={row.original.status}
+            onValueChange={async (value) => {
+              try {
+                await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
+                  status: value
+                });
+                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+                toast({
+                  title: "Success",
+                  description: "Service status updated",
+                });
+              } catch (error) {
+                toast({
+                  title: "Error",
+                  description: "Failed to update status",
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            <SelectTrigger className={cn("w-[130px]", config.color)}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      }
     },
     {
       id: "caseNotes",
