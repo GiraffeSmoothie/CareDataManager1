@@ -6,6 +6,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 import type { z } from 'zod';
 
 // Define __dirname for ES module
@@ -116,11 +117,49 @@ export async function initializeDatabase() {
   }
 }
 
+// Input validation helper
+function validateInput(input: any, type: string): boolean {
+  switch(type) {
+    case 'id':
+      return Number.isInteger(input) && input > 0;
+    case 'string':
+      return typeof input === 'string' && input.length > 0;
+    case 'date':
+      return !isNaN(Date.parse(input));
+    case 'boolean':
+      return typeof input === 'boolean';
+    case 'array':
+      return Array.isArray(input);
+    default:
+      return false;
+  }
+}
+
+// SQL injection prevention helper
+function sanitizeInput(input: string): string {
+  // Remove any dangerous SQL characters
+  return input.replace(/['";\\]/g, '');
+}
+
+// Database error handler
+function handleDatabaseError(error: any, operation: string): never {
+  console.error(`Database error during ${operation}:`, error);
+  if (error.code === '23505') { // Unique violation
+    throw new Error('Duplicate entry found');
+  }
+  if (error.code === '23503') { // Foreign key violation
+    throw new Error('Referenced record not found');
+  }
+  throw new Error(`Database error during ${operation}`);
+}
+
 export interface NewServiceCaseNote {
   serviceId: number;
   noteText: string;
   createdBy: number;
 }
+
+const SALT_ROUNDS = 10;
 
 export class Storage {
   private pool: Pool;
@@ -129,77 +168,146 @@ export class Storage {
     this.pool = pool;
   }
 
+  async withTransaction<T>(operation: (client: any) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await operation(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getAllUsers(): Promise<User[]> {
     try {
-      const result = await this.pool.query('SELECT * FROM users');
-      return result.rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        username: row.username,
-        role: row.role,
-        // We don't return the password for security reasons
-      }));
+      const result = await this.pool.query(
+        'SELECT id, name, username, role FROM users'
+      );
+      return result.rows;
     } catch (error) {
-      console.error("Error in getAllUsers:", error);
-      throw error;
+      handleDatabaseError(error, 'getAllUsers');
     }
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    const result = await this.pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    return result.rows[0] || null;
+    if (!validateInput(username, 'string')) {
+      throw new Error('Invalid username format');
+    }
+    
+    try {
+      const result = await this.pool.query(
+        'SELECT id, name, username, password, role FROM users WHERE username = $1',
+        [username]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      handleDatabaseError(error, 'getUserByUsername');
+    }
   }
 
   async getUserById(id: number): Promise<User | null> {
-    const result = await this.pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    return result.rows[0] || null;
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT id, name, username, role FROM users WHERE id = $1',
+        [id]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      handleDatabaseError(error, 'getUserById');
+    }
   }
 
   async verifyPassword(username: string, password: string): Promise<boolean> {
-    const user = await this.pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (!user.rows[0]) return false;
-    const hash = crypto.createHash('sha256').update(password).digest('hex');
-    return user.rows[0].password === hash;
+    if (!validateInput(username, 'string') || !validateInput(password, 'string')) {
+      throw new Error('Invalid username or password format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT password FROM users WHERE username = $1',
+        [username]
+      );
+      if (!result.rows[0]) return false;
+      return bcrypt.compare(password, result.rows[0].password);
+    } catch (error) {
+      handleDatabaseError(error, 'verifyPassword');
+    }
   }
 
   async updateUserPassword(id: number, newPassword: string): Promise<void> {
-    const hash = crypto.createHash('sha256').update(newPassword).digest('hex');
-    await this.pool.query('UPDATE users SET password = $1 WHERE id = $2', [hash, id]);
+    if (!validateInput(id, 'id') || !validateInput(newPassword, 'string')) {
+      throw new Error('Invalid ID or password format');
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      await this.pool.query(
+        'UPDATE users SET password = $1 WHERE id = $2',
+        [hashedPassword, id]
+      );
+    } catch (error) {
+      handleDatabaseError(error, 'updateUserPassword');
+    }
+  }
+
+  async resetAdminPassword(): Promise<void> {
+    try {
+      const defaultPassword = 'password';
+      const hashedPassword = await bcrypt.hash(defaultPassword, SALT_ROUNDS);
+      
+      await this.pool.query(
+        'UPDATE users SET password = $1 WHERE username = $2',
+        [hashedPassword, 'admin']
+      );
+      
+      console.log('Admin password has been reset successfully');
+    } catch (error) {
+      console.error('Error resetting admin password:', error);
+      handleDatabaseError(error, 'resetAdminPassword');
+    }
   }
 
   async createUser(user: { name: string; username: string; password: string; role?: string }): Promise<User> {
+    if (!validateInput(user.name, 'string') || 
+        !validateInput(user.username, 'string') || 
+        !validateInput(user.password, 'string')) {
+      throw new Error('Invalid user data format');
+    }
+
     try {
-      console.log("Attempting to create user:", {
-        name: user.name,
-        username: user.username,
-        role: user.role || 'user'
+      return await this.withTransaction(async (client) => {
+        const existingUser = await client.query(
+          'SELECT id FROM users WHERE username = $1',
+          [user.username]
+        );
+        
+        if (existingUser.rows.length > 0) {
+          throw new Error('Username already exists');
+        }
+
+        const result = await client.query(
+          'INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, username, role',
+          [user.name, user.username, user.password, user.role || 'user']
+        );
+
+        return result.rows[0];
       });
-
-      const result = await this.pool.query(
-        'INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING *',
-        [user.name, user.username, user.password, user.role || 'user']
-      );
-
-      console.log("User created successfully:", {
-        id: result.rows[0]?.id,
-        username: result.rows[0]?.username,
-        role: result.rows[0]?.role
-      });
-
-      return result.rows[0];
     } catch (error) {
-      console.error("Error in createUser:", error);
-      if (error instanceof Error) {
-        console.error("Error details:", error.message);
-        console.error("Stack trace:", error.stack);
-      }
-      throw error;
+      handleDatabaseError(error, 'createUser');
     }
   }
 
   async createPersonInfo(data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     try {
-      console.log("Creating person info with data:", data);
       const {
         title,
         firstName,
@@ -228,7 +336,6 @@ export class Storage {
         createdBy
       } = data;
 
-      console.log("Destructured data successfully, executing SQL query...");
       const result = await this.pool.query(
         `INSERT INTO person_info (
           title, first_name, middle_name, last_name, date_of_birth, email,
@@ -266,92 +373,102 @@ export class Storage {
           createdBy
         ]
       );
-      console.log("SQL query executed successfully, returning result:", result.rows[0]);
       return result.rows[0];
     } catch (error) {
-      console.error("Error in createPersonInfo:", error);
-      if (error instanceof Error) {
-        console.error("Error details:", error.message);
-        console.error("Stack trace:", error.stack);
-      }
-      throw error;
+      handleDatabaseError(error, 'createPersonInfo');
     }
   }
 
   async getAllPersonInfo(): Promise<PersonInfo[]> {
-    const result = await this.pool.query('SELECT * FROM person_info');
-    return result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      firstName: row.first_name,
-      middleName: row.middle_name,
-      lastName: row.last_name,
-      dateOfBirth: row.date_of_birth,
-      email: row.email,
-      homePhoneCountryCode: row.home_phone_country_code || null,
-      homePhone: row.home_phone || null,
-      mobilePhoneCountryCode: row.mobile_phone_country_code || null,
-      mobilePhone: row.mobile_phone || null,
-      addressLine1: row.address_line1,
-      addressLine2: row.address_line2 || null,
-      addressLine3: row.address_line3 || null,
-      postCode: row.post_code,
-      mailingAddressLine1: row.mailing_address_line1 || null,
-      mailingAddressLine2: row.mailing_address_line2 || null,
-      mailingAddressLine3: row.mailing_address_line3 || null,
-      mailingPostCode: row.mailing_post_code || null,
-      useHomeAddress: row.use_home_address,
-      nextOfKinName: row.next_of_kin_name || null,
-      nextOfKinAddress: row.next_of_kin_address || null,
-      nextOfKinEmail: row.next_of_kin_email || null,
-      nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
-      nextOfKinPhone: row.next_of_kin_phone || null,
-      hcpLevel: row.hcp_level || null,
-      hcpStartDate: row.hcp_start_date || null,
-      status: row.status || 'New',
-      createdBy: row.created_by || null
-    }));
+    try {
+      const result = await this.pool.query('SELECT * FROM person_info');
+      return result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        firstName: row.first_name,
+        middleName: row.middle_name,
+        lastName: row.last_name,
+        dateOfBirth: row.date_of_birth,
+        email: row.email,
+        homePhoneCountryCode: row.home_phone_country_code || null,
+        homePhone: row.home_phone || null,
+        mobilePhoneCountryCode: row.mobile_phone_country_code || null,
+        mobilePhone: row.mobile_phone || null,
+        addressLine1: row.address_line1,
+        addressLine2: row.address_line2 || null,
+        addressLine3: row.address_line3 || null,
+        postCode: row.post_code,
+        mailingAddressLine1: row.mailing_address_line1 || null,
+        mailingAddressLine2: row.mailing_address_line2 || null,
+        mailingAddressLine3: row.mailing_address_line3 || null,
+        mailingPostCode: row.mailing_post_code || null,
+        useHomeAddress: row.use_home_address,
+        nextOfKinName: row.next_of_kin_name || null,
+        nextOfKinAddress: row.next_of_kin_address || null,
+        nextOfKinEmail: row.next_of_kin_email || null,
+        nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
+        nextOfKinPhone: row.next_of_kin_phone || null,
+        hcpLevel: row.hcp_level || null,
+        hcpStartDate: row.hcp_start_date || null,
+        status: row.status || 'New',
+        createdBy: row.created_by || null
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getAllPersonInfo');
+    }
   }
 
   async getPersonInfoById(id: number): Promise<PersonInfo | null> {
-    const result = await this.pool.query('SELECT * FROM person_info WHERE id = $1', [id]);
-    if (!result.rows[0]) return null;
-    
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      title: row.title,
-      firstName: row.first_name,
-      middleName: row.middle_name,
-      lastName: row.last_name,
-      dateOfBirth: row.date_of_birth,
-      email: row.email,
-      homePhoneCountryCode: row.home_phone_country_code || null,
-      homePhone: row.home_phone || null,
-      mobilePhoneCountryCode: row.mobile_phone_country_code || null,
-      mobilePhone: row.mobile_phone || null,
-      addressLine1: row.address_line1,
-      addressLine2: row.address_line2 || null,
-      addressLine3: row.address_line3 || null,
-      postCode: row.post_code,
-      mailingAddressLine1: row.mailing_address_line1 || null,
-      mailingAddressLine2: row.mailing_address_line2 || null,
-      mailingAddressLine3: row.mailing_address_line3 || null,
-      mailingPostCode: row.mailing_post_code || null,
-      useHomeAddress: row.use_home_address,
-      nextOfKinName: row.next_of_kin_name || null,
-      nextOfKinAddress: row.next_of_kin_address || null,
-      nextOfKinEmail: row.next_of_kin_email || null,
-      nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
-      nextOfKinPhone: row.next_of_kin_phone || null,
-      hcpLevel: row.hcp_level || null,
-      hcpStartDate: row.hcp_start_date || null,
-      status: row.status || 'New',
-      createdBy: row.created_by || null
-    };
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
+
+    try {
+      const result = await this.pool.query('SELECT * FROM person_info WHERE id = $1', [id]);
+      if (!result.rows[0]) return null;
+      
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        title: row.title,
+        firstName: row.first_name,
+        middleName: row.middle_name,
+        lastName: row.last_name,
+        dateOfBirth: row.date_of_birth,
+        email: row.email,
+        homePhoneCountryCode: row.home_phone_country_code || null,
+        homePhone: row.home_phone || null,
+        mobilePhoneCountryCode: row.mobile_phone_country_code || null,
+        mobilePhone: row.mobile_phone || null,
+        addressLine1: row.address_line1,
+        addressLine2: row.address_line2 || null,
+        addressLine3: row.address_line3 || null,
+        postCode: row.post_code,
+        mailingAddressLine1: row.mailing_address_line1 || null,
+        mailingAddressLine2: row.mailing_address_line2 || null,
+        mailingAddressLine3: row.mailing_address_line3 || null,
+        mailingPostCode: row.mailing_post_code || null,
+        useHomeAddress: row.use_home_address,
+        nextOfKinName: row.next_of_kin_name || null,
+        nextOfKinAddress: row.next_of_kin_address || null,
+        nextOfKinEmail: row.next_of_kin_email || null,
+        nextOfKinPhoneCountryCode: row.next_of_kin_phone_country_code || null,
+        nextOfKinPhone: row.next_of_kin_phone || null,
+        hcpLevel: row.hcp_level || null,
+        hcpStartDate: row.hcp_start_date || null,
+        status: row.status || 'New',
+        createdBy: row.created_by || null
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'getPersonInfoById');
+    }
   }
 
   async updatePersonInfo(id: number, data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
+
     try {
       const {
         title,
@@ -455,22 +572,28 @@ export class Storage {
         createdBy: row.created_by
       };
     } catch (error) {
-      console.error("Error in updatePersonInfo:", error);
-      throw error;
+      handleDatabaseError(error, 'updatePersonInfo');
     }
   }
 
   async checkDuplicateService(serviceCategory: string, serviceType: string, serviceProvider: string): Promise<boolean> {
-    const result = await this.pool.query(
-      'SELECT COUNT(*) FROM master_data WHERE service_category = $1 AND service_type = $2 AND service_provider = $3',
-      [serviceCategory, serviceType, serviceProvider || '']
-    );
-    return parseInt(result.rows[0].count) > 0;
+    if (!validateInput(serviceCategory, 'string') || !validateInput(serviceType, 'string') || !validateInput(serviceProvider, 'string')) {
+      throw new Error('Invalid service data format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT COUNT(*) FROM master_data WHERE service_category = $1 AND service_type = $2 AND service_provider = $3',
+        [serviceCategory, serviceType, serviceProvider || '']
+      );
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      handleDatabaseError(error, 'checkDuplicateService');
+    }
   }
 
   async createMasterData(data: Omit<MasterData, 'id'>): Promise<MasterData> {
     try {
-      // Check for duplicates first
       const isDuplicate = await this.checkDuplicateService(
         data.serviceCategory, 
         data.serviceType, 
@@ -502,29 +625,44 @@ export class Storage {
         createdAt: result.rows[0].created_at
       };
     } catch (error) {
-      console.error("Error in createMasterData:", error);
-      throw error;
+      handleDatabaseError(error, 'createMasterData');
     }
   }
 
   async getAllMasterData(): Promise<MasterData[]> {
-    const result = await this.pool.query('SELECT * FROM master_data ORDER BY id DESC');
-    return result.rows.map(row => ({
-      id: row.id,
-      serviceCategory: row.service_category,
-      serviceType: row.service_type,
-      serviceProvider: row.service_provider,
-      active: row.active,
-      createdBy: row.created_by,
-      createdAt: row.created_at
-    }));
+    try {
+      const result = await this.pool.query('SELECT * FROM master_data ORDER BY id DESC');
+      return result.rows.map(row => ({
+        id: row.id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        active: row.active,
+        createdBy: row.created_by,
+        createdAt: row.created_at
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getAllMasterData');
+    }
   }
 
   async updateMasterDataStatus(id: number, status: string): Promise<void> {
-    await this.pool.query('UPDATE master_data SET status = $1 WHERE id = $2', [status, id]);
+    if (!validateInput(id, 'id') || !validateInput(status, 'string')) {
+      throw new Error('Invalid ID or status format');
+    }
+
+    try {
+      await this.pool.query('UPDATE master_data SET status = $1 WHERE id = $2', [status, id]);
+    } catch (error) {
+      handleDatabaseError(error, 'updateMasterDataStatus');
+    }
   }
 
   async updateMasterData(id: number, data: Omit<MasterData, 'id'>): Promise<MasterData> {
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
+
     try {
       const result = await this.pool.query(
         `UPDATE master_data SET 
@@ -556,20 +694,16 @@ export class Storage {
         createdAt: result.rows[0].created_at
       };
     } catch (error) {
-      console.error("Error in updateMasterData:", error);
-      throw error;
+      handleDatabaseError(error, 'updateMasterData');
     }
   }
 
   async createDocument(data: Omit<Document, 'id'>): Promise<Document> {
     try {
-      console.log("Creating document with data:", data);
       const result = await this.pool.query(
         'INSERT INTO documents (client_id, document_name, document_type, filename, file_path, created_by, uploaded_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
         [data.clientId, data.documentName, data.documentType, data.filename, data.filePath, data.createdBy, data.uploadedAt]
       );
-      
-      console.log("Document created successfully:", result.rows[0]);
       return {
         id: result.rows[0].id,
         clientId: result.rows[0].client_id,
@@ -581,66 +715,86 @@ export class Storage {
         createdBy: result.rows[0].created_by
       };
     } catch (error) {
-      console.error("Error in createDocument:", error);
-      throw error;
+      handleDatabaseError(error, 'createDocument');
     }
   }
 
   async getDocumentsByClientId(clientId: number): Promise<Document[]> {
-    const result = await this.pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
-    return result.rows.map(row => ({
-      id: row.id,
-      clientId: row.client_id,
-      documentName: row.document_name,
-      documentType: row.document_type,
-      filename: row.filename,
-      filePath: row.file_path,
-      uploadedAt: row.uploaded_at,
-      createdBy: row.created_by
-    }));
+    if (!validateInput(clientId, 'id')) {
+      throw new Error('Invalid client ID format');
+    }
+
+    try {
+      const result = await this.pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
+      return result.rows.map(row => ({
+        id: row.id,
+        clientId: row.client_id,
+        documentName: row.document_name,
+        documentType: row.document_type,
+        filename: row.filename,
+        filePath: row.file_path,
+        uploadedAt: row.uploaded_at,
+        createdBy: row.created_by
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getDocumentsByClientId');
+    }
   }
 
   async getDocumentByFilename(filename: string): Promise<Document | null> {
-    const result = await this.pool.query('SELECT * FROM documents WHERE filename = $1 LIMIT 1', [filename]);
-    if (result.rows.length === 0) {
-      return null;
+    if (!validateInput(filename, 'string')) {
+      throw new Error('Invalid filename format');
     }
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      clientId: row.client_id,
-      documentName: row.document_name,
-      documentType: row.document_type,
-      filename: row.filename,
-      filePath: row.file_path,
-      uploadedAt: row.uploaded_at,
-      createdBy: row.created_by
-    };
+
+    try {
+      const result = await this.pool.query('SELECT * FROM documents WHERE filename = $1 LIMIT 1', [filename]);
+      if (result.rows.length === 0) {
+        return null;
+      }
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        documentName: row.document_name,
+        documentType: row.document_type,
+        filename: row.filename,
+        filePath: row.file_path,
+        uploadedAt: row.uploaded_at,
+        createdBy: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'getDocumentByFilename');
+    }
   }
 
   async getDocumentByFilePath(filePath: string): Promise<Document | null> {
-    const result = await this.pool.query('SELECT * FROM documents WHERE file_path = $1 LIMIT 1', [filePath]);
-    if (result.rows.length === 0) {
-      return null;
+    if (!validateInput(filePath, 'string')) {
+      throw new Error('Invalid file path format');
     }
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      clientId: row.client_id,
-      documentName: row.document_name,
-      documentType: row.document_type,
-      filename: row.filename,
-      filePath: row.file_path,
-      uploadedAt: row.uploaded_at,
-      createdBy: row.created_by
-    };
+
+    try {
+      const result = await this.pool.query('SELECT * FROM documents WHERE file_path = $1 LIMIT 1', [filePath]);
+      if (result.rows.length === 0) {
+        return null;
+      }
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        documentName: row.document_name,
+        documentType: row.document_type,
+        filename: row.filename,
+        filePath: row.file_path,
+        uploadedAt: row.uploaded_at,
+        createdBy: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'getDocumentByFilePath');
+    }
   }
 
   async createClientService(data: Omit<ClientService, 'id'>): Promise<ClientService> {
     try {
-      console.log("Creating client service with data:", data);
-      
-      // Ensure serviceDays is properly formatted as a PostgreSQL array
       const serviceDaysArray = Array.isArray(data.serviceDays) ? data.serviceDays : [data.serviceDays];
       
       const result = await this.pool.query(
@@ -660,8 +814,6 @@ export class Storage {
           data.createdBy
         ]
       );
-
-      console.log("Client service created:", result.rows[0]);
       
       return {
         id: result.rows[0].id,
@@ -677,36 +829,55 @@ export class Storage {
         createdBy: result.rows[0].created_by
       };
     } catch (error) {
-      console.error("Error in createClientService:", error);
-      throw error;
+      handleDatabaseError(error, 'createClientService');
     }
   }
 
   async getClientServicesByClientId(clientId: number): Promise<ClientService[]> {
-    const result = await this.pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
-    return result.rows.map(row => ({
-      id: row.id,
-      clientId: row.client_id,
-      serviceCategory: row.service_category,
-      serviceType: row.service_type,
-      serviceProvider: row.service_provider,
-      serviceStartDate: row.service_start_date,
-      serviceDays: row.service_days,
-      serviceHours: row.service_hours,
-      status: row.status,
-      createdAt: row.created_at,
-      createdBy: row.created_by
-    }));
+    if (!validateInput(clientId, 'id')) {
+      throw new Error('Invalid client ID format');
+    }
+
+    try {
+      const result = await this.pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
+      return result.rows.map(row => ({
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: row.service_days,
+        serviceHours: row.service_hours,
+        status: row.status,
+        createdAt: row.created_at,
+        createdBy: row.created_by
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getClientServicesByClientId');
+    }
   }
 
   async updateClientServiceStatus(id: number, status: string): Promise<void> {
-    await this.pool.query(
-      'UPDATE client_services SET status = $1 WHERE id = $2',
-      [status, id]
-    );
+    if (!validateInput(id, 'id') || !validateInput(status, 'string')) {
+      throw new Error('Invalid ID or status format');
+    }
+
+    try {
+      await this.pool.query(
+        'UPDATE client_services SET status = $1 WHERE id = $2',
+        [status, id]
+      );
+    } catch (error) {
+      handleDatabaseError(error, 'updateClientServiceStatus');
+    }
   }
 
   async getServiceCaseNote(serviceId: number): Promise<ServiceCaseNote | null> {
+    if (!validateInput(serviceId, 'id')) {
+      throw new Error('Invalid service ID format');
+    }
+
     try {
       const result = await this.pool.query(
         'SELECT * FROM service_case_notes WHERE service_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -727,8 +898,7 @@ export class Storage {
         updatedBy: result.rows[0].updated_by
       };
     } catch (error) {
-      console.error("Error in getServiceCaseNote:", error);
-      throw error;
+      handleDatabaseError(error, 'getServiceCaseNote');
     }
   }
 
@@ -751,12 +921,15 @@ export class Storage {
         updatedBy: result.rows[0].updated_by
       };
     } catch (error) {
-      console.error("Error in createServiceCaseNote:", error);
-      throw error;
+      handleDatabaseError(error, 'createServiceCaseNote');
     }
   }
 
   async updateServiceCaseNote(serviceId: number, data: { noteText: string; updatedBy: number }): Promise<ServiceCaseNote> {
+    if (!validateInput(serviceId, 'id') || !validateInput(data.noteText, 'string') || !validateInput(data.updatedBy, 'id')) {
+      throw new Error('Invalid case note data format');
+    }
+
     try {
       const result = await this.pool.query(
         `UPDATE service_case_notes 
@@ -782,81 +955,110 @@ export class Storage {
         updatedBy: result.rows[0].updated_by
       };
     } catch (error) {
-      console.error("Error in updateServiceCaseNote:", error);
-      throw error;
+      handleDatabaseError(error, 'updateServiceCaseNote');
     }
   }
 
-  // Company methods
   async getAllCompanies(): Promise<Company[]> {
-    const result = await this.pool.query(
-      'SELECT * FROM companies ORDER BY company_name'
-    );
-    return result.rows;
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM companies ORDER BY company_name'
+      );
+      return result.rows;
+    } catch (error) {
+      handleDatabaseError(error, 'getAllCompanies');
+    }
   }
 
   async getCompanyById(id: number): Promise<Company | null> {
-    const result = await this.pool.query(
-      'SELECT * FROM companies WHERE company_id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid company ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM companies WHERE company_id = $1',
+        [id]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      handleDatabaseError(error, 'getCompanyById');
+    }
   }
 
   async createCompany(data: z.infer<typeof insertCompanySchema>): Promise<Company> {
-    const result = await this.pool.query(
-      `INSERT INTO companies (
-          company_name,
-          registered_address,
-          postal_address,
-          contact_person_name,
-          contact_person_phone,
-          contact_person_email,
-          created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [
-        data.company_name,
-        data.registered_address,
-        data.postal_address,
-        data.contact_person_name,
-        data.contact_person_phone,
-        data.contact_person_email,
-        data.created_by
-      ]
-    );
-    return result.rows[0];
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO companies (
+            company_name,
+            registered_address,
+            postal_address,
+            contact_person_name,
+            contact_person_phone,
+            contact_person_email,
+            created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [
+          data.company_name,
+          data.registered_address,
+          data.postal_address,
+          data.contact_person_name,
+          data.contact_person_phone,
+          data.contact_person_email,
+          data.created_by
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'createCompany');
+    }
   }
 
   async updateCompany(id: number, data: z.infer<typeof insertCompanySchema>): Promise<Company> {
-    const result = await this.pool.query(
-      `UPDATE companies SET 
-          company_name = $1,
-          registered_address = $2,
-          postal_address = $3,
-          contact_person_name = $4,
-          contact_person_phone = $5,
-          contact_person_email = $6
-      WHERE company_id = $7 RETURNING *`,
-      [
-        data.company_name,
-        data.registered_address,
-        data.postal_address,
-        data.contact_person_name,
-        data.contact_person_phone,
-        data.contact_person_email,
-        id
-      ]
-    );
-    return result.rows[0];
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid company ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        `UPDATE companies SET 
+            company_name = $1,
+            registered_address = $2,
+            postal_address = $3,
+            contact_person_name = $4,
+            contact_person_phone = $5,
+            contact_person_email = $6
+        WHERE company_id = $7 RETURNING *`,
+        [
+          data.company_name,
+          data.registered_address,
+          data.postal_address,
+          data.contact_person_name,
+          data.contact_person_phone,
+          data.contact_person_email,
+          id
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'updateCompany');
+    }
   }
 
   async deleteCompany(id: number): Promise<void> {
-    await this.pool.query(
-      'DELETE FROM companies WHERE company_id = $1',
-      [id]
-    );
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid company ID format');
+    }
+
+    try {
+      await this.pool.query(
+        'DELETE FROM companies WHERE company_id = $1',
+        [id]
+      );
+    } catch (error) {
+      handleDatabaseError(error, 'deleteCompany');
+    }
   }
 }
 
-// Create and export storage instance
 export const storage = new Storage(pool);

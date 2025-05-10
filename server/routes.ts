@@ -118,29 +118,18 @@ const createHandler = <
 
 // Initialize users if none exist
 async function initializeUsers() {
-
-  console.log("Default admin user created");
-  console.log("Connecting to:", process.env.DATABASE_URL);
-  console.log("Environment:", process.env.NODE_ENV);
-
+  console.log("Checking for default admin user");
   const admin = await dbStorage.getUserByUsername("admin");
   if (!admin) {
-    // Create default admin user
-    await dbStorage.createUser({
+    // Create default admin user using AuthService to ensure bcrypt is used
+    await AuthService.createUser({
       name: "Default Admin",
       username: "admin",
-      password: hashPassword("password"),
+      password: "password",
       role: "admin"
     });
     console.log("Default admin user created");
-    console.log("Connecting to:", process.env.DATABASE_URL);
-    console.log("Environment:", process.env.NODE_ENV);
   }
-}
-
-// Helper function to hash passwords
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
 }
 
 const PgStore = pgSession(session);
@@ -148,27 +137,83 @@ const PgStore = pgSession(session);
 // Initialize blob storage service
 const blobStorage = new BlobStorageService();
 
-// Extend storage interface with client service methods
-declare module './storage' {
-  interface Storage {
-    getAllClientServices(): Promise<ClientService[]>;
-    getClientServiceById(id: number): Promise<ClientService | null>;
-    // ... other client service related methods
+// Input validation middleware
+const validateInput = (schema: z.ZodSchema) => async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validatedBody = await schema.parseAsync(req.body);
+    req.body = validatedBody;
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const validationError = fromZodError(error);
+      return res.status(400).json({ 
+        message: validationError.message,
+        details: validationError.details
+      });
+    }
+    next(error);
   }
-}
+};
 
-// Extend storage interface with company methods
-declare module './storage' {
-  interface Storage {
-    getAllCompanies(): Promise<Company[]>;
-    getCompanyById(id: number): Promise<Company | null>;
-    createCompany(data: z.infer<typeof insertCompanySchema>): Promise<Company>;
-    updateCompany(id: number, data: z.infer<typeof insertCompanySchema>): Promise<Company>;
-    deleteCompany(id: number): Promise<void>;
+// Request sanitization middleware
+const sanitizeRequest = (req: Request, _res: Response, next: NextFunction) => {
+  const sanitize = (obj: any) => {
+    Object.keys(obj).forEach(key => {
+      if (typeof obj[key] === 'string') {
+        obj[key] = obj[key].replace(/['";]/g, '');
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitize(obj[key]);
+      }
+    });
+  };
+
+  if (req.body) sanitize(req.body);
+  if (req.query) sanitize(req.query);
+  if (req.params) sanitize(req.params);
+  next();
+};
+
+// Rate limiting middleware
+const rateLimit = {
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+};
+
+let requestCounts = new Map<string, { count: number, firstRequest: number }>();
+
+const rateLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const ip = req.ip;
+  const now = Date.now();
+  const windowStart = now - rateLimit.windowMs;
+
+  // Clean up old entries
+  requestCounts.forEach((data, key) => {
+    if (data.firstRequest < windowStart) {
+      requestCounts.delete(key);
+    }
+  });
+
+  // Check current IP
+  const currentCount = requestCounts.get(ip);
+  if (!currentCount) {
+    requestCounts.set(ip, { count: 1, firstRequest: now });
+    next();
+  } else if (currentCount.firstRequest < windowStart) {
+    requestCounts.set(ip, { count: 1, firstRequest: now });
+    next();
+  } else if (currentCount.count >= rateLimit.max) {
+    res.status(429).json({ message: 'Too many requests, please try again later' });
+  } else {
+    currentCount.count++;
+    next();
   }
-}
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Apply global middleware
+  app.use(sanitizeRequest);
+  app.use(rateLimitMiddleware);
+
   // Configure CORS
   app.use(cors({
     origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
@@ -300,6 +345,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Protected routes
   app.use("/api", authMiddleware);
+
+  // Apply route-specific middleware
+  app.post("/api/users", validateInput(insertUserSchema), authMiddleware);
+  app.post("/api/person-info", validateInput(insertPersonInfoSchema), authMiddleware);
+  app.post("/api/master-data", validateInput(insertMasterDataSchema), authMiddleware);
+  app.post("/api/documents", validateInput(insertDocumentSchema), authMiddleware);
+  app.post("/api/service-case-notes", validateInput(insertServiceCaseNoteSchema), authMiddleware);
+  app.post("/api/client-services", validateInput(insertClientServiceSchema), authMiddleware);
+  app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
 
   // Master data routes
   app.post("/api/master-data", async (req: Request, res: Response) => {
@@ -912,13 +966,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(409).json({ message: "Username already exists" });
         }
 
-        // Hash password using the helper function
+        // Create user using AuthService to ensure bcrypt is used
         console.log("Creating new user with username:", validatedData.username);
-        const hashedPassword = hashPassword(validatedData.password);
-        const user = await dbStorage.createUser({ 
+        const user = await AuthService.createUser({ 
           name: validatedData.name,
           username: validatedData.username, 
-          password: hashedPassword, 
+          password: validatedData.password,
           role: validatedData.role 
         });
         

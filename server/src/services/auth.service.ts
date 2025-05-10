@@ -1,9 +1,11 @@
-import crypto from "crypto";
+import bcrypt from "bcrypt";
 import { storage } from "../../storage";
 
+const SALT_ROUNDS = 10;
+
 export class AuthService {
-  static hashPassword(password: string): string {
-    return crypto.createHash("sha256").update(password).digest("hex");
+  static async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, SALT_ROUNDS);
   }
 
   static async validateUser(username: string, password: string) {
@@ -14,8 +16,7 @@ export class AuthService {
         return null;
       }
 
-      const hashedPassword = this.hashPassword(password);
-      const isValid = user.password === hashedPassword;
+      const isValid = await bcrypt.compare(password, user.password);
       console.log('Password validation:', isValid ? 'successful' : 'failed');
 
       if (!isValid) {
@@ -50,7 +51,7 @@ export class AuthService {
   static async createUser(userData: { name: string, username: string, password: string, role: string }) {
     return await storage.createUser({
       ...userData,
-      password: this.hashPassword(userData.password)
+      password: await this.hashPassword(userData.password)
     });
   }
 }
