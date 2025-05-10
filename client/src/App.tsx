@@ -17,7 +17,8 @@ import Company from "@/pages/company";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
-import { Loading } from "@/components/ui/loading";
+import { Loader2 } from "lucide-react";
+
 
 interface AuthData {
   authenticated: boolean;
@@ -52,8 +53,15 @@ function PrivateRoute({ component: Component, ...rest }: any) {
     }
   }, [authData, isLoading, setLocation]);
 
-  if (isLoading) {
-    return <Loading text="Loading..." />;
+
+  if (isAuthenticated === null) {
+    // Loading state
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+
   }
 
   if (!authData?.authenticated) {
@@ -90,7 +98,12 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }, [authData]);
 
   if (loading) {
-    return <Loading text="Loading..." />;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+
   }
 
   if (!authData?.user || authData.user.role !== "admin") {
@@ -137,6 +150,9 @@ function Router() {
       <Route path="/company">
         <AdminRoute component={Company} />
       </Route>
+
+      {/* Fallback to 404 */}
+
       <Route component={NotFound} />
     </Switch>
   );

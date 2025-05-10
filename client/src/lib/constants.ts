@@ -17,29 +17,48 @@ export const ROUTES = {
     DOCUMENT_UPLOAD: '/document-upload'
 };
 
-// Status constants
-export const CLIENT_STATUSES = {
-  NEW: "New",
-  ACTIVE: "Active",
-  PAUSED: "Paused",
-  CLOSED: "Closed",
+
+// Status configurations
+export const STATUS_CONFIGS = {
+  Active: {
+    label: "Active",
+    color: "bg-green-100 text-green-800",
+    badge: "default",
+    order: 0
+  },
+  New: {
+    label: "New",
+    color: "bg-blue-100 text-blue-800",
+    badge: "secondary",
+    order: 1
+  },
+  "In Progress": {
+    label: "In Progress",
+    color: "bg-green-100 text-green-800",
+    badge: "default",
+    order: 2
+  },
+  Paused: {
+    label: "Paused",
+    color: "bg-amber-100 text-amber-800",
+    badge: "secondary",
+    order: 3
+  },
+  Closed: {
+    label: "Closed",
+    color: "bg-gray-100 text-gray-800",
+    badge: "secondary",
+    order: 4
+  }
 } as const;
 
-export const SERVICE_STATUSES = {
-  PLANNED: "Planned",
-  IN_PROGRESS: "In Progress",
-  CLOSED: "Closed",
-} as const;
+export type StatusType = keyof typeof STATUS_CONFIGS;
 
-export const STATUS_STYLES = {
-  [CLIENT_STATUSES.ACTIVE]: "bg-green-100 text-green-800",
-  [CLIENT_STATUSES.NEW]: "bg-blue-100 text-blue-800",
-  [CLIENT_STATUSES.PAUSED]: "bg-amber-100 text-amber-800",
-  [CLIENT_STATUSES.CLOSED]: "bg-gray-100 text-gray-800",
-  [SERVICE_STATUSES.PLANNED]: "bg-blue-100 text-blue-800",
-  [SERVICE_STATUSES.IN_PROGRESS]: "bg-green-100 text-green-800",
-  [SERVICE_STATUSES.CLOSED]: "bg-gray-100 text-gray-800",
-} as const;
+export const getStatusConfig = (status: string) => {
+  return STATUS_CONFIGS[status as StatusType] || STATUS_CONFIGS.Closed;
+};
 
-export type ClientStatus = typeof CLIENT_STATUSES[keyof typeof CLIENT_STATUSES];
-export type ServiceStatus = typeof SERVICE_STATUSES[keyof typeof SERVICE_STATUSES];
+export const getStatusBadgeColors = (status: string) => {
+  return getStatusConfig(status).color;
+};
+

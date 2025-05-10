@@ -8,7 +8,10 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loading, ButtonLoading } from "@/components/ui/loading";
+
+import { Loader2 } from "lucide-react";
+import { ErrorDisplay } from "@/components/ui/error-display";
+
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -16,7 +19,7 @@ const changePasswordSchema = z.object({
   confirmPassword: z.string().min(6, "Please confirm your new password")
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "New passwords do not match",
-  path: ["confirmPassword"],
+  path: ["confirmPassword"]
 });
 
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
@@ -24,6 +27,8 @@ type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 export default function Settings() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const form = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: {
@@ -35,6 +40,7 @@ export default function Settings() {
 
   const handleChangePassword = async (values: ChangePasswordFormValues) => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/change-password", {
         method: "POST",
@@ -48,7 +54,7 @@ export default function Settings() {
       toast({ title: "Success", description: "Password changed successfully" });
       form.reset();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -56,14 +62,21 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="container mx-auto py-8 max-w-lg">
-        <Card>
+      <div className="container py-6">
+        <Card className="max-w-md mx-auto">
           <CardHeader>
-            <CardTitle>Settings</CardTitle>
+            <CardTitle>Change Password</CardTitle>
           </CardHeader>
           <CardContent>
+            {error && (
+              <ErrorDisplay
+                title="Password Change Failed"
+                message={error}
+                className="mb-4"
+              />
+            )}
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleChangePassword)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(handleChangePassword)} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="currentPassword"
@@ -71,7 +84,7 @@ export default function Settings() {
                     <FormItem>
                       <FormLabel>Current Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} required />
+                        <Input type="password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -84,7 +97,7 @@ export default function Settings() {
                     <FormItem>
                       <FormLabel>New Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} required />
+                        <Input type="password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -97,7 +110,7 @@ export default function Settings() {
                     <FormItem>
                       <FormLabel>Confirm New Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} required />
+                        <Input type="password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -105,7 +118,11 @@ export default function Settings() {
                 />
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? (
-                    <ButtonLoading text="Changing password..." />
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Changing Password...
+                    </>
+
                   ) : (
                     "Change Password"
                   )}

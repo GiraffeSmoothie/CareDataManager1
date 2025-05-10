@@ -14,29 +14,17 @@ import { getQueryFn } from "@/lib/queryClient";
 import { Loader2, Users, Activity } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SimpleBarChart } from "@/components/ui/chart";
-import { DataTable } from "@/components/ui/data-table";
-import { SERVICE_STATUSES, CLIENT_STATUSES, STATUS_STYLES, type ServiceStatus } from "@/lib/constants";
-import { Loading } from "@/components/ui/loading";
-import { Error } from "@/components/ui/error";
+import { Input } from "@/components/ui/input";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS } from "@/lib/constants";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
-interface DashboardMember extends PersonInfo {
-  clientService?: ClientService;
-}
-
-interface DashboardStatistics {
-  totalClients: number;
-  activeClients: number;
-  hcpLevelStats: Record<string, number>;
-  serviceStatusStats: Record<string, number>;
-}
+type CombinedClientData = PersonInfo & { clientService?: ClientService };
 
 export default function Dashboard() {
-  const [statistics, setStatistics] = useState<DashboardStatistics>({
-    totalClients: 0,
-    activeClients: 0,
-    hcpLevelStats: {},
-    serviceStatusStats: {},
-  });
+  const [combinedData, setCombinedData] = useState<Array<CombinedClientData>>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
 
   // Queries
   const { data: persons = [], isLoading: isLoadingPersons, error: personsError } = useQuery<PersonInfo[]>({
@@ -150,6 +138,60 @@ export default function Dashboard() {
     value: count
   }));
 
+  const columns: DataTableColumnDef<CombinedClientData>[] = [
+    {
+      accessorKey: "firstName",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="font-medium">
+          {row.original.title} {row.original.firstName} {row.original.lastName}
+        </span>
+      )
+    },
+    {
+      accessorKey: "hcpLevel",
+      header: "HCP Level",
+      cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : 'Unassigned'
+    },
+    {
+      accessorKey: "hcpStartDate",
+      header: "HCP Start Date - End Date",
+      cell: ({ row }) => (
+        <>
+          {row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : 'Not set'}
+          {row.original.hcpStartDate && ' - '}
+          {row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : ''}
+        </>
+      )
+    },
+    {
+      accessorKey: "clientService.serviceDays",
+      header: "Service Days",
+      cell: ({ row }) => row.original.clientService?.serviceDays?.join(', ') || 'Not set'
+    },
+    {
+      accessorKey: "clientService.serviceHours",
+      header: "Service Hours",
+      cell: ({ row }) => row.original.clientService?.serviceHours ? `${row.original.clientService.serviceHours} hours` : 'Not set'
+    },
+    {
+      accessorKey: "clientService.status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.original.clientService?.status || 'Not Assigned';
+        const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] || STATUS_CONFIGS.Closed;
+        return (
+          <Badge 
+            variant={config.badge}
+            className={config.color}
+          >
+            {status}
+          </Badge>
+        );
+      }
+    }
+  ];
+
   if (isLoadingPersons || isLoadingServices) {
     return (
       <AppLayout>
@@ -161,11 +203,16 @@ export default function Dashboard() {
   if (personsError || servicesError) {
     return (
       <AppLayout>
-        <Error 
-          variant="card"
-          fullPage
-          message={personsError?.message || servicesError?.message || "There was an error loading the dashboard data."}
-        />
+
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay 
+            variant="card"
+            title="Error Loading Dashboard"
+            message={personsError?.message || servicesError?.message || "There was an error loading the dashboard data."}
+            className="max-w-md"
+          />
+        </div>
+
       </AppLayout>
     );
   }
@@ -224,10 +271,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <DataTable
+
+              data={filteredMembers}
               columns={columns}
-              data={members.filter(m => m.status === 'Active')}
-              searchKey="firstName"
-              searchPlaceholder="Search clients..."
+              searchPlaceholder="Search active clients..."
+
             />
           </CardContent>
         </Card>

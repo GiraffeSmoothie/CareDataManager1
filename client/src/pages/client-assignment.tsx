@@ -11,15 +11,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DataTable } from "@/components/ui/data-table";
+
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
-import { SERVICE_STATUSES } from "@/lib/constants";
-import { Error } from "@/components/ui/error";
+
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS } from "@/lib/constants";
+
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -273,69 +276,85 @@ export default function ClientAssignment() {
     `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Define columns for services table
-  const columns: ColumnDef<ClientService>[] = [
+
+  const statusOptions = Object.keys(STATUS_CONFIGS)
+    .filter(status => ["Active", "Paused", "In Progress", "Closed"].includes(status));
+
+  const columns: DataTableColumnDef<ClientService>[] = [
     {
       accessorKey: "serviceCategory",
-      header: "Category",
+      header: "Category"
     },
     {
       accessorKey: "serviceType",
-      header: "Type",
+      header: "Type"
     },
     {
       accessorKey: "serviceProvider",
-      header: "Provider",
+      header: "Provider"
+
     },
     {
       accessorKey: "serviceStartDate",
       header: "Start Date",
-      cell: ({ row }) => new Date(row.getValue("serviceStartDate")).toLocaleDateString(),
+
+      cell: ({ row }) => new Date(row.original.serviceStartDate).toLocaleDateString()
+
     },
     {
       accessorKey: "serviceDays",
       header: "Days",
-      cell: ({ row }) => (row.getValue("serviceDays") as string[]).join(", "),
+
+      cell: ({ row }) => row.original.serviceDays.join(", ")
     },
     {
       accessorKey: "serviceHours",
-      header: "Hours",
+      header: "Hours"
+
     },
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <Select
-          value={row.getValue("status")}
-          onValueChange={async (value) => {
-            try {
-              await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
-                status: value
-              });
-              await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
-              toast({
-                title: "Success",
-                description: "Service status updated",
-              });
-            } catch (error) {
-              toast({
-                title: "Error",
-                description: "Failed to update status",
-                variant: "destructive",
-              });
-            }
-          }}
-        >
-          <SelectTrigger className="w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.values(SERVICE_STATUSES).map(status => (
-              <SelectItem key={status} value={status}>{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ),
+
+      cell: ({ row }) => {
+        const status = row.original.status || 'Not Assigned';
+        const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] || STATUS_CONFIGS.Closed;
+        return (
+          <Select
+            value={row.original.status}
+            onValueChange={async (value) => {
+              try {
+                await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
+                  status: value
+                });
+                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+                toast({
+                  title: "Success",
+                  description: "Service status updated",
+                });
+              } catch (error) {
+                toast({
+                  title: "Error",
+                  description: "Failed to update status",
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            <SelectTrigger className={cn("w-[130px]", config.color)}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      }
+
     },
     {
       id: "caseNotes",
@@ -351,27 +370,15 @@ export default function ClientAssignment() {
         >
           View/Edit Notes
         </Button>
-      ),
-    },
-  ];
 
-  if (servicesError) {
-    return (
-      <AppLayout>
-        <Error
-          variant="card"
-          fullPage
-          title="Error Loading Data"
-          message={servicesError?.message || "Failed to load client assignment data"}
-        />
-      </AppLayout>
-    );
-  }
+      )
+    }
+  ];
 
   return (
     <AppLayout>
-      <div className="container mx-auto py-6">
-        {/* Search Section */}
+      <div className="container mx-auto p-4">
+
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -420,13 +427,21 @@ export default function ClientAssignment() {
               <CardTitle>Client Services</CardTitle>
             </CardHeader>
             <CardContent>
-              {isServicesLoading && <div>Loading assigned services...</div>}
-              <DataTable
-                columns={columns}
-                data={clientServices}
-                searchKey="serviceCategory"
-                searchPlaceholder="Search services..."
-              />
+
+              {isServicesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : servicesError ? (
+                <div className="text-red-500">Error loading services: {servicesError.message}</div>
+              ) : (
+                <DataTable
+                  data={clientServices}
+                  columns={columns}
+                  searchPlaceholder="Search services..."
+                />
+              )}
+
             </CardContent>
           </Card>
         )}

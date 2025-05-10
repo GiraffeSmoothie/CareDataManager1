@@ -7,6 +7,7 @@ export type User = {
   password: string;
   role: string;
   name: string;
+  company_id?: number;
 };
 
 export type PersonInfo = {
@@ -92,7 +93,8 @@ export type Company = {
   company_id: number;
   company_name: string;
   registered_address: string;
-  postal_address?: string;
+  postal_address: string;
+
   contact_person_name: string;
   contact_person_phone: string;
   contact_person_email: string;
@@ -100,14 +102,7 @@ export type Company = {
   created_by?: number;
 };
 
-export type CompanySegment = {
-  segment_id: number;
-  company_id: number;
-  segment_name: string;
-  company_name: string;
-  created_at?: Date;
-  created_by?: number;
-};
+
 
 // Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
@@ -115,6 +110,7 @@ export const insertUserSchema = z.object({
   password: z.string().min(1, "Password is required"),
   name: z.string().min(1, "Name is required"),
   role: z.enum(["admin", "user"]).default("user"),
+  company_id: z.number().optional(),
 });
 
 export const insertPersonInfoSchema = z.object({
@@ -197,14 +193,14 @@ export const insertMasterDataSchema = z.object({
   createdBy: z.number().optional(),
 });
 
-export const insertSegmentSchema = z.object({
-  company_name: z.string({ required_error: "Company name is required" }),
-  segment_name: z.string({ required_error: "Segment name is required" }),
+
+export const insertCompanySchema = z.object({
+  company_name: z.string().min(1, "Company name is required"),
+  registered_address: z.string().min(1, "Registered address is required"),
+  postal_address: z.string().min(1, "Postal address is required"),
+  contact_person_name: z.string().min(1, "Contact person name is required"),
+  contact_person_phone: z.string().min(1, "Contact person phone is required"),
+  contact_person_email: z.string().email("Invalid email address"),
   created_by: z.number().optional()
 });
 
-export const insertCompanySegmentSchema = z.object({
-  company_name: z.string().min(1, "Company name is required"),
-  segment_name: z.string().min(1, "Segment name is required"),
-  created_by: z.number()
-});

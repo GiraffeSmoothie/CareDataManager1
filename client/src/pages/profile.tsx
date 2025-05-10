@@ -6,8 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loading } from "@/components/ui/loading";
-import { Error } from "@/components/ui/error";
+import { Loader2 } from "lucide-react";
+
 
 export default function Profile() {
   // Fetch user data from the auth status endpoint
@@ -23,20 +23,11 @@ export default function Profile() {
   if (isLoading) {
     return (
       <AppLayout>
-        <Loading text="Loading profile..." />
-      </AppLayout>
-    );
-  }
 
-  if (error) {
-    return (
-      <AppLayout>
-        <Error
-          variant="card"
-          fullPage
-          title="Failed to Load Profile"
-          message={error instanceof Error ? error.message : "Could not load your profile information"}
-        />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+
       </AppLayout>
     );
   }

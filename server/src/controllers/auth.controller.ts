@@ -1,79 +1,61 @@
 import { Request, Response, NextFunction } from 'express';
-import { storage } from '../../storage';  // Fixed path to point to server root
-import { ValidationError, AuthenticationError } from '../middleware/error';
-import { z } from 'zod';
-
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required")
-});
+import { ApiError } from '../types/error';
+import { AuthService } from '../services/auth.service';
 
 export class AuthController {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const validatedData = loginSchema.parse(req.body);
+      const { username, password } = req.body;
       
-      const user = await storage.getUserByUsername(validatedData.username);
-      if (!user || !(await storage.verifyPassword(validatedData.username, validatedData.password))) {
-        throw new AuthenticationError("Invalid username or password");
+      if (!username || !password) {
+        throw new ApiError(400, "Missing credentials", null, "MISSING_CREDENTIALS");
       }
 
-      // Set user session
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        role: user.role
-      };
+      const user = await AuthService.validateUser(username, password);
+      if (!user) {
+        throw new ApiError(401, "Invalid credentials", null, "INVALID_CREDENTIALS");
+      }
 
-      return res.status(200).json({
-        status: 'success',
-        data: {
-          id: user.id,
-          username: user.username,
-          role: user.role
-        }
-      });
+      req.session.user = user;
+      return res.json({ success: true, user });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return next(new ValidationError(error.errors[0].message));
-      }
+      console.error("Login error:", error);
       next(error);
     }
   }
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
+      if (!req.session?.user) {
+        throw new ApiError(401, "Not authenticated", null, "NOT_AUTHENTICATED");
+      }
+
       req.session.destroy((err) => {
         if (err) {
-          throw new Error("Failed to logout");
+          throw new ApiError(500, "Failed to logout", err, "LOGOUT_FAILED");
         }
-        res.clearCookie("connect.sid");
-        res.status(200).json({ status: 'success', message: "Logged out successfully" });
+        res.status(200).json({ success: true });
+
       });
     } catch (error) {
       next(error);
     }
   }
 
-  async getCurrentUser(req: Request, res: Response, next: NextFunction) {
+
+  async validateSession(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.session.user) {
-        throw new AuthenticationError();
+      if (!req.session?.user) {
+        throw new ApiError(401, "Session expired", null, "SESSION_EXPIRED");
       }
-
-      const user = await storage.getUserById(req.session.user.id);
+      
+      const user = await AuthService.getUserById(req.session.user.id);
       if (!user) {
-        throw new AuthenticationError("User session is invalid");
+        throw new ApiError(401, "Invalid session", null, "INVALID_SESSION");
       }
 
-      return res.status(200).json({
-        status: 'success',
-        data: {
-          id: user.id,
-          username: user.username,
-          role: user.role
-        }
-      });
+      res.json({ user });
+
     } catch (error) {
       next(error);
     }

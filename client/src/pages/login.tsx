@@ -9,6 +9,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -152,7 +154,14 @@ export default function Login() {
               />
 
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign in"}
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Signing in...</span>
+                  </div>
+                ) : (
+                  "Sign in"
+                )}
               </Button>
             </form>
           </Form>

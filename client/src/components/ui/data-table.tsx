@@ -1,14 +1,20 @@
-import * as React from "react";
+
+import { useState } from "react";
+
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
+
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  getFilteredRowModel,
+  ColumnFiltersState,
   SortingState,
 } from "@tanstack/react-table";
+import { Input } from "./input";
+
 import {
   Table,
   TableBody,
@@ -16,26 +22,28 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronUp } from "lucide-react";
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
-  data: TData[];
-  searchKey?: string;
+} from "./table";
+import { Button } from "./button";
+
+interface DataTableProps<T extends object> {
+  data: T[];
+  columns: ColumnDef<T>[];
   searchPlaceholder?: string;
+  searchColumn?: string;
 }
 
-export function DataTable<TData, TValue>({
-  columns,
+export type DataTableColumnDef<T extends object> = ColumnDef<T>;
+
+export function DataTable<T extends object>({
   data,
-  searchKey,
-  searchPlaceholder = "Filter records...",
-}: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = React.useState("");
+  columns,
+  searchPlaceholder = "Search...",
+  searchColumn,
+}: DataTableProps<T>) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
 
   const table = useReactTable({
     data,
@@ -44,26 +52,29 @@ export function DataTable<TData, TValue>({
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     state: {
       sorting,
-      globalFilter,
+      columnFilters,
     },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
   });
 
   return (
-    <div className="space-y-4">
-      {searchKey && (
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder={searchPlaceholder}
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
-      )}
+    <div>
+      <div className="flex items-center py-4">
+        <Input
+          placeholder={searchPlaceholder}
+          value={(table.getColumn(searchColumn || columns[0].id || "")?.getFilterValue() as string) ?? ""}
+          onChange={(event) =>
+            table.getColumn(searchColumn || columns[0].id || "")?.setFilterValue(event.target.value)
+          }
+          className="max-w-sm"
+        />
+      </div>
+      
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -72,59 +83,54 @@ export function DataTable<TData, TValue>({
                 {headerGroup.headers.map((header) => (
                   <TableHead 
                     key={header.id}
-                    className={header.column.getCanSort() ? "cursor-pointer select-none" : ""}
+
+                    className="cursor-pointer"
                     onClick={header.column.getToggleSortingHandler()}
                   >
-                    <div className="flex items-center gap-2">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                      {header.column.getCanSort() && (
-                        <div className="w-4">
-                          {header.column.getIsSorted() === "asc" ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : header.column.getIsSorted() === "desc" ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+                    {{ asc: ' 🔼', desc: ' 🔽' }[header.column.getIsSorted() as string] ?? null}
+
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+
+            {table.getRowModel().rows?.length ? (
+
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
+
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
+
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No results found.
+
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between">
+
+
+      <div className="flex items-center justify-between space-x-2 py-4">
         <div className="text-sm text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
+          Page {table.getState().pagination.pageIndex + 1} of{' '}
+
           {table.getPageCount()}
         </div>
         <div className="flex items-center space-x-2">

@@ -1,129 +1,100 @@
 import { Request, Response, NextFunction } from 'express';
-import { storage } from '../../storage';
-import { ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../middleware/error';
-import { insertUserSchema } from '@shared/schema';
+import { storage as dbStorage } from '../../storage';
+import { ApiError } from '../types/error';
 import { z } from 'zod';
 
-const updatePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(6, "New password must be at least 6 characters"),
-  confirmPassword: z.string().min(1, "Confirm password is required")
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
+const userUpdateSchema = z.object({
+  name: z.string().optional(),
+  password: z.string().optional(),
+  role: z.enum(['admin', 'user']).optional(),
+  company_id: z.number().optional()
 });
 
 export class UserController {
-  async getAllUsers(req: Request, res: Response, next: NextFunction) {
+  async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
-      // Only admin can list all users
-      if (req.user?.role !== 'admin') {
-        throw new ForbiddenError('Admin access required');
+      const users = await dbStorage.getAllUsers();
+      if (!users) {
+        throw new ApiError(404, "No users found", null, "NOT_FOUND");
       }
-
-      const users = await storage.getAllUsers();
-      return res.status(200).json({
-        status: 'success',
-        data: users
-      });
+      res.json(users);
     } catch (error) {
-      next(error);
-    }
-  }
-
-  async createUser(req: Request, res: Response, next: NextFunction) {
-    try {
-      // Only admin can create users
-      if (req.user?.role !== 'admin') {
-        throw new ForbiddenError('Admin access required');
-      }
-
-      const validatedData = insertUserSchema.parse(req.body);
-      
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(validatedData.username);
-      if (existingUser) {
-        throw new ConflictError('Username already exists');
-      }
-
-      const user = await storage.createUser(validatedData);
-      
-      return res.status(201).json({
-        status: 'success',
-        data: {
-          id: user.id,
-          username: user.username,
-          role: user.role
-        }
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return next(new ValidationError(error.errors[0].message));
-      }
-      next(error);
-    }
-  }
-
-  async updatePassword(req: Request, res: Response, next: NextFunction) {
-    try {
-      const validatedData = updatePasswordSchema.parse(req.body);
-      const userId = req.user?.id;
-
-      if (!userId) {
-        throw new ValidationError('User ID is required');
-      }
-
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        throw new NotFoundError('User not found');
-      }
-
-      // Verify current password
-      const isValidPassword = await storage.verifyPassword(user.username, validatedData.currentPassword);
-      if (!isValidPassword) {
-        throw new ValidationError('Current password is incorrect');
-      }
-
-      // Update password
-      await storage.updateUserPassword(userId, validatedData.newPassword);
-
-      return res.status(200).json({
-        status: 'success',
-        message: 'Password updated successfully'
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return next(new ValidationError(error.errors[0].message));
-      }
       next(error);
     }
   }
 
   async getUserById(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        throw new ValidationError('Invalid user ID');
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
       }
 
-      // Users can only view their own profile unless they're an admin
-      if (req.user?.role !== 'admin' && req.user?.id !== userId) {
-        throw new ForbiddenError('Access denied');
-      }
-
-      const user = await storage.getUserById(userId);
+      const user = await dbStorage.getUserById(id);
       if (!user) {
-        throw new NotFoundError('User not found');
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
       }
 
-      return res.status(200).json({
-        status: 'success',
-        data: {
-          id: user.id,
-          username: user.username,
-          role: user.role
-        }
-      });
+      res.json(user);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
+  async updateUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
+      }
+
+      // Validate request body against schema
+      const validatedData = userUpdateSchema.parse(req.body);
+
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(id);
+      if (!existingUser) {
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
+      }
+
+      // Check permissions
+      if (req.session?.user?.role !== 'admin' && req.session?.user?.id !== id) {
+        throw new ApiError(403, "Insufficient permissions", null, "FORBIDDEN");
+      }
+
+      const updatedUser = await dbStorage.updateUser(id, validatedData);
+      res.json(updatedUser);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        next(new ApiError(400, "Invalid user data", error.errors, "VALIDATION_ERROR"));
+      } else {
+        next(error);
+      }
+    }
+  }
+
+  async deleteUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
+      }
+
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(id);
+      if (!existingUser) {
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
+      }
+
+      // Check permissions
+      if (req.session?.user?.role !== 'admin') {
+        throw new ApiError(403, "Admin access required", null, "FORBIDDEN");
+      }
+
+      await dbStorage.deleteUser(id);
+      res.status(200).json({ success: true });
+
     } catch (error) {
       next(error);
     }

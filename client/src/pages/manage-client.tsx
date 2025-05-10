@@ -8,10 +8,11 @@ import { insertPersonInfoSchema, type PersonInfo, CompanySegment } from "@shared
 import { apiRequest } from "../lib/queryClient";
 import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
-import { Search } from "lucide-react";
-import { DataTable } from "@/components/ui/data-table";
-import { CLIENT_STATUSES, STATUS_STYLES, type ClientStatus } from "@/lib/constants";
-import { Loading, ButtonLoading } from "@/components/ui/loading";
+import { Loader2, Plus } from "lucide-react";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
+import { ErrorDisplay } from "@/components/ui/error-display";
+
 
 import {
   Form,
@@ -30,19 +31,22 @@ import {
   CardTitle 
 } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
+import { cn } from "../lib/utils";
+
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
@@ -68,23 +72,52 @@ const personInfoSchema = insertPersonInfoSchema.extend({
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
 
 export default function ManageClient() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [useHomeAddress, setUseHomeAddress] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
+
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<PersonInfo | null>(null);
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Queries
-  const { data: clients = [], isLoading, error } = useQuery<PersonInfo[]>({
+
+  // Fetch all members
+  const { data: members = [], isLoading, error } = useQuery<PersonInfo[]>({
+
     queryKey: ["/api/person-info"],
   });
 
-  const { data: segments = [] } = useQuery<CompanySegment[]>({
-    queryKey: ["/api/company-segments"],
-  });
 
-  // Form setup
-  const form = useForm({
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay
+            variant="card"
+            title="Error Loading Clients"
+            message={error instanceof Error ? error.message : "Failed to load client data"}
+            className="max-w-md"
+          />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const form = useForm<PersonInfoFormValues>({
+
     resolver: zodResolver(personInfoSchema),
     defaultValues: {
       title: "",
@@ -114,6 +147,14 @@ export default function ManageClient() {
       status: "New", 
     },
   });
+
+
+  // Filter clients based on search term
+  const filteredClients = members.filter(client => 
+    !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
+  );
+
+  // Handle edit client
 
   const handleEdit = (client: PersonInfo) => {
     setEditingClient(client);
@@ -180,104 +221,75 @@ export default function ManageClient() {
   };
 
   const hcpLevels = ["1", "2", "3", "4"];
-  const statusOptions = Object.values(CLIENT_STATUSES);
 
-  const getStatusBadgeColors = (status: string): string => {
-    return STATUS_STYLES[status as ClientStatus] || STATUS_STYLES[CLIENT_STATUSES.CLOSED];
-  };
+  const statusOptions = Object.keys(STATUS_CONFIGS);
 
-  const columns: ColumnDef<PersonInfo>[] = [
+  const columns: DataTableColumnDef<PersonInfo>[] = [
     {
-      id: "name",
+      accessorKey: "firstName",
       header: "Name",
-      cell: ({ row }) => {
-        const data = row.original;
-        return `${data.firstName} ${data.lastName}`;
-      },
+      cell: ({ row }) => `${row.original.firstName} ${row.original.lastName}`
     },
     {
       accessorKey: "email",
-      header: "Email",
+      header: "Email"
     },
     {
       accessorKey: "mobilePhone",
-      header: "Phone",
+      header: "Phone"
+
     },
     {
       accessorKey: "hcpLevel",
       header: "HCP Level",
-      cell: ({ row }) => row.getValue("hcpLevel") ? `Level ${row.getValue("hcpLevel")}` : '-',
+
+      cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : '-'
+
     },
     {
       accessorKey: "hcpStartDate",
       header: "HCP Start Date",
-      cell: ({ row }) => row.getValue("hcpStartDate") ? new Date(row.getValue("hcpStartDate")).toLocaleDateString() : '-',
-    },
-    {
-      accessorKey: "segment_id",
-      header: "Segment",
-      cell: ({ row }) => {
-        const segmentId = row.getValue("segment_id");
-        return segments.find(s => s.segment_id === segmentId)?.segment_name || '-';
-      },
+      cell: ({ row }) => row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : '-'
+
     },
     {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => (
-        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(row.getValue("status") || CLIENT_STATUSES.NEW)}`}>
-          {row.getValue("status") || CLIENT_STATUSES.NEW}
+        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColors(row.original.status || 'New')}`}>
+          {row.original.status || 'New'}
         </span>
-      ),
+      )
+
     },
     {
       id: "actions",
       cell: ({ row }) => (
-        <Button
-          variant="outline"
-          size="sm"
+        <Button 
+          variant="outline" 
+          size="sm" 
+
           onClick={() => handleEdit(row.original)}
         >
           Edit
         </Button>
-      ),
-    },
-  ];
 
-  if (error) {
-    return (
-      <AppLayout>
-        <Error
-          variant="card"
-          fullPage
-          title="Error Loading Users"
-          message={error instanceof Error ? error.message : "Failed to load users data"}
-        />
-      </AppLayout>
-    );
-  }
+      )
+    }
+  ];
 
   return (
     <AppLayout>
-      <div className="container mx-auto py-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
+      <div className="container py-6">
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex justify-between items-center">
               <CardTitle>Clients</CardTitle>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center">
-                <Checkbox 
-                  id="hideInactiveClients" 
-                  checked={hideInactiveClients}
-                  onCheckedChange={(checked) => setHideInactiveClients(!!checked)}
-                />
-                <label
-                  htmlFor="hideInactiveClients"
-                  className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Hide closed and paused clients
-                </label>
+              <div className="flex gap-2">
+                <Button onClick={handleAddNew}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New
+                </Button>
               </div>
               <Button onClick={handleAddNew}>
                 Add New
@@ -285,13 +297,23 @@ export default function ManageClient() {
             </div>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center mb-4">
+              <Checkbox 
+                id="hideInactiveClients" 
+                checked={hideInactiveClients}
+                onCheckedChange={(checked) => setHideInactiveClients(!!checked)}
+              />
+              <label
+                htmlFor="hideInactiveClients"
+                className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Hide closed and paused clients
+              </label>
+            </div>
             <DataTable
+              data={filteredClients}
               columns={columns}
-              data={hideInactiveClients 
-                ? clients.filter(client => client.status !== CLIENT_STATUSES.CLOSED && client.status !== CLIENT_STATUSES.PAUSED)
-                : clients
-              }
-              searchKey="firstName"
+
               searchPlaceholder="Search clients..."
             />
           </CardContent>

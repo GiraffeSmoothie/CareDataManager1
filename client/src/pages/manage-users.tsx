@@ -3,10 +3,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Search, Plus } from "lucide-react";
-import DashboardLayout from "@/layouts/app-layout";
+import { Loader2, Plus, MoreVertical, Edit2 } from "lucide-react";
+import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 import {
   Form,
@@ -21,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { 
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle 
 } from "@/components/ui/card";
@@ -31,7 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -39,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Form validation schema
 const userSchema = z.object({
@@ -46,6 +52,7 @@ const userSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   name: z.string().min(1, "Name is required"),
   role: z.enum(["user", "admin"]).default("user"),
+  company_id: z.number().optional(),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -55,23 +62,20 @@ interface User {
   username: string;
   name: string;
   role: string;
+  company_id?: number;
+}
+
+interface Company {
+  company_id: number;
+  company_name: string;
 }
 
 export default function ManageUsers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  
-  // Add pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof User; direction: 'asc' | 'desc' }>({
-    key: 'username',
-    direction: 'asc'
-  });
-  const itemsPerPage = 10;
 
   // Fetch all users
   const { data: users = [], isLoading, error } = useQuery<User[]>({
@@ -95,6 +99,42 @@ export default function ManageUsers() {
     },
   });
 
+  // Fetch all companies
+  const { data: companies = [], isLoading: isLoadingCompanies, error: companiesError } = useQuery<Company[]>({
+    queryKey: ["companies"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("GET", "/api/companies");
+        if (!response.ok) {
+          throw new Error("Failed to fetch companies");
+        }
+        return response.json();
+      } catch (error: any) {
+        console.error("[client] Error fetching companies:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch companies",
+          variant: "destructive"
+        });
+        throw error;
+      }
+    },
+  });
+
+  if (error || companiesError) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay 
+            variant="card"
+            title="Error Loading Data"
+            message={(error || companiesError) instanceof Error ? (error || companiesError)?.message || "Failed to load data" : "Failed to load data"}
+          />
+        </div>
+      </AppLayout>
+    );
+  }
+
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
     defaultValues: {
@@ -102,37 +142,9 @@ export default function ManageUsers() {
       password: "",
       name: "",
       role: "user",
+      company_id: undefined,
     },
   });
-
-  // Sort and filter users
-  const sortedUsers = [...users].sort((a, b) => {
-    if (sortConfig.direction === 'asc') {
-      return a[sortConfig.key] > b[sortConfig.key] ? 1 : -1;
-    }
-    return a[sortConfig.key] < b[sortConfig.key] ? 1 : -1;
-  });
-
-  const filteredUsers = sortedUsers.filter(user =>
-    searchTerm.length === 0 || 
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const handleSort = (key: keyof User) => {
-    setSortConfig(current => ({
-      key,
-      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-    }));
-  };
 
   const mutation = useMutation({
     mutationFn: async (data: UserFormValues) => {
@@ -154,6 +166,7 @@ export default function ManageUsers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
       toast({
         title: "Success",
         description: isEditing ? "User updated successfully" : "User created successfully"
@@ -180,6 +193,7 @@ export default function ManageUsers() {
       username: user.username,
       name: user.name,
       role: user.role as "user" | "admin",
+      company_id: user.company_id,
       password: "", // Don't populate password field when editing
     });
   };
@@ -191,96 +205,82 @@ export default function ManageUsers() {
     form.reset();
   };
 
+  const columns: DataTableColumnDef<User>[] = [
+    {
+      accessorKey: "username",
+      header: "Username"
+    },
+    {
+      accessorKey: "name",
+      header: "Name"
+    },
+    {
+      accessorKey: "role",
+      header: "Role",
+      cell: ({ row }) => (
+        <span className="capitalize">{row.original.role}</span>
+      )
+    },
+    {
+      accessorKey: "company_id",
+      header: "Company",
+      cell: ({ row }) => {
+        if (!row.original.company_id) {
+          return <span className="text-muted-foreground">No company assigned</span>;
+        }
+        const company = companies.find(c => c.company_id === row.original.company_id);
+        if (!company) {
+          return <span className="text-yellow-600">Unable to find company details</span>;
+        }
+        return <span className="font-medium">{company.company_name}</span>;
+      }
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleEdit(row.original)}>
+              <Edit2 className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+    }
+  ];
+
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container py-6">
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Users</CardTitle>
-              <div className="flex gap-2">
-                <div className="relative flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search users..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <Button onClick={handleAddNew}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New
-                </Button>
-              </div>
+              <Button onClick={handleAddNew}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add New
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoading || isLoadingCompanies ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead onClick={() => handleSort('username')} className="cursor-pointer hover:bg-gray-100">
-                        Username {sortConfig.key === 'username' && (
-                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </TableHead>
-                      <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-gray-100">
-                        Name {sortConfig.key === 'name' && (
-                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </TableHead>
-                      <TableHead onClick={() => handleSort('role')} className="cursor-pointer hover:bg-gray-100">
-                        Role {sortConfig.key === 'role' && (
-                          <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>{user.name}</TableCell>
-                        <TableCell className="capitalize">{user.role}</TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
-                            Edit
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {totalPages > 1 && (
-                  <div className="flex justify-center gap-2 mt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <span className="flex items-center px-4">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                )}
-              </>
+              <DataTable
+                data={users}
+                columns={columns}
+                searchPlaceholder="Search users..."
+                searchColumn="username"
+              />
             )}
           </CardContent>
         </Card>
@@ -364,6 +364,37 @@ export default function ManageUsers() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="company_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
+                      <Select 
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        value={field.value?.toString()}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select company" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {companies.map((company) => (
+                            <SelectItem 
+                              key={company.company_id} 
+                              value={company.company_id.toString()}
+                            >
+                              {company.company_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <Button 
                   type="submit" 
                   className="w-full"
@@ -381,6 +412,6 @@ export default function ManageUsers() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

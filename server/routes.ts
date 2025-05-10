@@ -1,7 +1,25 @@
-import express, { type Express, Request, Response, NextFunction } from "express";
+import express from "express";
+import { Request, Response, NextFunction } from "express";
+import { Session } from "express-session";
+import { AuthService } from "./src/services/auth.service";
+
+// Define session types
+declare module "express-session" {
+  interface Session {
+    user?: {
+      id: string;
+      username: string;
+      role?: string;
+    };
+  }
+}
+
+import { type Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, pool } from "./storage";  // Import storage instance and pool from storage.ts
-import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertSegmentSchema, insertCompanySegmentSchema } from "@shared/schema";
+
+import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
+import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
+
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -15,47 +33,60 @@ import helmet from 'helmet';
 import { BlobStorageService } from "./services/blob-storage.service";
 import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
-import { ValidationError, AuthenticationError, ForbiddenError, NotFoundError, errorHandler } from './src/middleware/error';
+import { errorHandler } from './src/middleware/error';
+import { ApiError } from './src/types/error';
+import { Compay } from "../shared/schema";
+import { Request as ExpressRequest } from "express";
 
-// Base response type for consistent error handling
-interface ApiResponse<T = undefined | Buffer> {
-  message?: string;
-  data?: T;
-}
+// Augment Express Request type
+declare module 'express-session' {
 
-declare module "express-session" {
   interface SessionData {
     user: {
       id: number;
       username: string;
-      role: string; // include role in session
+      role: string;
     };
   }
 }
 
-declare module "express" {
-  interface Request {
-    user?: {
-      id: number;
-      username: string;
-      role: string; // include role in session
-    };
-    memberPath?: string;
-    filePath?: string;
-  }
-}
-
-// Define authenticated request type
-interface AuthenticatedRequest<
-  P = ParamsDictionary,
-  B = any,
-  Q = ParsedQs
-> extends Request<P, any, B, Q> {
+// Type augmentation for Express Request
+interface AuthRequest extends Request {
   user: {
     id: number;
     username: string;
     role: string;
   };
+}
+
+// Base response type for consistent error handling
+interface ApiResponse<T = undefined> {
+  message?: string;
+  data?: T;
+}
+
+interface UserSession {
+  user?: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
+interface CustomSession extends Session {
+  user?: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
+interface TypedRequestBody<T> extends AuthRequest {
+  body: T;
+}
+
+interface TypedRequestParams<T extends ParamsDictionary> extends AuthRequest {
+  params: T;
 }
 
 // Type guard for authenticated requests
@@ -91,29 +122,19 @@ const createHandler = <
 
 // Initialize users if none exist
 async function initializeUsers() {
-
-  console.log("Default admin user created");
-  console.log("Connecting to:", process.env.DATABASE_URL);
-  console.log("Environment:", process.env.NODE_ENV);
-
-  const admin = await storage.getUserByUsername("admin");
+  console.log("Checking for default admin user");
+  const admin = await dbStorage.getUserByUsername("admin");
   if (!admin) {
-    // Create default admin user
-    await storage.createUser({
+    // Create default admin user using AuthService to ensure bcrypt is used
+    await AuthService.createUser({
+
       name: "Default Admin",
       username: "admin",
-      password: hashPassword("password"),
+      password: "password",
       role: "admin"
     });
     console.log("Default admin user created");
-    console.log("Connecting to:", process.env.DATABASE_URL);
-    console.log("Environment:", process.env.NODE_ENV);
   }
-}
-
-// Helper function to hash passwords
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
 }
 
 const PgStore = pgSession(session);
@@ -121,8 +142,85 @@ const PgStore = pgSession(session);
 // Initialize blob storage service
 const blobStorage = new BlobStorageService();
 
+// Input validation middleware
+const validateInput = (schema: z.ZodSchema) => async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validatedBody = await schema.parseAsync(req.body);
+    req.body = validatedBody;
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const validationError = fromZodError(error);
+      return res.status(400).json({ 
+        message: validationError.message,
+        details: validationError.details
+      });
+    }
+    next(error);
+  }
+};
+
+// Request sanitization middleware
+const sanitizeRequest = (req: Request, _res: Response, next: NextFunction) => {
+  const sanitize = (obj: any) => {
+    Object.keys(obj).forEach(key => {
+      if (typeof obj[key] === 'string') {
+        obj[key] = obj[key].replace(/['";]/g, '');
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitize(obj[key]);
+      }
+    });
+  };
+
+  if (req.body) sanitize(req.body);
+  if (req.query) sanitize(req.query);
+  if (req.params) sanitize(req.params);
+  next();
+};
+
+// Rate limiting middleware
+const rateLimit = {
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+};
+
+let requestCounts = new Map<string, { count: number, firstRequest: number }>();
+
+const rateLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const ip = req.ip;
+  const now = Date.now();
+  const windowStart = now - rateLimit.windowMs;
+
+  // Clean up old entries
+  requestCounts.forEach((data, key) => {
+    if (data.firstRequest < windowStart) {
+      requestCounts.delete(key);
+    }
+  });
+
+  // Check current IP
+  const currentCount = requestCounts.get(ip);
+  if (!currentCount) {
+    requestCounts.set(ip, { count: 1, firstRequest: now });
+    next();
+  } else if (currentCount.firstRequest < windowStart) {
+    requestCounts.set(ip, { count: 1, firstRequest: now });
+    next();
+  } else if (currentCount.count >= rateLimit.max) {
+    res.status(429).json({ message: 'Too many requests, please try again later' });
+  } else {
+    currentCount.count++;
+    next();
+  }
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Configure CORS with stricter settings
+  // Apply global middleware
+  app.use(sanitizeRequest);
+  app.use(rateLimitMiddleware);
+
+  // Configure CORS
+
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
       ? process.env.CORS_ORIGIN 
@@ -175,59 +273,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req: Request, res: Response, next) => {
     try {
       const { username, password } = req.body;
-
-      if (!username || !password) {
-        throw new ValidationError("Username and password are required");
-      }
-
-      const user = await storage.getUserByUsername(username);
       
-      if (!user || !(await storage.verifyPassword(username, password))) {
-        throw new AuthenticationError("Invalid username or password");
+      if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Missing credentials" });
       }
 
-      // Set session
+      const user = await AuthService.validateUser(username, password);
+      if (!user) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+
+      }
+
       req.session.user = {
         id: user.id,
         username: user.username,
         role: user.role
       };
-
-      return res.status(200).json({ message: "Login successful" });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/login", async (req: Request, res: Response, next) => {
-    try {
-      const { username, password } = req.body;
-
-      if (!username || !password) {
-        throw new ValidationError("Username and password are required");
-      }
-
-      const user = await storage.getUserByUsername(username);
       
-      if (!user || !(await storage.verifyPassword(username, password))) {
-        throw new AuthenticationError("Invalid username or password");
-      }
-
-      // Set session
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        role: user.role
-      };
-
-      return res.status(200).json({ 
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role
-      });
+      return res.json({ success: true, user });
     } catch (error) {
-      next(error);
+      console.error("Login error:", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+
     }
   });
 
@@ -309,6 +376,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Protected routes
   app.use("/api", authMiddleware);
+
+  // Apply route-specific middleware
+  app.post("/api/users", validateInput(insertUserSchema), authMiddleware);
+  app.post("/api/person-info", validateInput(insertPersonInfoSchema), authMiddleware);
+  app.post("/api/master-data", validateInput(insertMasterDataSchema), authMiddleware);
+  app.post("/api/documents", validateInput(insertDocumentSchema), authMiddleware);
+  app.post("/api/service-case-notes", validateInput(insertServiceCaseNoteSchema), authMiddleware);
+  app.post("/api/client-services", validateInput(insertClientServiceSchema), authMiddleware);
+  app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
 
   // Master data routes
   app.post("/api/master-data", async (req: Request, res: Response, next) => {
@@ -421,15 +497,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        throw new ValidationError("Invalid ID format");
+
+        throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
+
       }
       
       const personInfo = await storage.getPersonInfoById(id);
       if (!personInfo) {
-        throw new NotFoundError("Person info not found");
+        throw new ApiError(404, "Person info not found", null, "NOT_FOUND");
+
       }
       
-      return res.status(200).json(personInfo);
+      res.status(200).json(personInfo);
     } catch (error) {
       next(error);
     }
@@ -441,13 +520,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        throw new ValidationError('Invalid ID provided');
+        throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
+
       }
 
       // First check if the person exists
       const existingPerson = await storage.getPersonInfoById(id);
       if (!existingPerson) {
-        throw new NotFoundError('Person not found');
+        throw new ApiError(404, "Person not found", null, "NOT_FOUND");
+
       }
 
       // Validate the update data
@@ -465,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log("Person updated successfully:", updatedPerson);
-      return res.status(200).json(updatedPerson);
+      res.status(200).json(updatedPerson);
     } catch (error) {
       next(error);
     }
@@ -800,8 +881,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // List all users (admin only)
   app.get("/api/users", adminMiddleware, async (req, res, next) => {
     try {
-      const users = await storage.getAllUsers();
-      return res.status(200).json(users.map(u => ({ id: u.id, name: u.name, username: u.username, role: u.role })));
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        console.log("Request rejected: User is not admin", {
+          userId: user?.id,
+          userRole: user?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+      const users = await dbStorage.getAllUsers();
+      return res.status(200).json(users.map(u => ({ 
+        id: u.id, 
+        name: u.name, 
+        username: u.username, 
+        role: u.role,
+        company_id: u.company_id
+      })));
+
     } catch (err) {
       next(err);
     }
@@ -827,28 +923,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new ValidationError("Username already exists");
         }
 
-        // Hash password using the helper function
+        // Create user using AuthService to ensure bcrypt is used
         console.log("Creating new user with username:", validatedData.username);
-        const hashedPassword = hashPassword(validatedData.password);
-        const user = await storage.createUser({ 
+        const user = await AuthService.createUser({ 
+
           name: validatedData.name,
           username: validatedData.username, 
-          password: hashedPassword, 
-          role: validatedData.role 
+          password: validatedData.password,
+          role: validatedData.role,
+          company_id: validatedData.company_id
         });
         
         console.log("User created successfully:", {
           id: user.id,
           username: user.username,
-          role: user.role
+          role: user.role,
+          company_id: user.company_id
         });
 
-        return res.status(201).json({ 
-          id: user.id, 
-          name: user.name, 
-          username: user.username, 
-          role: user.role 
-        });
+        return res.status(201).json(user);
       } catch (validationError) {
         if (validationError instanceof z.ZodError) {
           const formattedError = fromZodError(validationError);
@@ -889,71 +982,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/companies/:id", adminMiddleware, async (req: Request, res: Response, next) => {
+
+  // Company routes (admin only)
+  type CompanyDeleteRequest = ExpressRequest<{ id: string }> & AuthRequest;
+
+  app.get("/api/companies", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        throw new ValidationError("Invalid ID format");
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
 
-      const updatedCompany = await storage.updateCompany(id, req.body);
-      return res.status(200).json(updatedCompany);
+      const companies = await dbStorage.getAllCompanies();
+      return res.status(200).json(companies);
     } catch (error) {
-      next(error);
+      console.error("Error fetching companies:", error);
+      return res.status(500).json({ message: "Failed to fetch companies" });
     }
   });
 
-  // Company segments routes
-  app.get("/api/company-segments", async (req: Request, res: Response, next) => {
-    try {
-      const segments = await storage.getAllSegments();
-      return res.status(200).json(segments);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/company-segments", adminMiddleware, async (req: Request, res: Response, next) => {
+  app.post("/api/companies", authMiddleware, async (req: AuthRequest & TypedRequestBody<typeof insertCompanySchema._type>, res: Response) => {
     try {
       if (!req.user) {
-        throw new AuthenticationError("User not authenticated");
+        return res.status(401).json({ error: "Unauthorized" });
       }
-      
-      // Validate the request data using the schema
-      const validatedData = insertCompanySegmentSchema.parse({
+      const validatedData = insertCompanySchema.parse(req.body);
+      const company = await dbStorage.createCompany(validatedData);
+      res.status(201).json(company);
+    } catch (error) {
+      console.error("Error creating company:", error);
+      return res.status(500).json({ message: "Failed to create company" });
+    }
+  });
+
+  app.put("/api/companies/:id", authMiddleware, async (
+    req: Request<{ id: string }, any, any> & AuthRequest,
+    res: Response
+  ) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const existingCompany = await dbStorage.getCompanyById(id);
+      if (!existingCompany) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      const validatedData = insertCompanySchema.parse({
         ...req.body,
-        created_by: req.user.id
+        created_by: existingCompany.created_by
       });
-      
-      const createdSegment = await storage.createSegment(validatedData);
-      return res.status(201).json(createdSegment);
+
+      const company = await dbStorage.updateCompany(id, validatedData);
+      return res.status(200).json(company);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const formattedError = fromZodError(error);
-        next(new ValidationError(formattedError.message));
-      } else {
-        next(error);
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
       }
+      console.error("Error updating company:", error);
+      return res.status(500).json({ message: "Failed to update company" });
     }
   });
 
-  app.put("/api/company-segments/:companyId/:segmentId", adminMiddleware, async (req: Request, res: Response, next) => {
+  app.delete("/api/companies/:id", authMiddleware, async (
+    req: CompanyDeleteRequest,
+    res: Response
+  ) => {
     try {
-      const companyId = parseInt(req.params.companyId);
-      const segmentId = parseInt(req.params.segmentId);
-      
-      if (isNaN(companyId) || isNaN(segmentId)) {
-        throw new ValidationError("Invalid ID format");
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
 
-      const updatedSegment = await storage.updateSegment(companyId, segmentId, req.body);
-      return res.status(200).json(updatedSegment);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const existingCompany = await dbStorage.getCompanyById(id);
+      if (!existingCompany) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      await dbStorage.deleteCompany(id);
+      return res.status(200).json({ message: "Company deleted successfully" });
     } catch (error) {
-      next(error);
+      console.error("Error deleting company:", error);
+      return res.status(500).json({ message: "Failed to delete company" });
     }
   });
 
-  // Global error handler - must be last
+  // Add error handling middleware
   app.use(errorHandler);
 
   const httpServer = createServer(app);
@@ -970,14 +1103,6 @@ interface ClientService {
   status: string;
 }
 
-// Extend storage interface with client service methods
-declare module './storage' {
-  interface Storage {
-    getClientServices(): Promise<ClientService[]>;
-    getAllClientServices(): Promise<ClientService[]>;
-    getClientServiceById(id: number): Promise<ClientService | null>;
-  }
-}
 
 // Update PersonInfo interface to include HCP dates
 interface PersonInfo {

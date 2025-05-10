@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { insertPersonInfoSchema } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
-import AppLayout from "@/layouts/app-layout";
+import DashboardLayout from "@/layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { PhoneInput } from "../components/ui/phone-input";
-import { Error } from "@/components/ui/error";
+
+
 
 import {
   Form,
@@ -148,7 +149,9 @@ export default function PersonInfo() {
   };
 
   return (
-    <AppLayout>
+
+    <DashboardLayout>
+
       <div className="container py-10">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
@@ -180,15 +183,16 @@ export default function PersonInfo() {
                     <FormField
                       control={form.control}
                       name="firstName"
-                      render={({ field, fieldState }) => (
+                      render={({ field }) => (
+
                         <FormItem>
                           <FormLabel>First Name</FormLabel>
                           <FormControl>
                             <Input placeholder="First name" {...field} />
                           </FormControl>
-                          {fieldState.error && (
-                            <Error variant="inline" message={fieldState.error.message} />
-                          )}
+
+                          <FormMessage />
+
                         </FormItem>
                       )}
                     />
@@ -503,6 +507,6 @@ export default function PersonInfo() {
           </CardContent>
         </Card>
       </div>
-    </AppLayout>
+    </DashboardLayout>
   );
 }

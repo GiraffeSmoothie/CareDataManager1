@@ -3,7 +3,8 @@ import AppLayout from "@/layouts/app-layout"
 import { useQuery } from "@tanstack/react-query"
 import axios from "axios"
 import { useLocation } from "wouter"
-import { CLIENT_STATUSES, STATUS_STYLES, type ClientStatus } from "@/lib/constants"
+import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
+
 
 interface Member {
   id: number
@@ -31,19 +32,12 @@ export default function Homepage() {
     setLocation(`/client-assignment?clientId=${member.id}&name=${encodeURIComponent(memberName)}`);
   };
 
-  // Get badge colors based on status
-  const getStatusBadgeColors = (status: string): string => {
-    return STATUS_STYLES[status as ClientStatus] || STATUS_STYLES[CLIENT_STATUSES.CLOSED];
-  };
 
-  // Sort members by status order: Active, New, Paused
+  // Sort members by status order from centralized config
   const sortedMembers = members?.sort((a, b) => {
-    const statusOrder: {[key: string]: number} = {
-      [CLIENT_STATUSES.ACTIVE]: 0,
-      [CLIENT_STATUSES.NEW]: 1,
-      [CLIENT_STATUSES.PAUSED]: 2,
-    };
-    return statusOrder[a.status] - statusOrder[b.status];
+    const getOrder = (status: string) => STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS]?.order ?? 999;
+    return getOrder(a.status) - getOrder(b.status);
+
   });
 
   if (isLoading) {
