@@ -7,6 +7,7 @@ export type User = {
   password: string;
   role: string;
   name: string;
+  company_id?: number;
 };
 
 export type PersonInfo = {
@@ -106,6 +107,7 @@ export const insertUserSchema = z.object({
   password: z.string().min(1, "Password is required"),
   name: z.string().min(1, "Name is required"),
   role: z.enum(["admin", "user"]).default("user"),
+  company_id: z.number().optional(),
 });
 
 export const insertPersonInfoSchema = z.object({

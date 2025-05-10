@@ -917,7 +917,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
       const users = await dbStorage.getAllUsers();
-      return res.status(200).json(users.map(u => ({ id: u.id, name: u.name, username: u.username, role: u.role })));
+      return res.status(200).json(users.map(u => ({ 
+        id: u.id, 
+        name: u.name, 
+        username: u.username, 
+        role: u.role,
+        company_id: u.company_id
+      })));
     } catch (err) {
       console.error("Error fetching users:", err);
       console.log ("[API /api/users] Failed to fetch users")
@@ -972,21 +978,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: validatedData.name,
           username: validatedData.username, 
           password: validatedData.password,
-          role: validatedData.role 
+          role: validatedData.role,
+          company_id: validatedData.company_id
         });
         
         console.log("User created successfully:", {
           id: user.id,
           username: user.username,
-          role: user.role
+          role: user.role,
+          company_id: user.company_id
         });
 
-        return res.status(201).json({ 
-          id: user.id, 
-          name: user.name, 
-          username: user.username, 
-          role: user.role 
-        });
+        return res.status(201).json(user);
       } catch (validationError) {
         console.error("Validation error:", validationError);
         if (validationError instanceof z.ZodError) {

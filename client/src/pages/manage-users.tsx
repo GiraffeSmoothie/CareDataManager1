@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, MoreVertical, Edit2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -39,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Form validation schema
 const userSchema = z.object({
@@ -46,6 +52,7 @@ const userSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   name: z.string().min(1, "Name is required"),
   role: z.enum(["user", "admin"]).default("user"),
+  company_id: z.number().optional(),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -55,6 +62,12 @@ interface User {
   username: string;
   name: string;
   role: string;
+  company_id?: number;
+}
+
+interface Company {
+  company_id: number;
+  company_name: string;
 }
 
 export default function ManageUsers() {
@@ -86,14 +99,36 @@ export default function ManageUsers() {
     },
   });
 
-  if (error) {
+  // Fetch all companies
+  const { data: companies = [], isLoading: isLoadingCompanies, error: companiesError } = useQuery<Company[]>({
+    queryKey: ["companies"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("GET", "/api/companies");
+        if (!response.ok) {
+          throw new Error("Failed to fetch companies");
+        }
+        return response.json();
+      } catch (error: any) {
+        console.error("[client] Error fetching companies:", error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch companies",
+          variant: "destructive"
+        });
+        throw error;
+      }
+    },
+  });
+
+  if (error || companiesError) {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <ErrorDisplay 
             variant="card"
-            title="Error Loading Users"
-            message={error instanceof Error ? error.message : "Failed to load users"}
+            title="Error Loading Data"
+            message={(error || companiesError) instanceof Error ? (error || companiesError)?.message || "Failed to load data" : "Failed to load data"}
           />
         </div>
       </AppLayout>
@@ -107,6 +142,7 @@ export default function ManageUsers() {
       password: "",
       name: "",
       role: "user",
+      company_id: undefined,
     },
   });
 
@@ -130,6 +166,7 @@ export default function ManageUsers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
       toast({
         title: "Success",
         description: isEditing ? "User updated successfully" : "User created successfully"
@@ -156,6 +193,7 @@ export default function ManageUsers() {
       username: user.username,
       name: user.name,
       role: user.role as "user" | "admin",
+      company_id: user.company_id,
       password: "", // Don't populate password field when editing
     });
   };
@@ -184,15 +222,36 @@ export default function ManageUsers() {
       )
     },
     {
+      accessorKey: "company_id",
+      header: "Company",
+      cell: ({ row }) => {
+        if (!row.original.company_id) {
+          return <span className="text-muted-foreground">No company assigned</span>;
+        }
+        const company = companies.find(c => c.company_id === row.original.company_id);
+        if (!company) {
+          return <span className="text-yellow-600">Unable to find company details</span>;
+        }
+        return <span className="font-medium">{company.company_name}</span>;
+      }
+    },
+    {
       id: "actions",
       cell: ({ row }) => (
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => handleEdit(row.original)}
-        >
-          Edit
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleEdit(row.original)}>
+              <Edit2 className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )
     }
   ];
@@ -211,7 +270,7 @@ export default function ManageUsers() {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoading || isLoadingCompanies ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
@@ -220,6 +279,7 @@ export default function ManageUsers() {
                 data={users}
                 columns={columns}
                 searchPlaceholder="Search users..."
+                searchColumn="username"
               />
             )}
           </CardContent>
@@ -297,6 +357,37 @@ export default function ManageUsers() {
                         <SelectContent>
                           <SelectItem value="user">User</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="company_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
+                      <Select 
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        value={field.value?.toString()}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select company" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {companies.map((company) => (
+                            <SelectItem 
+                              key={company.company_id} 
+                              value={company.company_id.toString()}
+                            >
+                              {company.company_name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

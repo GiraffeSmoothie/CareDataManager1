@@ -48,7 +48,7 @@ export class AuthService {
     }
   }
 
-  static async createUser(userData: { name: string, username: string, password: string, role: string }) {
+  static async createUser(userData: { name: string; username: string; password: string; role?: string; company_id?: number }) {
     return await storage.createUser({
       ...userData,
       password: await this.hashPassword(userData.password)

@@ -1,17 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
+import { storage as dbStorage } from '../../storage';
 import { ApiError } from '../types/error';
 import { z } from 'zod';
 
 const userUpdateSchema = z.object({
   name: z.string().optional(),
-  email: z.string().email().optional(),
-  role: z.enum(['admin', 'user']).optional()
+  password: z.string().optional(),
+  role: z.enum(['admin', 'user']).optional(),
+  company_id: z.number().optional()
 });
 
 export class UserController {
   async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
-      const users = await dbStorage.getUsers();
+      const users = await dbStorage.getAllUsers();
       if (!users) {
         throw new ApiError(404, "No users found", null, "NOT_FOUND");
       }
@@ -56,7 +58,7 @@ export class UserController {
       }
 
       // Check permissions
-      if (!req.session?.user?.role === 'admin' && req.session?.user?.id !== id) {
+      if (req.session?.user?.role !== 'admin' && req.session?.user?.id !== id) {
         throw new ApiError(403, "Insufficient permissions", null, "FORBIDDEN");
       }
 

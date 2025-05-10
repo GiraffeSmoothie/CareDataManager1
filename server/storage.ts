@@ -43,16 +43,24 @@ console.log('Storage.ts - DATABASE_URL configured:', process.env.DATABASE_URL ? 
 // Better error handling when parsing the connection string
 let connectionOptions;
 try {
-  connectionOptions = parse(process.env.DATABASE_URL || '');
+  const parsed = parse(process.env.DATABASE_URL || '');
+  connectionOptions = {
+    user: parsed.user,
+    host: parsed.host || '',
+    database: parsed.database || '',
+    password: parsed.password,
+    port: parsed.port ? parseInt(parsed.port) : 5432,
+  };
+  
   console.log('Parsed connection options:', {
     user: connectionOptions.user || '',
-    host: connectionOptions.host || '',
+    host: connectionOptions.host,
     database: connectionOptions.database,
     // Not logging password for security reasons
-    port: connectionOptions.port || ''
+    port: connectionOptions.port
   });
   
-  if (!connectionOptions.host || connectionOptions.host === 'base') {
+  if (!connectionOptions.host) {
     throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
   }
 } catch (error) {
@@ -60,14 +68,7 @@ try {
   throw new Error('Invalid DATABASE_URL format. Please check your environment configuration.');
 }
 
-// Ensure password is a string to prevent Pool creation errors
-if (connectionOptions.password && typeof connectionOptions.password !== 'string') {
-  connectionOptions.password = String(connectionOptions.password);
-}
-
-export const pool = new Pool({
-  ...connectionOptions,
-});
+export const pool = new Pool(connectionOptions);
 
 // Add error handling for the pool
 pool.on('error', (err) => {
@@ -186,7 +187,7 @@ export class Storage {
   async getAllUsers(): Promise<User[]> {
     try {
       const result = await this.pool.query(
-        'SELECT id, name, username, role FROM users'
+        'SELECT id, name, username, role, company_id FROM users ORDER BY id'
       );
       return result.rows;
     } catch (error) {
@@ -201,7 +202,7 @@ export class Storage {
     
     try {
       const result = await this.pool.query(
-        'SELECT id, name, username, password, role FROM users WHERE username = $1',
+        'SELECT id, name, username, password, role, company_id FROM users WHERE username = $1',
         [username]
       );
       return result.rows[0] || null;
@@ -217,7 +218,7 @@ export class Storage {
 
     try {
       const result = await this.pool.query(
-        'SELECT id, name, username, role FROM users WHERE id = $1',
+        'SELECT id, name, username, role, company_id FROM users WHERE id = $1',
         [id]
       );
       return result.rows[0] || null;
@@ -276,7 +277,7 @@ export class Storage {
     }
   }
 
-  async createUser(user: { name: string; username: string; password: string; role?: string }): Promise<User> {
+  async createUser(user: { name: string; username: string; password: string; role?: string; company_id?: number }): Promise<User> {
     if (!validateInput(user.name, 'string') || 
         !validateInput(user.username, 'string') || 
         !validateInput(user.password, 'string')) {
@@ -295,14 +296,60 @@ export class Storage {
         }
 
         const result = await client.query(
-          'INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, username, role',
-          [user.name, user.username, user.password, user.role || 'user']
+          'INSERT INTO users (name, username, password, role, company_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, username, role, company_id',
+          [user.name, user.username, user.password, user.role || 'user', user.company_id]
         );
 
         return result.rows[0];
       });
     } catch (error) {
       handleDatabaseError(error, 'createUser');
+    }
+  }
+
+  async updateUser(id: number, data: { name?: string; password?: string; role?: string; company_id?: number }): Promise<User> {
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
+
+    try {
+      const updateFields: string[] = [];
+      const values: any[] = [];
+      let paramCount = 1;
+
+      if (data.name) {
+        updateFields.push(`name = $${paramCount}`);
+        values.push(data.name);
+        paramCount++;
+      }
+      if (data.password) {
+        updateFields.push(`password = $${paramCount}`);
+        values.push(data.password);
+        paramCount++;
+      }
+      if (data.role) {
+        updateFields.push(`role = $${paramCount}`);
+        values.push(data.role);
+        paramCount++;
+      }
+      if (data.company_id !== undefined) {
+        updateFields.push(`company_id = $${paramCount}`);
+        values.push(data.company_id);
+        paramCount++;
+      }
+
+      values.push(id);
+      const query = `
+        UPDATE users 
+        SET ${updateFields.join(', ')} 
+        WHERE id = $${paramCount}
+        RETURNING id, name, username, role, company_id
+      `;
+
+      const result = await this.pool.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'updateUser');
     }
   }
 
