@@ -735,21 +735,7 @@ export class Storage {
         throw new Error('Master data record not found');
 
       }
-    });
-
-    values.push(id);
-    const query = `
-      UPDATE master_data 
-      SET ${updates.join(', ')} 
-      WHERE id = $${paramCount} 
-      RETURNING *
-    `;
-
-    const result = await this.pool.query(query, values);
-    return result.rows[0];
-  }
-
-
+    
       return {
         id: result.rows[0].id,
         serviceCategory: result.rows[0].service_category,
