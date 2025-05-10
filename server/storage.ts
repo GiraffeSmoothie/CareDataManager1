@@ -558,29 +558,39 @@ export class Storage {
           address_line1 = $9, address_line2 = $10, address_line3 = $11,
           post_code = $12, status = $13
         WHERE id = $14
-        RETURNING *
-      `);
-      
-      const result = await this.pool.query(query, [
-        validatedData.title,
-        validatedData.firstName,
-        validatedData.middleName || null,
-        validatedData.lastName,
-        validatedData.dateOfBirth,
-        validatedData.email,
-        validatedData.homePhone || null,
-        validatedData.mobilePhone,
-        validatedData.addressLine1,
-        validatedData.addressLine2 || null,
-        validatedData.addressLine3 || null,
-        validatedData.postCode,
-        validatedData.status || 'Active',
-        id
-      ]);
-      
-      return result.rows[0];
-    });
-  }
+        RETURNING *`);
+        [
+          title,
+          firstName,
+          middleName || '',
+          lastName,
+          dateOfBirth,
+          email,
+          homePhone || '',
+          mobilePhone,
+          addressLine1,
+          addressLine2 || '',
+          addressLine3 || '',
+          postCode,
+          mailingAddressLine1 || '',
+          mailingAddressLine2 || '',
+          mailingAddressLine3 || '',
+          mailingPostCode || '',
+          useHomeAddress,
+          nextOfKinName || '',
+          nextOfKinAddress || '',
+          nextOfKinEmail || '',
+          nextOfKinPhone || '',
+          hcpLevel || '',
+          hcpStartDate || '',
+          status || 'New',
+          id
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error(`Person with ID ${id} not found`);
+      }
 
 
       const row = result.rows[0];
