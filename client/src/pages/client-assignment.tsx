@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import DashboardLayout from "@/layouts/app-layout";
+import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -362,7 +362,7 @@ export default function ClientAssignment() {
   ];
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container mx-auto p-4">
         <Card className="mb-6">
           <CardHeader>
@@ -647,6 +647,6 @@ export default function ClientAssignment() {
           }}
         />
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

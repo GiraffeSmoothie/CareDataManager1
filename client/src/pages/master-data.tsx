@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MasterData as MasterDataType } from "@shared/schema";
 import { Switch } from "@/components/ui/switch";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
-import DashboardLayout from "@/layouts/app-layout";
+import AppLayout from "@/layouts/app-layout";
 import { ErrorDisplay } from "@/components/ui/error-display";
 
 const masterDataSchema = z.object({
@@ -187,7 +187,7 @@ export default function MasterData() {
   ];
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container py-6">
         {error && (
           <ErrorDisplay 
@@ -315,6 +315,6 @@ export default function MasterData() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
-import DashboardLayout from "../layouts/app-layout";
+import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
@@ -84,17 +84,17 @@ export default function ManageClient() {
 
   if (isLoading) {
     return (
-      <DashboardLayout>
+      <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </DashboardLayout>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <DashboardLayout>
+      <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <ErrorDisplay
             variant="card"
@@ -103,7 +103,7 @@ export default function ManageClient() {
             className="max-w-md"
           />
         </div>
-      </DashboardLayout>
+      </AppLayout>
     );
   }
 
@@ -298,7 +298,7 @@ export default function ManageClient() {
   ];
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container py-6">
         <Card className="mb-6">
           <CardHeader>
@@ -779,6 +779,6 @@ export default function ManageClient() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

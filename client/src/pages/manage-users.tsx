@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
-import DashboardLayout from "@/layouts/app-layout";
+import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
@@ -88,13 +88,15 @@ export default function ManageUsers() {
 
   if (error) {
     return (
-      <DashboardLayout>
-        <ErrorDisplay 
-          variant="card"
-          title="Error Loading Users"
-          message={error instanceof Error ? error.message : "Failed to load users"}
-        />
-      </DashboardLayout>
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay 
+            variant="card"
+            title="Error Loading Users"
+            message={error instanceof Error ? error.message : "Failed to load users"}
+          />
+        </div>
+      </AppLayout>
     );
   }
 
@@ -196,7 +198,7 @@ export default function ManageUsers() {
   ];
 
   return (
-    <DashboardLayout>
+    <AppLayout>
       <div className="container py-6">
         <Card>
           <CardHeader>
@@ -319,6 +321,6 @@ export default function ManageUsers() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 }
