@@ -558,7 +558,7 @@ export class Storage {
           address_line1 = $9, address_line2 = $10, address_line3 = $11,
           post_code = $12, status = $13
         WHERE id = $14
-        RETURNING *`);
+        RETURNING *`,
         [
           title,
           firstName,
