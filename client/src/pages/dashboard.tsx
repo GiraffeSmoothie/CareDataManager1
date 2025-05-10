@@ -16,6 +16,7 @@ import { SimpleBarChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS } from "@/lib/constants";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 type CombinedClientData = PersonInfo & { clientService?: ClientService };
 
@@ -163,14 +164,12 @@ export default function Dashboard() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="text-destructive">Error Loading Data</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>{personsError?.message || servicesError?.message || "There was an error loading the dashboard data."}</p>
-            </CardContent>
-          </Card>
+          <ErrorDisplay 
+            variant="card"
+            title="Error Loading Dashboard"
+            message={personsError?.message || servicesError?.message || "There was an error loading the dashboard data."}
+            className="max-w-md"
+          />
         </div>
       </AppLayout>
     );

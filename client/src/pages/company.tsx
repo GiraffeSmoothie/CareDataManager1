@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Plus } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { ErrorDisplay } from "@/components/ui/error-display";
 import {
   Card,
   CardContent,
@@ -14,7 +16,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,7 @@ export default function CompanyPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
@@ -70,13 +72,25 @@ export default function CompanyPage() {
   });
 
   // Fetch companies
-  const { data: companies, isLoading } = useQuery<Company[]>({
+  const { data: companies, isLoading, error: fetchError } = useQuery<Company[]>({
     queryKey: ["companies"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/companies");
       return response.json();
     },
   });
+
+  if (fetchError) {
+    return (
+      <AppLayout>
+        <ErrorDisplay 
+          variant="card"
+          title="Error Loading Companies"
+          message={fetchError instanceof Error ? fetchError.message : "Failed to load companies"}
+        />
+      </AppLayout>
+    );
+  }
 
   // Add/Update company mutation
   const mutation = useMutation({
@@ -97,12 +111,8 @@ export default function CompanyPage() {
         description: `Company ${isEditing ? "updated" : "created"} successfully`,
       });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || `Failed to ${isEditing ? "update" : "create"} company`,
-        variant: "destructive",
-      });
+    onError: (err: any) => {
+      setError(err instanceof Error ? err : new Error(err.message || `Failed to ${isEditing ? "update" : "create"} company`));
     },
   });
 
@@ -171,6 +181,15 @@ export default function CompanyPage() {
   return (
     <AppLayout>
       <div className="container py-6">
+        {error && (
+          <ErrorDisplay 
+            variant="alert"
+            title="Error"
+            message={error.message}
+            className="mb-4"
+            onDismiss={() => setError(null)}
+          />
+        )}
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">

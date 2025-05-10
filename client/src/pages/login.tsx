@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),

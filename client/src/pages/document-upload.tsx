@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
 import { insertDocumentSchema, type PersonInfo, type Document } from "@shared/schema";
+import { ErrorDisplay } from "@/components/ui/error-display";
 import type { z } from "zod";
 
 // Define the type based on the schema
@@ -37,6 +38,7 @@ export default function DocumentUpload() {
   const [showDialog, setShowDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch all members
   const { data: members = [] } = useQuery<PersonInfo[]>({
@@ -131,6 +133,7 @@ export default function DocumentUpload() {
       return await response.json();
     },
     onSuccess: () => {
+      setError(null);
       toast({
         title: "Document uploaded",
         description: "The document has been successfully uploaded",
@@ -160,11 +163,7 @@ export default function DocumentUpload() {
       setShowDialog(false);
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error uploading document",
-        description: error.message,
-        variant: "destructive",
-      });
+      setError(error.message);
     },
   });
 
@@ -185,6 +184,14 @@ export default function DocumentUpload() {
   return (
     <AppLayout>
       <div className="container mx-auto py-6 space-y-6 text-base font-sans">
+        {error && (
+          <ErrorDisplay
+            variant="alert"
+            title="Upload Error"
+            message={error}
+            className="mb-4"
+          />
+        )}
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
             <div className="flex justify-between items-center">

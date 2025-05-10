@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
 import { Button } from "./button";
 import { Textarea } from "./textarea";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { MemberService } from "@shared/schema";
+import { ErrorDisplay } from "./error-display";
 
 export function CaseNotesModal({
   isOpen,
@@ -21,55 +22,23 @@ export function CaseNotesModal({
 }) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [existingNote, setExistingNote] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const noteRef = useRef<HTMLTextAreaElement>(null);
-
-  // Fetch existing case note when modal opens
-  useEffect(() => {
-    if (isOpen && service) {
-      setIsLoading(true);
-      apiRequest("GET", `/api/service-case-notes/${service.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.noteText) {
-            setExistingNote(data.noteText);
-            if (noteRef.current) {
-              noteRef.current.value = data.noteText;
-            }
-          } else {
-            setExistingNote("");
-            if (noteRef.current) {
-              noteRef.current.value = "";
-            }
-          }
-        })
-        .catch(() => {
-          toast({
-            title: "Error",
-            description: "Failed to fetch case notes",
-            variant: "destructive",
-          });
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
+  const handleSubmit = async () => {
+    const notes = textareaRef.current?.value;
+    if (!notes?.trim()) {
+      setError("Please enter case notes");
+      return;
     }
-  }, [isOpen, service, toast]);
 
-  const handleSave = async () => {
-    if (!service || !noteRef.current) return;
+    setIsLoading(true);
+    setError(null);
 
     try {
-      setIsLoading(true);
-      const endpoint = existingNote 
-        ? `/api/service-case-notes/${service.id}` 
-        : "/api/service-case-notes";
-      const method = existingNote ? "PUT" : "POST";
-      
-      const response = await apiRequest(method, endpoint, {
-        serviceId: service.id,
-        noteText: noteRef.current.value,
+      const response = await apiRequest("POST", `/api/service/${service.id}/case-notes`, {
+        notes,
+        serviceId: service.id
       });
 
       if (!response.ok) {
@@ -85,11 +54,7 @@ export function CaseNotesModal({
       }
       onClose();
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save case note",
-        variant: "destructive",
-      });
+      setError(error instanceof Error ? error.message : "Failed to save case note");
     } finally {
       setIsLoading(false);
     }
@@ -103,28 +68,42 @@ export function CaseNotesModal({
             {service ? `Case Notes - ${service.serviceCategory} (${service.serviceType})` : 'Service Case Notes'}
           </DialogTitle>
           <DialogDescription>
-            {service ? `Notes for ${service.serviceCategory} - ${service.serviceType} service provided on ${service.serviceDays.join(", ")} (${service.serviceHours} hrs)` : 'Case Note'}
+            Add case notes for this service. These notes will be saved to the client's record.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <Label htmlFor="case-note">Case Note</Label>
-          <Textarea
-            id="case-note"
-            placeholder="Enter case notes here..."
-            className="min-h-[200px]"
-            ref={noteRef}
+
+        {error && (
+          <ErrorDisplay
+            message={error}
+            className="mb-4"
           />
-          <DialogFooter>
-            <Button
-              onClick={handleSave}
-              className="w-full"
-              disabled={isLoading}
-            >
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Case Note
-            </Button>
-          </DialogFooter>
+        )}
+
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="case-notes">Case Notes</Label>
+            <Textarea
+              id="case-notes"
+              ref={textareaRef}
+              placeholder="Enter case notes here..."
+              className="min-h-[150px]"
+            />
+          </div>
         </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Notes'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

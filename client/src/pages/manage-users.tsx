@@ -8,6 +8,7 @@ import DashboardLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 import {
   Form,
@@ -64,7 +65,7 @@ export default function ManageUsers() {
   const [isEditing, setIsEditing] = useState(false);
 
   // Fetch all users
-  const { data: users = [], isLoading } = useQuery<User[]>({
+  const { data: users = [], isLoading, error } = useQuery<User[]>({
     queryKey: ["users"],
     queryFn: async () => {
       try {
@@ -84,6 +85,18 @@ export default function ManageUsers() {
       }
     },
   });
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorDisplay 
+          variant="card"
+          title="Error Loading Users"
+          message={error instanceof Error ? error.message : "Failed to load users"}
+        />
+      </DashboardLayout>
+    );
+  }
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),

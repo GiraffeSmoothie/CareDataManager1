@@ -10,6 +10,7 @@ import { useToast } from "../hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 import {
   Form,
@@ -76,10 +77,35 @@ export default function ManageClient() {
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
 
   // Fetch all members
-  const { data: members = [] } = useQuery<PersonInfo[]>({
+  const { data: members = [], isLoading, error } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     staleTime: 10000,
   });
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay
+            variant="card"
+            title="Error Loading Clients"
+            message={error instanceof Error ? error.message : "Failed to load client data"}
+            className="max-w-md"
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const form = useForm<PersonInfoFormValues>({
     resolver: zodResolver(personInfoSchema),

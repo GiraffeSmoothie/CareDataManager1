@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { MasterData as MasterDataType } from "@shared/schema";
 import { Switch } from "@/components/ui/switch";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import DashboardLayout from "@/layouts/app-layout";
-import { Loader2 } from "lucide-react";
+import { ErrorDisplay } from "@/components/ui/error-display";
 
 const masterDataSchema = z.object({
   serviceCategory: z.string({ required_error: "Please select a service category" }),
@@ -32,6 +32,7 @@ export default function MasterData() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingData, setEditingData] = useState<MasterDataType | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   // Populate form when editing data changes
   useEffect(() => {
@@ -98,11 +99,7 @@ export default function MasterData() {
       refetch();
     },
     onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save data",
-        variant: "destructive",
-      });
+      setError(error instanceof Error ? error : new Error("Failed to save data"));
     },
   });
 
@@ -138,12 +135,8 @@ export default function MasterData() {
       } else {
         await saveMutation.mutateAsync(data);
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save service",
-        variant: "destructive",
-      });
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Failed to save service"));
     }
   };
 
@@ -196,6 +189,14 @@ export default function MasterData() {
   return (
     <DashboardLayout>
       <div className="container py-6">
+        {error && (
+          <ErrorDisplay 
+            variant="alert"
+            title="Error"
+            message={error.message}
+            className="mb-4"
+          />
+        )}
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
