@@ -1,10 +1,9 @@
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useForm } from "react-hook-form";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ColumnDef } from "@tanstack/react-table";
-import { insertPersonInfoSchema, type PersonInfo, CompanySegment } from "@shared/schema";
+import { z } from "zod";
+import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
@@ -80,14 +79,12 @@ export default function ManageClient() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingClient, setEditingClient] = useState<PersonInfo | null>(null);
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
 
   // Fetch all members
   const { data: members = [], isLoading, error } = useQuery<PersonInfo[]>({
-
     queryKey: ["/api/person-info"],
+    staleTime: 10000,
   });
 
 
