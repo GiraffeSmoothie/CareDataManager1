@@ -1,4 +1,20 @@
-import express, { type Express, Request, Response, NextFunction } from "express";
+import express from "express";
+import { Request, Response, NextFunction } from "express";
+import { Session } from "express-session";
+import { AuthService } from "./src/services/auth.service";
+
+// Define session types
+declare module "express-session" {
+  interface Session {
+    user?: {
+      id: string;
+      username: string;
+      role?: string;
+    };
+  }
+}
+
+import { type Express } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
@@ -14,6 +30,30 @@ import cors from 'cors';
 import { BlobStorageService } from "./services/blob-storage.service";
 import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
+import { errorHandler } from './src/middleware/error';
+import { ApiError } from './src/types/error';
+import { Company } from "../shared/schema";
+import { Request as ExpressRequest } from "express";
+
+// Augment Express Request type
+declare module 'express-session' {
+  interface SessionData {
+    user: {
+      id: number;
+      username: string;
+      role: string;
+    };
+  }
+}
+
+// Type augmentation for Express Request
+interface AuthRequest extends Request {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
 
 // Base response type for consistent error handling
 interface ApiResponse<T = undefined> {
@@ -21,39 +61,28 @@ interface ApiResponse<T = undefined> {
   data?: T;
 }
 
-declare module "express-session" {
-  interface SessionData {
-    user: {
-      id: number;
-      username: string;
-      role: string; // include role in session
-    };
-  }
-}
-
-declare module "express" {
-  interface Request {
-    user?: {
-      id: number;
-      username: string;
-      role: string; // include role in session
-    };
-    memberPath?: string;
-    filePath?: string;
-  }
-}
-
-// Define authenticated request type
-interface AuthenticatedRequest<
-  P = ParamsDictionary,
-  B = any,
-  Q = ParsedQs
-> extends Request<P, any, B, Q> {
-  user: {
+interface UserSession {
+  user?: {
     id: number;
     username: string;
     role: string;
   };
+}
+
+interface CustomSession extends Session {
+  user?: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
+interface TypedRequestBody<T> extends AuthRequest {
+  body: T;
+}
+
+interface TypedRequestParams<T extends ParamsDictionary> extends AuthRequest {
+  params: T;
 }
 
 // Type guard for authenticated requests
@@ -178,28 +207,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
-
-      if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
-      }
-
-      const user = await dbStorage.getUserByUsername(username);
       
-      if (!user || user.password !== hashPassword(password)) {
-        return res.status(401).json({ message: "Invalid username or password" });
+      if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Missing credentials" });
       }
 
-      // Set session
+      const user = await AuthService.validateUser(username, password);
+      if (!user) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
       req.session.user = {
         id: user.id,
         username: user.username,
-        role: user.role // include role in session
+        role: user.role
       };
-
-      return res.status(200).json({ message: "Login successful" });
+      
+      return res.json({ success: true, user });
     } catch (error) {
       console.error("Login error:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   });
 
@@ -422,40 +449,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/person-info/:id", async (req: Request, res: Response) => {
+  app.get("/api/person-info/:id", async (req: Request, res: Response, next) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid ID format" });
+        throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
       }
       
       const personInfo = await dbStorage.getPersonInfoById(id);
       if (!personInfo) {
-        return res.status(404).json({ message: "Person info not found" });
+        throw new ApiError(404, "Person info not found", null, "NOT_FOUND");
       }
       
-      return res.status(200).json(personInfo);
+      res.status(200).json(personInfo);
     } catch (error) {
-      console.error("Error fetching person info:", error);
-      return res.status(500).json({ message: "Failed to fetch person info" });
+      next(error);
     }
   });
 
-  app.put('/api/person-info/:id', async (req: Request, res: Response) => {
+  app.put('/api/person-info/:id', async (req: Request, res: Response, next) => {
     try {
       console.log("Update request received for id:", req.params.id, "with data:", req.body);
       
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        console.error("Invalid ID format:", req.params.id);
-        return res.status(400).json({ message: 'Invalid ID provided' });
+        throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
       }
 
       // First check if the person exists
       const existingPerson = await dbStorage.getPersonInfoById(id);
       if (!existingPerson) {
-        console.error("Person not found with ID:", id);
-        return res.status(404).json({ message: 'Person not found' });
+        throw new ApiError(404, "Person not found", null, "NOT_FOUND");
       }
 
       // Validate the update data
@@ -473,24 +497,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log("Person updated successfully:", updatedPerson);
-      return res.status(200).json(updatedPerson);
+      res.status(200).json(updatedPerson);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const validationError = fromZodError(error);
-        console.error('Validation error:', validationError, '\nFull error:', error);
-        return res.status(400).json({ 
-          message: validationError.message,
-          details: validationError.details
-        });
-      }
-      console.error('Error updating person info:', error);
-      if (error instanceof Error) {
-        console.error('Error stack:', error.stack);
-      }
-      return res.status(500).json({ 
-        message: 'Failed to update person info',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
+      next(error);
     }
   });
   
@@ -946,7 +955,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Company routes (admin only)
-  app.get("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+  type CompanyDeleteRequest = ExpressRequest<{ id: string }> & AuthRequest;
+
+  app.get("/api/companies", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const user = await dbStorage.getUserById(req.user.id);
       if (!user || user.role !== "admin") {
@@ -961,32 +972,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/companies", authMiddleware, async (req: AuthRequest & TypedRequestBody<typeof insertCompanySchema._type>, res: Response) => {
     try {
-      const user = await dbStorage.getUserById(req.user.id);
-      if (!user || user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
       }
-
-      const validatedData = insertCompanySchema.parse({
-        ...req.body,
-        created_by: req.user.id
-      });
-
+      const validatedData = insertCompanySchema.parse(req.body);
       const company = await dbStorage.createCompany(validatedData);
-      return res.status(201).json(company);
+      res.status(201).json(company);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const validationError = fromZodError(error);
-        return res.status(400).json({ message: validationError.message });
-      }
       console.error("Error creating company:", error);
       return res.status(500).json({ message: "Failed to create company" });
     }
   });
 
-  app.put("/api/companies/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.put("/api/companies/:id", authMiddleware, async (
+    req: Request<{ id: string }, any, any> & AuthRequest,
+    res: Response
+  ) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const user = await dbStorage.getUserById(req.user.id);
       if (!user || user.role !== "admin") {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
@@ -1019,8 +1026,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/companies/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/companies/:id", authMiddleware, async (
+    req: CompanyDeleteRequest,
+    res: Response
+  ) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const user = await dbStorage.getUserById(req.user.id);
       if (!user || user.role !== "admin") {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
@@ -1043,6 +1056,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to delete company" });
     }
   });
+
+  // Add error handling middleware
+  app.use(errorHandler);
 
   const httpServer = createServer(app);
   return httpServer;

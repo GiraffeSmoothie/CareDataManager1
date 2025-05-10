@@ -1,52 +1,98 @@
-import { Request, Response } from "express";
-import { UserService } from "../services/user.service";
+import { Request, Response, NextFunction } from 'express';
+import { ApiError } from '../types/error';
+import { z } from 'zod';
+
+const userUpdateSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().email().optional(),
+  role: z.enum(['admin', 'user']).optional()
+});
 
 export class UserController {
-  static async getUsers(req: Request, res: Response) {
+  async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
-      const users = await UserService.getAllUsers();
+      const users = await dbStorage.getUsers();
+      if (!users) {
+        throw new ApiError(404, "No users found", null, "NOT_FOUND");
+      }
       res.json(users);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching users" });
+      next(error);
     }
   }
 
-  static async getUserById(req: Request, res: Response) {
-    const { id } = req.params;
+  async getUserById(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await UserService.getUserById(parseInt(id));
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
       }
+
+      const user = await dbStorage.getUserById(id);
+      if (!user) {
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
+      }
+
       res.json(user);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching user" });
+      next(error);
     }
   }
 
-  static async updateUser(req: Request, res: Response) {
-    const { id } = req.params;
-    const updateData = req.body;
-    
+  async updateUser(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await UserService.updateUser(parseInt(id), updateData);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
       }
-      res.json(user);
+
+      // Validate request body against schema
+      const validatedData = userUpdateSchema.parse(req.body);
+
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(id);
+      if (!existingUser) {
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
+      }
+
+      // Check permissions
+      if (!req.session?.user?.role === 'admin' && req.session?.user?.id !== id) {
+        throw new ApiError(403, "Insufficient permissions", null, "FORBIDDEN");
+      }
+
+      const updatedUser = await dbStorage.updateUser(id, validatedData);
+      res.json(updatedUser);
     } catch (error) {
-      res.status(500).json({ message: "Error updating user" });
+      if (error instanceof z.ZodError) {
+        next(new ApiError(400, "Invalid user data", error.errors, "VALIDATION_ERROR"));
+      } else {
+        next(error);
+      }
     }
   }
 
-  static async deleteUser(req: Request, res: Response) {
-    const { id } = req.params;
-    
+  async deleteUser(req: Request, res: Response, next: NextFunction) {
     try {
-      await UserService.deleteUser(parseInt(id));
-      res.json({ message: "User deleted successfully" });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
+      }
+
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(id);
+      if (!existingUser) {
+        throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
+      }
+
+      // Check permissions
+      if (req.session?.user?.role !== 'admin') {
+        throw new ApiError(403, "Admin access required", null, "FORBIDDEN");
+      }
+
+      await dbStorage.deleteUser(id);
+      res.status(200).json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: "Error deleting user" });
+      next(error);
     }
   }
 }

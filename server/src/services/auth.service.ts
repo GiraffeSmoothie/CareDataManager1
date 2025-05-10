@@ -7,22 +7,44 @@ export class AuthService {
   }
 
   static async validateUser(username: string, password: string) {
-    const user = await storage.getUserByUsername(username);
-    if (!user) {
-      return null;
-    }
+    try {
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        console.log('User not found:', username);
+        return null;
+      }
 
-    const hashedPassword = this.hashPassword(password);
-    if (user.password !== hashedPassword) {
-      return null;
-    }
+      const hashedPassword = this.hashPassword(password);
+      const isValid = user.password === hashedPassword;
+      console.log('Password validation:', isValid ? 'successful' : 'failed');
 
-    return {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      name: user.name
-    };
+      if (!isValid) {
+        return null;
+      }
+
+      // Don't return the password in the response
+      const { password: _, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    } catch (error) {
+      console.error('Error in validateUser:', error);
+      throw error;
+    }
+  }
+
+  static async getUserById(id: number) {
+    try {
+      const user = await storage.getUserById(id);
+      if (!user) {
+        return null;
+      }
+
+      // Don't return the password in the response
+      const { password: _, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    } catch (error) {
+      console.error('Error in getUserById:', error);
+      throw error;
+    }
   }
 
   static async createUser(userData: { name: string, username: string, password: string, role: string }) {

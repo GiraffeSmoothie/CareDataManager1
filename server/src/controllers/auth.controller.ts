@@ -1,44 +1,60 @@
-import { Request, Response } from "express";
-import { AuthService } from "../services/auth.service";
+import { Request, Response, NextFunction } from 'express';
+import { ApiError } from '../types/error';
+import { AuthService } from '../services/auth.service';
 
 export class AuthController {
-  static async login(req: Request, res: Response) {
-    const { username, password } = req.body;
-    
-    if (!username || !password) {
-      return res.status(400).json({ message: "Username and password are required" });
-    }
-
-    const user = await AuthService.validateUser(username, password);
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    req.session.user = user;
-    res.json({ user });
-  }
-
-  static async register(req: Request, res: Response) {
-    const { username, password, name, role } = req.body;
-
-    if (!username || !password || !name || !role) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
+  async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await AuthService.createUser({ username, password, name, role });
-      res.status(201).json({ user });
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        throw new ApiError(400, "Missing credentials", null, "MISSING_CREDENTIALS");
+      }
+
+      const user = await AuthService.validateUser(username, password);
+      if (!user) {
+        throw new ApiError(401, "Invalid credentials", null, "INVALID_CREDENTIALS");
+      }
+
+      req.session.user = user;
+      return res.json({ success: true, user });
     } catch (error) {
-      res.status(400).json({ message: "Username already exists" });
+      console.error("Login error:", error);
+      next(error);
     }
   }
 
-  static logout(req: Request, res: Response) {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ message: "Error logging out" });
+  async logout(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.session?.user) {
+        throw new ApiError(401, "Not authenticated", null, "NOT_AUTHENTICATED");
       }
-      res.json({ message: "Logged out successfully" });
-    });
+
+      req.session.destroy((err) => {
+        if (err) {
+          throw new ApiError(500, "Failed to logout", err, "LOGOUT_FAILED");
+        }
+        res.status(200).json({ success: true });
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async validateSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.session?.user) {
+        throw new ApiError(401, "Session expired", null, "SESSION_EXPIRED");
+      }
+      
+      const user = await AuthService.getUserById(req.session.user.id);
+      if (!user) {
+        throw new ApiError(401, "Invalid session", null, "INVALID_SESSION");
+      }
+
+      res.json({ user });
+    } catch (error) {
+      next(error);
+    }
   }
 }
