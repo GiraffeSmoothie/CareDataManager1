@@ -1,9 +1,11 @@
 // API endpoints
 export const API_ENDPOINTS = {
-    AUTH: '/auth',
-    USERS: '/users',
-    CLIENTS: '/clients',
-    DOCUMENTS: '/documents'
+    AUTH: '/api/auth',
+    USERS: '/api/users',
+    CLIENTS: '/api/clients',
+    DOCUMENTS: '/api/documents',
+    COMPANY_SEGMENTS: '/api/company-segments',
+    COMPANIES: '/api/companies'
 };
 
 export async function apiRequest(
@@ -12,37 +14,13 @@ export async function apiRequest(
   data?: unknown,
   isFormData = false
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
-  let body: any = undefined;
-  
-  if (data) {
-    if (isFormData) {
-      body = data;
-    } else {
-      headers["Content-Type"] = "application/json";
-      body = JSON.stringify(data);
-    }
-  }
+    const options: RequestInit = {
+        method,
+        headers: !isFormData ? { 'Content-Type': 'application/json' } : undefined,
+        credentials: 'include',
+        body: data ? (isFormData ? data as FormData : JSON.stringify(data)) : undefined,
+    };
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body,
-    credentials: "include",
-  });
-
-  const responseClone = response.clone();
-  
-  if (!response.ok) {
-    let errorMessage;
-    try {
-      const errorData = await responseClone.json();
-      errorMessage = errorData.message || response.statusText;
-    } catch (e) {
-      errorMessage = await responseClone.text() || response.statusText;
-    }
-    throw new Error(errorMessage);
-  }
-
-  return response;
+    const response = await fetch(url, options);
+    return response;
 }

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { ErrorDisplay } from "@/components/ui/error-display";
+
 import {
   Card,
   CardContent,
@@ -30,6 +31,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -38,10 +40,12 @@ const companySchema = z.object({
   company_name: z.string().min(1, "Company name is required"),
   registered_address: z.string().min(1, "Registered address is required"),
   postal_address: z.string().min(1, "Postal address is required"),
+
   contact_person_name: z.string().min(1, "Contact person name is required"),
   contact_person_phone: z.string().min(1, "Contact person phone is required"),
   contact_person_email: z.string().email("Invalid email address"),
 });
+
 
 type CompanyFormValues = z.infer<typeof companySchema>;
 
@@ -54,12 +58,14 @@ interface Company extends CompanyFormValues {
 export default function CompanyPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
   const [showDialog, setShowDialog] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const form = useForm<CompanyFormValues>({
+
     resolver: zodResolver(companySchema),
     defaultValues: {
       company_name: "",
@@ -70,6 +76,7 @@ export default function CompanyPage() {
       contact_person_email: "",
     },
   });
+
 
   // Fetch companies
   const { data: companies, isLoading, error: fetchError } = useQuery<Company[]>({
@@ -152,6 +159,7 @@ export default function CompanyPage() {
   };
 
   const columns = [
+
     {
       accessorKey: "company_name",
       header: "Company Name",
@@ -161,10 +169,13 @@ export default function CompanyPage() {
       header: "Contact Person",
     },
     {
+
+
       accessorKey: "contact_person_phone",
       header: "Phone",
     },
     {
+
       accessorKey: "contact_person_email",
       header: "Email",
     },
@@ -172,11 +183,13 @@ export default function CompanyPage() {
       id: "actions",
       cell: ({ row }: any) => (
         <Button variant="outline" size="sm" onClick={() => handleEdit(row.original)}>
+
           Edit
         </Button>
       ),
     },
   ];
+
 
   return (
     <AppLayout>
@@ -224,12 +237,16 @@ export default function CompanyPage() {
               <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
                 <FormField
                   control={form.control}
+
+  
                   name="company_name"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Company Name</FormLabel>
                       <FormControl>
+
                         <Input {...field} />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -237,13 +254,17 @@ export default function CompanyPage() {
                 />
 
                 <FormField
+
                   control={form.control}
+
                   name="registered_address"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Registered Address</FormLabel>
                       <FormControl>
+
                         <Textarea {...field} />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -251,13 +272,17 @@ export default function CompanyPage() {
                 />
 
                 <FormField
+
                   control={form.control}
+
                   name="postal_address"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Postal Address</FormLabel>
                       <FormControl>
+
                         <Textarea {...field} />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -265,13 +290,17 @@ export default function CompanyPage() {
                 />
 
                 <FormField
+
                   control={form.control}
+
                   name="contact_person_name"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person Name</FormLabel>
                       <FormControl>
+
                         <Input {...field} />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -279,13 +308,17 @@ export default function CompanyPage() {
                 />
 
                 <FormField
+
                   control={form.control}
+
                   name="contact_person_phone"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person Phone</FormLabel>
                       <FormControl>
+
                         <Input {...field} type="tel" />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -293,18 +326,23 @@ export default function CompanyPage() {
                 />
 
                 <FormField
+
                   control={form.control}
+
                   name="contact_person_email"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person Email</FormLabel>
                       <FormControl>
+
                         <Input {...field} type="email" />
+
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
 
                 <Button 
                   type="submit" 
@@ -318,6 +356,7 @@ export default function CompanyPage() {
                     </div>
                   ) : isEditing ? "Update Company" : "Create Company"}
                 </Button>
+
               </form>
             </Form>
           </DialogContent>

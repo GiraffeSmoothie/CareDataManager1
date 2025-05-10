@@ -94,12 +94,15 @@ export type Company = {
   company_name: string;
   registered_address: string;
   postal_address: string;
+
   contact_person_name: string;
   contact_person_phone: string;
   contact_person_email: string;
   created_at?: Date;
   created_by?: number;
 };
+
+
 
 // Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
@@ -190,6 +193,7 @@ export const insertMasterDataSchema = z.object({
   createdBy: z.number().optional(),
 });
 
+
 export const insertCompanySchema = z.object({
   company_name: z.string().min(1, "Company name is required"),
   registered_address: z.string().min(1, "Registered address is required"),
@@ -199,3 +203,4 @@ export const insertCompanySchema = z.object({
   contact_person_email: z.string().email("Invalid email address"),
   created_by: z.number().optional()
 });
+

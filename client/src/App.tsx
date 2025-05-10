@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation, Redirect } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
 import { Loader2 } from "lucide-react";
 
+
 interface AuthData {
   authenticated: boolean;
   user?: {
@@ -29,30 +30,29 @@ interface AuthData {
 }
 
 function PrivateRoute({ component: Component, ...rest }: any) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [location, setLocation] = useLocation();
+  const [_, setLocation] = useLocation();
+
+  const { data: authData, isLoading } = useQuery<AuthData>({
+    queryKey: ["authStatus"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/status", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Unauthorized");
+      }
+      return response.json();
+    },
+    retry: false,
+    staleTime: 5000 // Consider data fresh for 5 seconds
+  });
 
   useEffect(() => {
-    // Check if the user is authenticated
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/status", {
-          credentials: "include",
-        });
-        if (response.ok) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-          setLocation("/login");
-        }
-      } catch (error) {
-        setIsAuthenticated(false);
-        setLocation("/login");
-      }
-    };
+    if (!isLoading && !authData?.authenticated) {
+      setLocation("/login");
+    }
+  }, [authData, isLoading, setLocation]);
 
-    checkAuth();
-  }, [setLocation]);
 
   if (isAuthenticated === null) {
     // Loading state
@@ -61,10 +61,11 @@ function PrivateRoute({ component: Component, ...rest }: any) {
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+
   }
 
-  if (!isAuthenticated && location !== "/login") {
-    return <Redirect to="/login" />;
+  if (!authData?.authenticated) {
+    return null;
   }
 
   return <Component {...rest} />;
@@ -102,6 +103,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+
   }
 
   if (!authData?.user || authData.user.role !== "admin") {
@@ -115,10 +117,10 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/">
-        <Redirect to="/login" />
-      </Route>
       <Route path="/homepage">
+        <PrivateRoute component={Homepage} />
+      </Route>
+      <Route path="/">
         <PrivateRoute component={Homepage} />
       </Route>
       <Route path="/master-data">
@@ -150,6 +152,7 @@ function Router() {
       </Route>
 
       {/* Fallback to 404 */}
+
       <Route component={NotFound} />
     </Switch>
   );

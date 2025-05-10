@@ -23,12 +23,14 @@ export class AuthService {
         return null;
       }
 
+
       // Don't return the password in the response
       const { password: _, ...userWithoutPassword } = user;
       return userWithoutPassword;
     } catch (error) {
       console.error('Error in validateUser:', error);
       throw error;
+
     }
   }
 

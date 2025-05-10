@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { ColumnDef } from "@tanstack/react-table";
+import { insertPersonInfoSchema, type PersonInfo, CompanySegment } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
@@ -11,6 +12,7 @@ import { Loader2, Plus } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 import { ErrorDisplay } from "@/components/ui/error-display";
+
 
 import {
   Form,
@@ -30,6 +32,7 @@ import {
 } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { cn } from "../lib/utils";
+
 import {
   Dialog,
   DialogContent,
@@ -43,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
@@ -61,7 +65,8 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
   hcpLevel: z.string().min(1, "HCP Level is required"),
   hcpStartDate: z.string().min(1, "HCP Start Date is required"),
-  status: z.enum(["New", "Active", "Paused", "Closed"]).default("New")
+  segment_id: z.number({ required_error: "Please select a segment" }),
+  status: z.enum(Object.values(CLIENT_STATUSES) as [string, ...string[]]).default(CLIENT_STATUSES.NEW)
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
@@ -71,16 +76,20 @@ export default function ManageClient() {
   const queryClient = useQueryClient();
   const [useHomeAddress, setUseHomeAddress] = useState(true);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
+
   const [showDialog, setShowDialog] = useState(false);
-  const [buttonLabel, setButtonLabel] = useState("Add client");
-  const [isEditing, setIsEditing] = useState(false);
+  const [editingClient, setEditingClient] = useState<PersonInfo | null>(null);
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
 
   // Fetch all members
   const { data: members = [], isLoading, error } = useQuery<PersonInfo[]>({
+
     queryKey: ["/api/person-info"],
-    staleTime: 10000,
   });
+
 
   if (isLoading) {
     return (
@@ -108,6 +117,7 @@ export default function ManageClient() {
   }
 
   const form = useForm<PersonInfoFormValues>({
+
     resolver: zodResolver(personInfoSchema),
     defaultValues: {
       title: "",
@@ -133,9 +143,11 @@ export default function ManageClient() {
       nextOfKinPhone: "",
       hcpLevel: "",
       hcpStartDate: "",
+      segment_id: undefined,
       status: "New", 
     },
   });
+
 
   // Filter clients based on search term
   const filteredClients = members.filter(client => 
@@ -143,13 +155,11 @@ export default function ManageClient() {
   );
 
   // Handle edit client
+
   const handleEdit = (client: PersonInfo) => {
-    setSelectedMember(client);
-    setIsEditing(true);
-    setButtonLabel("Update client");
+    setEditingClient(client);
     setShowDialog(true);
 
-    // Populate form with client data
     Object.entries(client).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'createdBy') {
         form.setValue(key as any, value || "");
@@ -157,63 +167,28 @@ export default function ManageClient() {
     });
   };
 
-  // Handle add new
   const handleAddNew = () => {
-    setSelectedMember(null);
-    setIsEditing(false);
-    setButtonLabel("Add client");
+    setEditingClient(null);
     setShowDialog(true);
     form.reset();
   };
-
-  // When useHomeAddress changes, update mailing address fields
-  useEffect(() => {
-    if (useHomeAddress) {
-      const homeAddress = {
-        mailingAddressLine1: form.getValues("addressLine1"),
-        mailingAddressLine2: form.getValues("addressLine2"),
-        mailingAddressLine3: form.getValues("addressLine3"),
-        mailingPostCode: form.getValues("postCode"),
-        useHomeAddress: true
-      };
-
-      Object.entries(homeAddress).forEach(([key, value]) => {
-        form.setValue(key as any, value);
-      });
-    }
-  }, [useHomeAddress, form]);
-
-  // Watch for changes on home address fields
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (useHomeAddress && 
-         (name === "addressLine1" || name === "addressLine2" || 
-          name === "addressLine3" || name === "postCode")) {
-
-        const mailingField = name.replace("address", "mailingAddress").replace("postCode", "mailingPostCode");
-        form.setValue(mailingField as any, value[name as keyof typeof value] || "");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [form, useHomeAddress]);
 
   const mutation = useMutation({
     mutationFn: async (data: PersonInfoFormValues) => {
       const requestData = {
         ...data,
-        status: data.status || (isEditing ? selectedMember?.status : 'New')
+        status: data.status || (editingClient ? editingClient.status : 'New')
       };
 
-      if (!isEditing) {
+      if (!editingClient) {
         const response = await apiRequest("POST", "/api/person-info", requestData);
         if (!response.ok) {
           const error = await response.json();
           throw new Error(error.message || 'Failed to add client');
         }
         return response.json();
-      } else if (selectedMember?.id) {
-        const response = await apiRequest("PUT", `/api/person-info/${selectedMember.id}`, requestData);
+      } else if (editingClient?.id) {
+        const response = await apiRequest("PUT", `/api/person-info/${editingClient.id}`, requestData);
         if (!response.ok) {
           const error = await response.json();
           throw new Error(error.message || 'Failed to update client');
@@ -226,28 +201,27 @@ export default function ManageClient() {
       queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
       toast({
         title: "Success",
-        description: isEditing ? "Client information updated successfully" : "New client added successfully",
+        description: editingClient ? "Client information updated successfully" : "New client added successfully",
       });
       setShowDialog(false);
       form.reset();
-      setSelectedMember(null);
-      setIsEditing(false);
+      setEditingClient(null);
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || `Failed to ${isEditing ? 'update' : 'add'} client information`,
+        description: error.message || `Failed to ${editingClient ? 'update' : 'add'} client information`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: PersonInfoFormValues) => {
-    console.log("Form submitted:", data, "isEditing:", isEditing, "selectedMember:", selectedMember);
     mutation.mutate(data);
   };
 
   const hcpLevels = ["1", "2", "3", "4"];
+
   const statusOptions = Object.keys(STATUS_CONFIGS);
 
   const columns: DataTableColumnDef<PersonInfo>[] = [
@@ -263,16 +237,20 @@ export default function ManageClient() {
     {
       accessorKey: "mobilePhone",
       header: "Phone"
+
     },
     {
       accessorKey: "hcpLevel",
       header: "HCP Level",
+
       cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : '-'
+
     },
     {
       accessorKey: "hcpStartDate",
       header: "HCP Start Date",
       cell: ({ row }) => row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : '-'
+
     },
     {
       accessorKey: "status",
@@ -282,6 +260,7 @@ export default function ManageClient() {
           {row.original.status || 'New'}
         </span>
       )
+
     },
     {
       id: "actions",
@@ -289,10 +268,12 @@ export default function ManageClient() {
         <Button 
           variant="outline" 
           size="sm" 
+
           onClick={() => handleEdit(row.original)}
         >
           Edit
         </Button>
+
       )
     }
   ];
@@ -310,6 +291,9 @@ export default function ManageClient() {
                   Add New
                 </Button>
               </div>
+              <Button onClick={handleAddNew}>
+                Add New
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -329,6 +313,7 @@ export default function ManageClient() {
             <DataTable
               data={filteredClients}
               columns={columns}
+
               searchPlaceholder="Search clients..."
             />
           </CardContent>
@@ -337,7 +322,7 @@ export default function ManageClient() {
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{isEditing ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+              <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-16">
@@ -486,6 +471,36 @@ export default function ManageClient() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="segment_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Segment</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(Number(value))}
+                          value={field.value ? String(field.value) : undefined}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select segment" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {segments.map((segment) => (
+                              <SelectItem 
+                                key={segment.segment_id} 
+                                value={String(segment.segment_id)}
+                              >
+                                {segment.segment_name} ({segment.company_name})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 {/* Address Section */}
@@ -558,9 +573,8 @@ export default function ManageClient() {
                       <div className="flex items-center space-x-2">
                         <Checkbox 
                           id="useHomeAddress" 
-                          checked={useHomeAddress}
+                          checked={form.getValues("useHomeAddress")}
                           onCheckedChange={(checked) => {
-                            setUseHomeAddress(!!checked);
                             form.setValue("useHomeAddress", !!checked);
                           }}
                         />
@@ -573,7 +587,7 @@ export default function ManageClient() {
                       </div>
                     </div>
 
-                    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4", useHomeAddress && "opacity-50")}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="mailingAddressLine1"
@@ -584,7 +598,7 @@ export default function ManageClient() {
                               <Input 
                                 placeholder="Street address" 
                                 {...field} 
-                                disabled={useHomeAddress}
+                                disabled={form.getValues("useHomeAddress")}
                               />
                             </FormControl>
                             <FormMessage />
@@ -601,7 +615,7 @@ export default function ManageClient() {
                               <Input 
                                 placeholder="Apartment, suite, unit, etc. (optional)" 
                                 {...field}
-                                disabled={useHomeAddress}
+                                disabled={form.getValues("useHomeAddress")}
                               />
                             </FormControl>
                             <FormMessage />
@@ -618,7 +632,7 @@ export default function ManageClient() {
                               <Input 
                                 placeholder="City, town, etc. (optional)" 
                                 {...field}
-                                disabled={useHomeAddress}
+                                disabled={form.getValues("useHomeAddress")}
                               />
                             </FormControl>
                             <FormMessage />
@@ -635,7 +649,7 @@ export default function ManageClient() {
                               <Input 
                                 placeholder="Post code" 
                                 {...field}
-                                disabled={useHomeAddress}
+                                disabled={form.getValues("useHomeAddress")}
                               />
                             </FormControl>
                             <FormMessage />
@@ -769,11 +783,8 @@ export default function ManageClient() {
                 onClick={form.handleSubmit(onSubmit)}
               >
                 {mutation.isPending ? (
-                  <div className="flex items-center">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    <span>Processing...</span>
-                  </div>
-                ) : buttonLabel}
+                  <ButtonLoading text="Processing..." />
+                ) : editingClient ? "Update client" : "Add client"}
               </Button>
             </div>
           </DialogContent>

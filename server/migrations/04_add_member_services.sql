@@ -9,10 +9,10 @@ BEGIN
   END IF;
 END $$;
 
--- Create member_services table
-CREATE TABLE IF NOT EXISTS member_services (
+-- Create client_services table
+CREATE TABLE IF NOT EXISTS client_services (
   id SERIAL PRIMARY KEY,
-  member_id INTEGER REFERENCES person_info(id) NOT NULL,
+  client_id INTEGER REFERENCES person_info(id) NOT NULL,
   service_category TEXT NOT NULL,
   service_type TEXT NOT NULL,
   service_provider TEXT NOT NULL,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ColumnDef } from "@tanstack/react-table";
 import {
   Card,
   CardContent,
@@ -10,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PersonInfo, ClientService } from "@shared/schema";
 import { getQueryFn } from "@/lib/queryClient";
-import { Loader2, Users, Activity, Search } from "lucide-react";
+import { Loader2, Users, Activity } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SimpleBarChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
@@ -24,66 +25,107 @@ export default function Dashboard() {
   const [combinedData, setCombinedData] = useState<Array<CombinedClientData>>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Fetch person info data
-  const {
-    data: personData = [],
-    isLoading: isLoadingPersons,
-    error: personsError,
-  } = useQuery<PersonInfo[]>({
+
+  // Queries
+  const { data: persons = [], isLoading: isLoadingPersons, error: personsError } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  // Fetch client services data
-  const {
-    data: clientServices = [],
-    isLoading: isLoadingServices,
-    error: servicesError,
-  } = useQuery<ClientService[]>({
+  const { data: services = [], isLoading: isLoadingServices, error: servicesError } = useQuery<ClientService[]>({
     queryKey: ["/api/client-services"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  // Combine data when both queries complete
+  // Process data for display whenever persons or services change
   useEffect(() => {
-    if (personData && clientServices) {
-      const combinedData = personData.map(person => {
-        const clientService = clientServices.find(cs => cs.clientId === person.id);
-        return {
-          ...person,
-          clientService
-        };
+    if (persons && services) {
+      // Calculate total and active clients
+      const activeCount = persons.filter(p => p.status === CLIENT_STATUSES.ACTIVE).length;
+
+      // Calculate HCP level statistics including unassigned
+      const hcpStats = persons.reduce((acc, person) => {
+        const level = person.hcpLevel || 'Unassigned';
+        acc[level] = (acc[level] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Calculate service status statistics
+      const serviceStats = services.reduce((acc, service) => {
+        const status = service.status || SERVICE_STATUSES.PLANNED;
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      setStatistics({
+        totalClients: persons.length,
+        activeClients: activeCount,
+        hcpLevelStats: hcpStats,
+        serviceStatusStats: serviceStats,
       });
-      setCombinedData(combinedData);
     }
-  }, [personData, clientServices]);
+  }, [persons, services]);
 
-  // Filter members and calculate statistics
-  const filteredMembers = combinedData
-    .filter(member => member.clientService?.status !== 'Closed')
-    .filter(member => 
-      (member.firstName + " " + member.lastName).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.clientService?.status?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  // Prepare members data by combining persons and services
+  const members: DashboardMember[] = persons.map(person => ({
+    ...person,
+    clientService: services.find(service => service.clientId === person.id),
+  }));
 
-  const activeMembers = filteredMembers.filter(member => 
-    member.clientService?.status === 'In Progress'
-  );
-
-  const statistics = {
-    totalClients: combinedData.length,
-    activeClients: activeMembers.length,
-    hcpLevelStats: combinedData.reduce((acc, member) => {
-      const level = member.hcpLevel || 'Unassigned';
-      acc[level] = (acc[level] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>),
-    serviceStatusStats: combinedData.reduce((acc, member) => {
-      const status = member.clientService?.status || 'Not Assigned';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>)
-  };
+  // Define columns for the DataTable
+  const columns: ColumnDef<DashboardMember>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: ({ row }) => {
+        const client = row.original;
+        return `${client.title} ${client.firstName} ${client.lastName}`;
+      },
+    },
+    {
+      accessorKey: "hcpLevel",
+      header: "HCP Level",
+      cell: ({ row }) => row.getValue("hcpLevel") ? `Level ${row.getValue("hcpLevel")}` : 'Unassigned',
+    },
+    {
+      id: "hcpDates",
+      header: "HCP Start Date - End Date",
+      cell: ({ row }) => {
+        const startDate = row.original.hcpStartDate;
+        return startDate ? (
+          <>
+            {new Date(startDate).toLocaleDateString()}
+            {startDate && ' - '}
+            {startDate && new Date(startDate).toLocaleDateString()}
+          </>
+        ) : 'Not set';
+      },
+    },
+    {
+      id: "serviceDays",
+      header: "Service Days",
+      cell: ({ row }) => row.original.clientService?.serviceDays?.join(', ') || 'Not set',
+    },
+    {
+      id: "serviceHours",
+      header: "Service Hours",
+      cell: ({ row }) => row.original.clientService?.serviceHours ? 
+        `${row.original.clientService.serviceHours} hours` : 
+        'Not set',
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.original.clientService?.status || SERVICE_STATUSES.PLANNED;
+        return (
+          <Badge className={STATUS_STYLES[status as ServiceStatus]}>
+            {status}
+          </Badge>
+        );
+      },
+    },
+  ];
 
   // Prepare chart data
   const hcpChartData = Object.entries(statistics.hcpLevelStats).map(([level, count]) => ({
@@ -153,9 +195,7 @@ export default function Dashboard() {
   if (isLoadingPersons || isLoadingServices) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+        <Loading text="Loading dashboard data..." />
       </AppLayout>
     );
   }
@@ -163,6 +203,7 @@ export default function Dashboard() {
   if (personsError || servicesError) {
     return (
       <AppLayout>
+
         <div className="flex items-center justify-center min-h-[60vh]">
           <ErrorDisplay 
             variant="card"
@@ -171,6 +212,7 @@ export default function Dashboard() {
             className="max-w-md"
           />
         </div>
+
       </AppLayout>
     );
   }
@@ -178,19 +220,6 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="container mx-auto p-4 space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Client Dashboard</h1>
-          <div className="relative w-64">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search clients..."
-              className="pl-8"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -242,9 +271,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <DataTable
+
               data={filteredMembers}
               columns={columns}
               searchPlaceholder="Search active clients..."
+
             />
           </CardContent>
         </Card>

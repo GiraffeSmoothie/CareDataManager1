@@ -5,7 +5,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, Eye, ArrowDown, Loader2 } from "lucide-react";
+import { Search, Plus, Eye, ArrowDown } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiRequest } from "@/lib/queryClient";
 import { insertDocumentSchema, type PersonInfo, type Document } from "@shared/schema";
 import { ErrorDisplay } from "@/components/ui/error-display";
+
 import type { z } from "zod";
 
 // Define the type based on the schema
@@ -259,6 +260,7 @@ export default function DocumentUpload() {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
+
               ) : documents.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No documents found for this client. Click "Add New" to upload documents.
@@ -400,12 +402,9 @@ export default function DocumentUpload() {
 
                   <Button type="submit" className="w-full" disabled={uploadMutation.isPending}>
                     {uploadMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
+                      <ButtonLoading text="Uploading..." />
                     ) : (
-                      <>Upload Document</>
+                      "Upload Document"
                     )}
                   </Button>
                 </form>

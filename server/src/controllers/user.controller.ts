@@ -41,6 +41,7 @@ export class UserController {
     }
   }
 
+
   async updateUser(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id);
@@ -93,6 +94,7 @@ export class UserController {
 
       await dbStorage.deleteUser(id);
       res.status(200).json({ success: true });
+
     } catch (error) {
       next(error);
     }
