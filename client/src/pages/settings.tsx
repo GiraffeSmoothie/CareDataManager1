@@ -8,7 +8,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "@/components/ui/icons";
+import { Loader2 } from "lucide-react";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),

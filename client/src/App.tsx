@@ -17,7 +17,7 @@ import Company from "@/pages/company";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
-import { Loader2 } from "@/components/ui/icons";
+import { Loader2 } from "lucide-react";
 
 interface AuthData {
   authenticated: boolean;
