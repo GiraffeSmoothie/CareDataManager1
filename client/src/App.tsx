@@ -17,6 +17,7 @@ import Company from "@/pages/company";
 import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
+import { Loader2 } from "@/components/ui/icons";
 
 interface AuthData {
   authenticated: boolean;
@@ -55,7 +56,11 @@ function PrivateRoute({ component: Component, ...rest }: any) {
 
   if (isAuthenticated === null) {
     // Loading state
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   if (!isAuthenticated && location !== "/login") {
@@ -92,7 +97,11 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }, [authData]);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   if (!authData?.user || authData.user.role !== "admin") {

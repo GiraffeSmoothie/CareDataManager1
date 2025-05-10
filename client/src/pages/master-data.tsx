@@ -16,6 +16,7 @@ import { MasterData as MasterDataType } from "@shared/schema";
 import { Switch } from "@/components/ui/switch";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import DashboardLayout from "@/layouts/app-layout";
+import { Loader2 } from "lucide-react";
 
 const masterDataSchema = z.object({
   serviceCategory: z.string({ required_error: "Please select a service category" }),
@@ -227,7 +228,9 @@ export default function MasterData() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-4">Loading data...</div>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
             ) : masterDataList.length === 0 ? (
               <div className="text-center py-4">No Services master data found.</div>
             ) : (

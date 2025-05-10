@@ -412,9 +412,13 @@ export default function ClientAssignment() {
               <CardTitle>Client Services</CardTitle>
             </CardHeader>
             <CardContent>
-              {isServicesLoading && <div>Loading assigned services...</div>}
-              {servicesError && <div className="text-red-500">Error loading services: {servicesError.message}</div>}
-              {!isServicesLoading && !servicesError && (
+              {isServicesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : servicesError ? (
+                <div className="text-red-500">Error loading services: {servicesError.message}</div>
+              ) : (
                 <DataTable
                   data={clientServices}
                   columns={columns}

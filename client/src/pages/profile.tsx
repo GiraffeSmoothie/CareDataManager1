@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
 export default function Profile() {
   // Fetch user data from the auth status endpoint
@@ -21,8 +22,8 @@ export default function Profile() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="flex justify-center items-center min-h-[60vh]">
-          Loading...
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </AppLayout>
     );

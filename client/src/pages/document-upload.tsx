@@ -249,7 +249,7 @@ export default function DocumentUpload() {
             </CardHeader>
             <CardContent>
               {loadingDocuments ? (
-                <div className="flex justify-center p-4">
+                <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : documents.length === 0 ? (

@@ -8,6 +8,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Loader2 } from "@/components/ui/icons";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -52,6 +53,16 @@ export default function Settings() {
       setLoading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -103,7 +114,14 @@ export default function Settings() {
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Changing..." : "Change Password"}
+                  {loading ? (
+                    <div className="flex items-center">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <span>Changing password...</span>
+                    </div>
+                  ) : (
+                    "Change Password"
+                  )}
                 </Button>
               </form>
             </Form>
