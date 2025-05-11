@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ColumnDef } from "@tanstack/react-table";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/ui/button";
@@ -11,18 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
-
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS } from "@/lib/constants";
-
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -276,7 +271,6 @@ export default function ClientAssignment() {
     `${client.firstName} ${client.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-
   const statusOptions = Object.keys(STATUS_CONFIGS)
     .filter(status => ["Active", "Paused", "In Progress", "Closed"].includes(status));
 
@@ -292,30 +286,24 @@ export default function ClientAssignment() {
     {
       accessorKey: "serviceProvider",
       header: "Provider"
-
     },
     {
       accessorKey: "serviceStartDate",
       header: "Start Date",
-
       cell: ({ row }) => new Date(row.original.serviceStartDate).toLocaleDateString()
-
     },
     {
       accessorKey: "serviceDays",
       header: "Days",
-
       cell: ({ row }) => row.original.serviceDays.join(", ")
     },
     {
       accessorKey: "serviceHours",
       header: "Hours"
-
     },
     {
       accessorKey: "status",
       header: "Status",
-
       cell: ({ row }) => {
         const status = row.original.status || 'Not Assigned';
         const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] || STATUS_CONFIGS.Closed;
@@ -354,7 +342,6 @@ export default function ClientAssignment() {
           </Select>
         );
       }
-
     },
     {
       id: "caseNotes",
@@ -370,7 +357,6 @@ export default function ClientAssignment() {
         >
           View/Edit Notes
         </Button>
-
       )
     }
   ];
@@ -378,7 +364,6 @@ export default function ClientAssignment() {
   return (
     <AppLayout>
       <div className="container mx-auto p-4">
-
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -427,7 +412,6 @@ export default function ClientAssignment() {
               <CardTitle>Client Services</CardTitle>
             </CardHeader>
             <CardContent>
-
               {isServicesLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -441,7 +425,6 @@ export default function ClientAssignment() {
                   searchPlaceholder="Search services..."
                 />
               )}
-
             </CardContent>
           </Card>
         )}
@@ -486,38 +469,6 @@ export default function ClientAssignment() {
                   console.log("[Form] Form submission failed with errors:", errors);
                 })(e);
               }} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="clientId"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Client</FormLabel>
-                      <FormControl>
-                        <Select
-                          onValueChange={(value) => field.onChange(Number(value))}
-                          value={field.value ? String(field.value) : undefined}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a client" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {clients.map((client) => (
-                              <SelectItem
-                                key={client.id}
-                                value={String(client.id)}
-                              >
-                                {client.firstName} {client.lastName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      {fieldState.error && (
-                        <Error variant="inline" message={fieldState.error.message} />
-                      )}
-                    </FormItem>
-                  )}
-                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}

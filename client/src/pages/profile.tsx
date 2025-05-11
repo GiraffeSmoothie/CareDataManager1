@@ -8,10 +8,9 @@ import {
 } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-
 export default function Profile() {
   // Fetch user data from the auth status endpoint
-  const { data: authData, isLoading, error } = useQuery({
+  const { data: authData, isLoading } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
       const res = await fetch("/api/auth/status");
@@ -23,11 +22,9 @@ export default function Profile() {
   if (isLoading) {
     return (
       <AppLayout>
-
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-
       </AppLayout>
     );
   }

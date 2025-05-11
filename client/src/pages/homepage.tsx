@@ -5,7 +5,6 @@ import axios from "axios"
 import { useLocation } from "wouter"
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 
-
 interface Member {
   id: number
   firstName: string
@@ -23,7 +22,7 @@ export default function Homepage() {
     queryFn: async () => {
       const response = await axios.get("/api/person-info");
       // Filter for active members only
-      return (response.data as Member[]).filter(m => m.status === CLIENT_STATUSES.ACTIVE || m.status === CLIENT_STATUSES.PAUSED || m.status === CLIENT_STATUSES.NEW);
+      return (response.data as Member[]).filter(m => m.status === "Active" || m.status === "Paused" || m.status === "New");
     },
   });
 
@@ -32,12 +31,10 @@ export default function Homepage() {
     setLocation(`/client-assignment?clientId=${member.id}&name=${encodeURIComponent(memberName)}`);
   };
 
-
   // Sort members by status order from centralized config
   const sortedMembers = members?.sort((a, b) => {
     const getOrder = (status: string) => STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS]?.order ?? 999;
     return getOrder(a.status) - getOrder(b.status);
-
   });
 
   if (isLoading) {

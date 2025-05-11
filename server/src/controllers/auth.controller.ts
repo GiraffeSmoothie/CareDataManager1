@@ -35,13 +35,11 @@ export class AuthController {
           throw new ApiError(500, "Failed to logout", err, "LOGOUT_FAILED");
         }
         res.status(200).json({ success: true });
-
       });
     } catch (error) {
       next(error);
     }
   }
-
 
   async validateSession(req: Request, res: Response, next: NextFunction) {
     try {
@@ -55,7 +53,6 @@ export class AuthController {
       }
 
       res.json({ user });
-
     } catch (error) {
       next(error);
     }

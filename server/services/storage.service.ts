@@ -1,6 +1,54 @@
+import fs from 'fs/promises';
+import path from 'path';
 import { BlobServiceClient, ContainerClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } from '@azure/storage-blob';
 
-export class BlobStorageService {
+export interface IStorageService {
+    uploadFile(fileBuffer: Buffer, filePath: string, contentType: string): Promise<string>;
+    downloadFile(filePath: string): Promise<Buffer>;
+    deleteFile(filePath: string): Promise<void>;
+    fileExists(filePath: string): Promise<boolean>;
+}
+
+export class LocalStorageService implements IStorageService {
+    private uploadsDir: string;
+
+    constructor() {
+        // Use DOCUMENTS_ROOT_PATH from env or default to 'uploads' in current directory
+        this.uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), 'uploads');
+        // Ensure uploads directory exists
+        fs.mkdir(this.uploadsDir, { recursive: true }).catch(console.error);
+    }
+
+    async uploadFile(fileBuffer: Buffer, filePath: string, contentType: string): Promise<string> {
+        const fullPath = path.join(this.uploadsDir, filePath);
+        // Ensure directory exists
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, fileBuffer);
+        return filePath;
+    }
+
+    async downloadFile(filePath: string): Promise<Buffer> {
+        const fullPath = path.join(this.uploadsDir, filePath);
+        return fs.readFile(fullPath);
+    }
+
+    async deleteFile(filePath: string): Promise<void> {
+        const fullPath = path.join(this.uploadsDir, filePath);
+        await fs.unlink(fullPath);
+    }
+
+    async fileExists(filePath: string): Promise<boolean> {
+        const fullPath = path.join(this.uploadsDir, filePath);
+        try {
+            await fs.access(fullPath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+}
+
+export class AzureBlobStorageService implements IStorageService {
     private containerClient: ContainerClient;
     private blobServiceClient: BlobServiceClient;
     private accountName: string;
@@ -13,17 +61,14 @@ export class BlobStorageService {
             throw new Error('Azure Storage connection string not found in environment variables');
         }
 
-        // Extract account name and key from connection string
         this.accountName = this.extractAccountName(connectionString);
         this.accountKey = this.extractAccountKey(connectionString);
-
         this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
         this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documents';
         this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
         this.initializeContainer();
     }
 
-    // Extract account name from connection string
     private extractAccountName(connectionString: string): string {
         const matches = connectionString.match(/AccountName=([^;]+)/i);
         if (!matches || matches.length < 2) {
@@ -32,7 +77,6 @@ export class BlobStorageService {
         return matches[1];
     }
 
-    // Extract account key from connection string
     private extractAccountKey(connectionString: string): string {
         const matches = connectionString.match(/AccountKey=([^;]+)/i);
         if (!matches || matches.length < 2) {
@@ -43,9 +87,8 @@ export class BlobStorageService {
 
     private async initializeContainer(): Promise<void> {
         try {
-            // Create the container if it doesn't exist, with no public access
             await this.containerClient.createIfNotExists();
-            console.log(`Container ${this.containerName} initialized without public access`);
+            console.log(`Container ${this.containerName} initialized`);
         } catch (error) {
             console.error('Error initializing blob container:', error);
             throw error;
@@ -55,16 +98,12 @@ export class BlobStorageService {
     async uploadFile(fileBuffer: Buffer, blobName: string, contentType: string): Promise<string> {
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-            
             await blockBlobClient.upload(fileBuffer, fileBuffer.length, {
                 blobHTTPHeaders: {
                     blobContentType: contentType
                 }
             });
-
-            // Generate a SAS URL with read access for 1 hour
-            const sasUrl = this.generateSasUrl(blobName);
-            return sasUrl;
+            return this.generateSasUrl(blobName);
         } catch (error) {
             console.error('Error uploading to blob storage:', error);
             throw error;
@@ -75,8 +114,6 @@ export class BlobStorageService {
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
             const downloadResponse = await blockBlobClient.download(0);
-            
-            // Convert stream to buffer
             const chunks: Buffer[] = [];
             for await (const chunk of downloadResponse.readableStreamBody!) {
                 chunks.push(Buffer.from(chunk));
@@ -108,8 +145,7 @@ export class BlobStorageService {
         }
     }
 
-    // Generate a SAS URL for a blob with read access
-    generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
+    private generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
         const sharedKeyCredential = new StorageSharedKeyCredential(
             this.accountName,
             this.accountKey
@@ -118,7 +154,7 @@ export class BlobStorageService {
         const sasOptions = {
             containerName: this.containerName,
             blobName: blobName,
-            permissions: BlobSASPermissions.parse("r"), // Read permission only
+            permissions: BlobSASPermissions.parse("r"),
             startsOn: new Date(),
             expiresOn: new Date(new Date().valueOf() + expiryMinutes * 60 * 1000),
         };
@@ -129,5 +165,17 @@ export class BlobStorageService {
         ).toString();
         
         return `https://${this.accountName}.blob.core.windows.net/${this.containerName}/${blobName}?${sasToken}`;
+    }
+}
+
+// Factory function to create the appropriate storage service
+export function createStorageService(): IStorageService {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    if (isDevelopment) {
+        console.log('Using local file storage for development');
+        return new LocalStorageService();
+    } else {
+        console.log('Using Azure Blob storage for production');
+        return new AzureBlobStorageService();
     }
 }
