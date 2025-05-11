@@ -11,8 +11,6 @@ import { Loader2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { PhoneInput } from "../components/ui/phone-input";
 
-
-
 import {
   Form,
   FormControl,
@@ -20,6 +18,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -149,9 +148,7 @@ export default function PersonInfo() {
   };
 
   return (
-
     <DashboardLayout>
-
       <div className="container py-10">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
@@ -184,15 +181,12 @@ export default function PersonInfo() {
                       control={form.control}
                       name="firstName"
                       render={({ field }) => (
-
                         <FormItem>
                           <FormLabel>First Name</FormLabel>
                           <FormControl>
                             <Input placeholder="First name" {...field} />
                           </FormControl>
-
                           <FormMessage />
-
                         </FormItem>
                       )}
                     />

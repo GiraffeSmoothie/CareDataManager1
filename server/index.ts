@@ -2,12 +2,6 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
-import { errorHandler } from './src/middleware/error';
-import session from 'express-session';
-import pgSession from 'connect-pg-simple';
-import helmet from 'helmet';
-import cors from 'cors';
-import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,64 +30,11 @@ import { setupVite, serveStatic, log } from "./vite";
 import { pool } from './storage';
 
 const app = express();
-
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"]
-    }
-  }
-}));
-
-// CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CORS_ORIGIN 
-    : 'http://localhost:5173',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-  exposedHeaders: ['Set-Cookie']
-}));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session configuration
-const PostgresSession = pgSession(session);
-app.use(
-  session({
-    store: new PostgresSession({
-      pool,
-      tableName: 'session',
-      createTableIfMissing: true
-    }),
-    name: 'sessionId',
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000,
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined
-    }
-  })
-);
-
 app.enable('trust proxy');
 
-// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -172,8 +113,12 @@ export async function initializeDatabase() {
 
     const server = await registerRoutes(app);
 
-    // Global error handling middleware
-    app.use(errorHandler);
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error('Error:', err);
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+    });
 
     if (app.get("env") === "development") {
       await setupVite(app, server);
@@ -183,6 +128,7 @@ export async function initializeDatabase() {
 
     // Serve static files in production
     if (process.env.NODE_ENV === 'production') {
+      // Serve static files from server/dist/client
       const clientPath = path.resolve(__dirname, 'client');
       console.log('Serving static files from:', clientPath);
 
@@ -205,7 +151,7 @@ export async function initializeDatabase() {
           res.sendFile(indexPath, err => {
             if (err) {
               console.error('Error serving index.html:', err);
-              next(err);
+              res.status(500).send('Error loading application');
             }
           });
         } else {
@@ -215,6 +161,7 @@ export async function initializeDatabase() {
       });
     }
 
+    // Use port from environment variable (Azure App Service expects 8080) or default to 3000
     const port = process.env.WEBSITES_PORT || process.env.PORT || 8080;
     server.listen(port, () => {
       console.log(`Server running on port ${port}`);

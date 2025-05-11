@@ -17,7 +17,6 @@ export const ROUTES = {
     DOCUMENT_UPLOAD: '/document-upload'
 };
 
-
 // Status configurations
 export const STATUS_CONFIGS = {
   Active: {
@@ -61,4 +60,3 @@ export const getStatusConfig = (status: string) => {
 export const getStatusBadgeColors = (status: string) => {
   return getStatusConfig(status).color;
 };
-

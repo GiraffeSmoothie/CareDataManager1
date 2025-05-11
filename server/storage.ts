@@ -1,7 +1,6 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
 import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, Company, insertCompanySchema } from '@shared/schema';
-
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -9,7 +8,6 @@ import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import type { z } from 'zod';
-
 
 // Define __dirname for ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -70,9 +68,7 @@ try {
   throw new Error('Invalid DATABASE_URL format. Please check your environment configuration.');
 }
 
-
 export const pool = new Pool(connectionOptions);
-
 
 // Add error handling for the pool
 pool.on('error', (err) => {
@@ -121,7 +117,6 @@ export async function initializeDatabase() {
     }
   }
 }
-
 
 // Input validation helper
 function validateInput(input: any, type: string): boolean {
@@ -358,7 +353,6 @@ export class Storage {
     }
   }
 
-  // Person operations with validation
   async createPersonInfo(data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     try {
       const {
@@ -556,8 +550,11 @@ export class Storage {
           title = $1, first_name = $2, middle_name = $3, last_name = $4,
           date_of_birth = $5, email = $6, home_phone = $7, mobile_phone = $8,
           address_line1 = $9, address_line2 = $10, address_line3 = $11,
-          post_code = $12, status = $13
-        WHERE id = $14
+          post_code = $12, mailing_address_line1 = $13, mailing_address_line2 = $14,
+          mailing_address_line3 = $15, mailing_post_code = $16, use_home_address = $17,
+          next_of_kin_name = $18, next_of_kin_address = $19, next_of_kin_email = $20,
+          next_of_kin_phone = $21, hcp_level = $22, hcp_start_date = $23, status = $24
+        WHERE id = $25
         RETURNING *`,
         [
           title,
@@ -591,7 +588,6 @@ export class Storage {
       if (result.rows.length === 0) {
         throw new Error(`Person with ID ${id} not found`);
       }
-
 
       const row = result.rows[0];
       return {
@@ -733,9 +729,8 @@ export class Storage {
 
       if (result.rows.length === 0) {
         throw new Error('Master data record not found');
-
       }
-    
+
       return {
         id: result.rows[0].id,
         serviceCategory: result.rows[0].service_category,
@@ -995,13 +990,16 @@ export class Storage {
 
       if (result.rows.length === 0) {
         throw new Error("Case note not found");
-
       }
 
-      // Return the complete segment info
       return {
-        ...segmentResult.rows[0],
-        company_name: data.company_name
+        id: result.rows[0].id,
+        serviceId: result.rows[0].service_id,
+        noteText: result.rows[0].note_text,
+        createdAt: result.rows[0].created_at,
+        createdBy: result.rows[0].created_by,
+        updatedAt: result.rows[0].updated_at,
+        updatedBy: result.rows[0].updated_by
       };
     } catch (error) {
       handleDatabaseError(error, 'updateServiceCaseNote');
@@ -1111,4 +1109,3 @@ export class Storage {
 }
 
 export const storage = new Storage(pool);
-

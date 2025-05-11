@@ -16,10 +16,8 @@ declare module "express-session" {
 
 import { type Express } from "express";
 import { createServer, type Server } from "http";
-
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
-
 import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -29,18 +27,16 @@ import path from "path";
 import fs from "fs";
 import pgSession from "connect-pg-simple";
 import cors from 'cors';
-import helmet from 'helmet';
 import { BlobStorageService } from "./services/blob-storage.service";
 import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
 import { errorHandler } from './src/middleware/error';
 import { ApiError } from './src/types/error';
-import { Compay } from "../shared/schema";
+import { Company } from "../shared/schema";
 import { Request as ExpressRequest } from "express";
 
 // Augment Express Request type
 declare module 'express-session' {
-
   interface SessionData {
     user: {
       id: number;
@@ -127,7 +123,6 @@ async function initializeUsers() {
   if (!admin) {
     // Create default admin user using AuthService to ensure bcrypt is used
     await AuthService.createUser({
-
       name: "Default Admin",
       username: "admin",
       password: "password",
@@ -220,57 +215,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(rateLimitMiddleware);
 
   // Configure CORS
-
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CORS_ORIGIN 
-      : "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
-    exposedHeaders: ["Set-Cookie"],
-    maxAge: 86400,
-    optionsSuccessStatus: 204
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Cookie", "Authorization"]
   }));
 
-  // Initialize session store with secure configuration
+  // Initialize session store with connection check using the shared pool
   const pgStore = new PgStore({
     pool: pool,
     tableName: 'session',
-    createTableIfMissing: true,
-    pruneSessionInterval: 60
+    createTableIfMissing: true
   });
 
-  // Initialize session with secure settings
+  // Initialize session
   app.use(
     session({
       store: pgStore,
-      name: 'sessionId',
-      secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+      secret: process.env.SESSION_SECRET || "care-system-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        //secure: process.env.NODE_ENV === "production",
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-        path: '/',
-        domain: process.env.COOKIE_DOMAIN
-      }
+        sameSite: 'lax'
+      },
     })
   );
-
-  // Add security headers
-  app.use(helmet());
-  app.use(helmet.referrerPolicy({ policy: 'same-origin' }));
-  app.use(helmet.noSniff());
-  app.use(helmet.frameguard({ action: 'deny' }));
 
   // Initialize users
   await initializeUsers();
 
   // Authentication routes
-  app.post("/api/auth/login", async (req: Request, res: Response, next) => {
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
       
@@ -281,7 +260,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await AuthService.validateUser(username, password);
       if (!user) {
         return res.status(401).json({ success: false, error: "Invalid credentials" });
-
       }
 
       req.session.user = {
@@ -294,28 +272,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Login error:", error);
       return res.status(500).json({ success: false, error: "Internal server error" });
-
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response, next) => {
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
-        next(new Error("Failed to logout"));
-        return;
+        return res.status(500).json({ message: "Failed to logout" });
       }
       res.clearCookie("connect.sid");
-      res.status(200).json({ message: "Logout successful" });
+      return res.status(200).json({ message: "Logout successful" });
     });
   });
 
-  app.get("/api/auth/status", async (req: Request, res: Response, next) => {
+  app.get("/api/auth/status", async (req: Request, res: Response) => {
     try {
       if (!req.session.user) {
         return res.status(401).json({ authenticated: false });
       }
 
-      const user = await storage.getUserById(req.session.user.id);
+      const user = await dbStorage.getUserById(req.session.user.id);
       if (!user) {
         req.session.destroy((err) => {
           if (err) console.error("Error destroying invalid session:", err);
@@ -332,34 +308,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } 
       });
     } catch (error) {
-      next(error);
+      console.error("Error checking auth status:", error);
+      return res.status(500).json({ message: "Internal server error checking auth status" });
     }
   });
 
   // Auth middleware for protected routes
   const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     if (!req.session.user) {
-      throw new AuthenticationError();
+      return res.status(401).json({ message: "Unauthorized" });
     }
     req.user = req.session.user; // Make user data available on request object
     next();
   };
-
-  // Admin middleware
-  const adminMiddleware = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user || req.user.role !== 'admin') {
-      throw new ForbiddenError('Admin access required');
-    }
-    next();
-  };
-
+  
   // Setup file upload
   const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
   
   // Configure multer for memory storage (for blob uploads)
-  const multerStorage = multer.memoryStorage();
+  const storage = multer.memoryStorage();
   const upload = multer({ 
-    storage: multerStorage,
+    storage: storage,
     limits: {
       fileSize: 5 * 1024 * 1024, // 5MB limit
     },
@@ -387,10 +356,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
 
   // Master data routes
-  app.post("/api/master-data", async (req: Request, res: Response, next) => {
+  app.post("/api/master-data", async (req: Request, res: Response) => {
     try {
       if (!req.user) {
-        throw new AuthenticationError("No active session found");
+        return res.status(401).json({ message: "No active session found" });
       }
 
       console.log("Received master data:", req.body);
@@ -404,37 +373,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log("Creating master data with:", masterDataWithUser);
-      const createdData = await storage.createMasterData(masterDataWithUser);
+      const createdData = await dbStorage.createMasterData(masterDataWithUser);
       console.log("Created master data:", createdData);
       return res.status(201).json(createdData);
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        console.error("Validation error:", validationError);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
+      }
+      
+      console.error("Error creating master data:", error);
+      // Check for duplicate service error
+      if (error instanceof Error && error.message.includes('combination of category, type, and provider already exists')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      return res.status(500).json({ 
+        message: "Failed to create master data",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
-  app.get("/api/master-data", async (req: Request, res: Response, next) => {
+  app.get("/api/master-data", async (req: Request, res: Response) => {
     try {
       console.log("Fetching all master data");
-      const masterData = await storage.getAllMasterData();
+      const masterData = await dbStorage.getAllMasterData();
       console.log("Fetched master data count:", masterData.length);
       return res.status(200).json(masterData);
     } catch (error) {
-      next(error);
+      console.error("Error fetching master data:", error);
+      return res.status(500).json({ message: "Failed to fetch master data" });
     }
   });
 
   // Add PUT endpoint for updating master data
-  app.put("/api/master-data/:id", async (req: Request, res: Response, next) => {
+  app.put("/api/master-data/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        throw new ValidationError("Invalid ID format");
+        return res.status(400).json({ message: "Invalid ID format" });
       }
 
       console.log("Updating master data for id:", id, "with data:", req.body);
       const validatedData = insertMasterDataSchema.parse(req.body);
       
-      const updatedData = await storage.updateMasterData(id, {
+      const updatedData = await dbStorage.updateMasterData(id, {
         ...validatedData,
         createdBy: req.user!.id
       });
@@ -442,12 +430,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Updated master data:", updatedData);
       return res.status(200).json(updatedData);
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
+      }
+      
+      console.error("Error updating master data:", error);
+      return res.status(500).json({ 
+        message: "Failed to update master data",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
   // Person Info routes
-  app.post("/api/person-info", async (req: Request, res: Response, next) => {
+  app.post("/api/person-info", async (req: Request, res: Response) => {
     try {
       console.log("Received person info data:", req.body);
       const validatedData = insertPersonInfoSchema.parse(req.body);
@@ -476,20 +476,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log("Processed data:", personInfoWithUser);
-      const createdData = await storage.createPersonInfo(personInfoWithUser);
+      const createdData = await dbStorage.createPersonInfo(personInfoWithUser);
       console.log("Created data:", createdData);
       return res.status(201).json(createdData);
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        console.error("Validation error:", validationError);
+        return res.status(400).json({ message: validationError.message });
+      }
+      console.error("Error creating person info:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", error.message, error.stack);
+      }
+      return res.status(500).json({ message: "Failed to create person info" });
     }
   });
 
-  app.get("/api/person-info", async (req: Request, res: Response, next) => {
+  app.get("/api/person-info", async (req: Request, res: Response) => {
     try {
-      const personInfo = await storage.getAllPersonInfo();
+      const personInfo = await dbStorage.getAllPersonInfo();
       return res.status(200).json(personInfo);
     } catch (error) {
-      next(error);
+      console.error("Error fetching person info:", error);
+      return res.status(500).json({ message: "Failed to fetch person info" });
     }
   });
 
@@ -497,15 +507,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-
         throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
-
       }
       
-      const personInfo = await storage.getPersonInfoById(id);
+      const personInfo = await dbStorage.getPersonInfoById(id);
       if (!personInfo) {
         throw new ApiError(404, "Person info not found", null, "NOT_FOUND");
-
       }
       
       res.status(200).json(personInfo);
@@ -521,14 +528,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         throw new ApiError(400, "Invalid ID format", null, "INVALID_ID");
-
       }
 
       // First check if the person exists
-      const existingPerson = await storage.getPersonInfoById(id);
+      const existingPerson = await dbStorage.getPersonInfoById(id);
       if (!existingPerson) {
         throw new ApiError(404, "Person not found", null, "NOT_FOUND");
-
       }
 
       // Validate the update data
@@ -540,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Validated update data:", validatedData);
       
       // Update the person info
-      const updatedPerson = await storage.updatePersonInfo(id, {
+      const updatedPerson = await dbStorage.updatePersonInfo(id, {
         ...validatedData,
         createdBy: existingPerson.createdBy // Preserve the original createdBy value
       });
@@ -553,41 +558,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update client assignment status
-  app.patch("/api/client-assignment/:id", async (req: Request, res: Response, next) => {
+  app.patch("/api/client-assignment/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { status } = req.body;
       
       if (!status || !["Planned", "In Progress", "Closed"].includes(status)) {
-        throw new ValidationError("Invalid status value");
+        return res.status(400).json({ message: "Invalid status value" });
       }
       
-      await storage.updateClientServiceStatus(id, status);
+      await dbStorage.updateClientServiceStatus(id, status);
       return res.status(200).json({ message: "Status updated successfully" });
     } catch (error) {
-      next(error);
+      console.error("Error updating assignment status:", error);
+      return res.status(500).json({ message: "Failed to update status" });
     }
   });
 
   // Client Assignment route with file upload  
-  app.post("/api/client-assignment", upload.single("document"), async (req: Request, res: Response, next) => {
+  app.post("/api/client-assignment", upload.single("document"), async (req: Request, res: Response) => {
     try {
       const { clientId, careCategory, careType, notes } = req.body;
       
       // Validation
       if (!clientId || !careCategory || !careType) {
-        throw new ValidationError("Client ID, care category, and care type are required");
+        return res.status(400).json({ message: "Client ID, care category, and care type are required" });
       }
       
       // Check if client exists
       const clientIdNum = parseInt(clientId);
       if (isNaN(clientIdNum)) {
-        throw new ValidationError("Invalid client ID format");
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
       
-      const client = await storage.getPersonInfoById(clientIdNum);
+      const client = await dbStorage.getPersonInfoById(clientIdNum);
       if (!client) {
-        throw new NotFoundError("Client not found");
+        return res.status(404).json({ message: "Client not found" });
       }
       
       // Create master data entry for this client
@@ -608,14 +614,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         masterDataEntry.notes += `\nDocument: ${req.file.originalname}`;
       }
       
-      const createdData = await storage.createMasterData(masterDataEntry);
+      const createdData = await dbStorage.createMasterData(masterDataEntry);
       
       return res.status(201).json({
         ...createdData,
         documentUploaded: !!req.file,
       });
     } catch (error) {
-      next(error);
+      console.error("Error creating client assignment:", error);
+      return res.status(500).json({ message: "Failed to create client assignment" });
     }
   });
   
@@ -628,24 +635,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       if (!req.file) {
-        throw new ValidationError("No file uploaded");
+        return res.status(400).json({ message: "No file uploaded" });
       }
 
       const { clientId, documentName, documentType } = req.body;
       
       if (!clientId || !documentName || !documentType) {
-        throw new ValidationError("Missing required fields: clientId, documentName, and documentType are required");
+        return res.status(400).json({ 
+          message: "Missing required fields: clientId, documentName, and documentType are required" 
+        });
       }
       
       // Check if client exists
       const clientIdNum = parseInt(clientId);
       if (isNaN(clientIdNum)) {
-        throw new ValidationError("Invalid client ID format");
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
       
-      const client = await storage.getPersonInfoById(clientIdNum);
+      const client = await dbStorage.getPersonInfoById(clientIdNum);
       if (!client) {
-        throw new NotFoundError("Client not found");
+        return res.status(404).json({ message: "Client not found" });
       }
 
       // Use original filename but sanitize it by removing any path components
@@ -659,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await blobStorage.uploadFile(fileBuffer, blobPath, req.file.mimetype);
       
       // Create document record in database
-      const documentRecord = await storage.createDocument({
+      const documentRecord = await dbStorage.createDocument({
         clientId: clientIdNum,
         documentName,
         documentType,
@@ -671,21 +680,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       return res.status(201).json(documentRecord);
     } catch (error) {
-      next(error);
+      console.error("Error uploading document:", error);
+      return res.status(500).json({ 
+        message: "Failed to upload document",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   }));
 
   // Modified document download endpoint
-  app.get("/api/documents/:filePath(*)", createHandler(async (req, res: Response<Buffer>) => {
+  app.get("/api/documents/:filePath(*)", createHandler(async (req, res) => {
     const filePath = req.params.filePath;
-    const document = await storage.getDocumentByFilePath(filePath);
+    const document = await dbStorage.getDocumentByFilePath(filePath);
     
     if (!document) {
-      throw new NotFoundError("Document not found");
+      return res.status(404).json({ message: "Document not found" });
     }
     
     if (!document.filePath) {
-      throw new NotFoundError("Document file path not found");
+      return res.status(404).json({ message: "Document file path not found" });
     }
     
     try {
@@ -711,24 +724,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Disposition', `attachment; filename="${originalFilename}"`);
       res.send(fileBuffer);
     } catch (error) {
-      throw new NotFoundError("Document not found in blob storage");
+      console.error("Error downloading document:", error);
+      return res.status(404).json({ message: "Document not found in blob storage" });
     }
   }));
 
   // Add client services routes
-  app.get("/api/client-services", async (req: Request, res: Response, next) => {
+  app.get("/api/client-services", async (req: Request, res: Response) => {
     try {
-      const clientServices = await storage.getClientServices();
+      const clientServices = await dbStorage.getClientServices();
       return res.status(200).json(clientServices);
     } catch (error) {
-      next(error);
+      console.error("Error fetching client services:", error);
+      return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
 
-  app.post("/api/client-services", async (req: Request, res: Response, next) => {
+  app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
-        throw new AuthenticationError("Unauthorized");
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
       console.log("[API] Received client service data:", req.body);
@@ -748,72 +763,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log("[API] Creating client service with:", clientServiceWithUser);
-      const createdService = await storage.createClientService(clientServiceWithUser);
+      const createdService = await dbStorage.createClientService(clientServiceWithUser);
       console.log("[API] Client service created:", createdService);
       return res.status(201).json(createdService);
     } catch (error) {
-      next(error);
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        console.error("[API] Validation error:", validationError);
+        return res.status(400).json({ message: validationError.message, details: validationError.details });
+      }
+      console.error("[API] Error creating client service:", error);
+      return res.status(500).json({ message: "Failed to create client service" });
     }
   });
 
-  app.get("/api/client-services/client/:clientId", async (req: Request, res: Response, next) => {
+  app.get("/api/client-services/client/:clientId", async (req: Request, res: Response) => {
     console.log("[API] Getting existing services for client:", req.params.clientId);
     try {
       const clientId = parseInt(req.params.clientId);
       if (isNaN(clientId)) {
-        throw new ValidationError("Invalid client ID format");
+        return res.status(400).json({ message: "Invalid client ID format" });
       }
 
-      const services = await storage.getClientServicesByClientId(clientId);
+      const services = await dbStorage.getClientServicesByClientId(clientId);
       return res.status(200).json(services);
     } catch (error) {
-      next(error);
+      console.error("Error fetching client services:", error);
+      return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
 
-  app.patch("/api/client-services/:id", async (req: Request, res: Response, next) => {
+  app.patch("/api/client-services/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        throw new ValidationError("Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
       }
 
       const { status } = req.body;
       if (!status || !["Planned", "In Progress", "Closed"].includes(status)) {
-        throw new ValidationError("Invalid status value");
+        return res.status(400).json({ message: "Invalid status value" });
       }
 
-      await storage.updateClientServiceStatus(id, status);
+      await dbStorage.updateClientServiceStatus(id, status);
       return res.status(200).json({ message: "Service status updated successfully" });
     } catch (error) {
-      next(error);
+      console.error("Error updating service status:", error);
+      return res.status(500).json({ message: "Failed to update service status" });
     }
   });
 
   // Service case notes endpoints
-  app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response, next) => {
+  app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
       if (isNaN(serviceId)) {
-        throw new ValidationError("Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
       }
 
-      const note = await storage.getServiceCaseNote(serviceId);
+      const note = await dbStorage.getServiceCaseNote(serviceId);
       return res.status(200).json(note);
     } catch (error) {
-      next(error);
+      console.error("Error fetching case note:", error);
+      return res.status(500).json({ message: "Failed to fetch case note" });
     }
   });
 
   // Create service case note
-  app.post("/api/service-case-notes", async (req: Request, res: Response, next) => {
+  app.post("/api/service-case-notes", async (req: Request, res: Response) => {
     try {
       const { serviceId, noteText } = req.body;
       if (!req.session?.user?.id) {
-        throw new AuthenticationError("Unauthorized");
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const note = await storage.createServiceCaseNote({
+      const note = await dbStorage.createServiceCaseNote({
         serviceId,
         noteText,
         createdBy: req.session.user.id
@@ -821,65 +845,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       return res.status(201).json(note);
     } catch (error) {
-      next(error);
+      console.error("Error creating case note:", error);
+      return res.status(500).json({ message: "Failed to create case note" });
     }
   });
 
   // Update service case note
-  app.put("/api/service-case-notes/:serviceId", async (req: Request, res: Response, next) => {
+  app.put("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
       const { noteText } = req.body;
       if (!req.session?.user?.id) {
-        throw new AuthenticationError("Unauthorized");
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
       if (isNaN(serviceId)) {
-        throw new ValidationError("Invalid service ID format");
+        return res.status(400).json({ message: "Invalid service ID format" });
       }
 
-      const note = await storage.updateServiceCaseNote(serviceId, {
+      const note = await dbStorage.updateServiceCaseNote(serviceId, {
         noteText,
         updatedBy: req.session.user.id
       });
 
       return res.status(200).json(note);
     } catch (error) {
-      next(error);
+      console.error("Error updating case note:", error);
+      return res.status(500).json({ message: "Failed to update case note" });
     }
   });
 
   // Change password endpoint
-  app.post("/api/change-password", async (req, res, next) => {
+  app.post("/api/change-password", async (req, res) => {
     try {
       const userId = req.user?.id; // Assumes authentication middleware sets req.user
       const { currentPassword, newPassword } = req.body;
       if (!userId) {
-        throw new AuthenticationError("Not authenticated");
+        return res.status(401).json({ message: "Not authenticated" });
       }
       if (!currentPassword || !newPassword) {
-        throw new ValidationError("Current and new password required");
+        return res.status(400).json({ message: "Current and new password required" });
       }
       // Fetch user from DB
-      const user = await storage.getUserById(userId);
+      const user = await dbStorage.getUserById(userId);
       if (!user) {
-        throw new NotFoundError("User not found");
+        return res.status(404).json({ message: "User not found" });
       }
       // Check current password
-      const isMatch = await storage.verifyPassword(user.username, currentPassword);
+      const isMatch = await dbStorage.verifyPassword(user.username, currentPassword);
       if (!isMatch) {
-        throw new ValidationError("Current password is incorrect");
+        return res.status(400).json({ message: "Current password is incorrect" });
       }
       // Update password
-      await storage.updateUserPassword(userId, newPassword);
+      await dbStorage.updateUserPassword(userId, newPassword);
       return res.status(200).json({ message: "Password changed successfully" });
     } catch (err) {
-      next(err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to change password";
+      return res.status(500).json({ message: errorMessage });
     }
   });
 
   // List all users (admin only)
-  app.get("/api/users", adminMiddleware, async (req, res, next) => {
+  app.get("/api/users", authMiddleware, async (req, res) => {
     try {
       const user = await dbStorage.getUserById(req.user.id);
       if (!user || user.role !== "admin") {
@@ -897,19 +924,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: u.role,
         company_id: u.company_id
       })));
-
     } catch (err) {
-      next(err);
+      console.error("Error fetching users:", err);
+      console.log ("[API /api/users] Failed to fetch users")
+      return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
 
   // Add a new user (admin only)
-  app.post("/api/users", adminMiddleware, async (req, res, next) => {
+  app.post("/api/users", async (req, res) => {
     try {
       console.log("Received user creation request with body:", {
         ...req.body,
         password: '[REDACTED]'  // Don't log passwords
       });
+
+      if (!req.session?.user?.id) {
+        console.log("Request rejected: No session user ID");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const currentUser = await dbStorage.getUserById(req.session.user.id);
+      console.log("Current user attempting operation:", {
+        id: currentUser?.id,
+        username: currentUser?.username,
+        role: currentUser?.role
+      });
+
+      if (!currentUser || currentUser.role !== "admin") {
+        console.log("Request rejected: User is not admin", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden" });
+      }
 
       // Validate input using the schema
       try {
@@ -918,15 +966,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("Input validation successful");
 
         // Check for duplicate username
-        const existing = await storage.getUserByUsername(validatedData.username);
+        const existing = await dbStorage.getUserByUsername(validatedData.username);
         if (existing) {
-          throw new ValidationError("Username already exists");
+          console.log("Request rejected: Username already exists:", validatedData.username);
+          return res.status(409).json({ message: "Username already exists" });
         }
 
         // Create user using AuthService to ensure bcrypt is used
         console.log("Creating new user with username:", validatedData.username);
         const user = await AuthService.createUser({ 
-
           name: validatedData.name,
           username: validatedData.username, 
           password: validatedData.password,
@@ -943,45 +991,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.status(201).json(user);
       } catch (validationError) {
+        console.error("Validation error:", validationError);
         if (validationError instanceof z.ZodError) {
           const formattedError = fromZodError(validationError);
-          throw new ValidationError(`Validation failed: ${formattedError.message}`);
+          return res.status(400).json({ 
+            message: "Validation failed", 
+            errors: formattedError.details 
+          });
         }
         throw validationError;
       }
     } catch (err) {
-      next(err);
-    }
-  });
-
-  // Company routes
-  app.post("/api/companies", adminMiddleware, async (req: Request, res: Response, next) => {
-    try {
-      if (!req.user) {
-        throw new AuthenticationError("User not authenticated");
+      console.error("Error creating user:", err);
+      if (err instanceof Error) {
+        console.error("Error stack:", err.stack);
       }
-      
-      const companyData = {
-        ...req.body,
-        created_by: req.user.id
-      };
-      
-      const createdCompany = await storage.createCompany(companyData);
-      return res.status(201).json(createdCompany);
-    } catch (error) {
-      next(error);
+      return res.status(500).json({ message: "Failed to add user" });
     }
   });
-
-  app.get("/api/companies", adminMiddleware, async (req: Request, res: Response, next) => {
-    try {
-      const companies = await storage.getAllCompanies();
-      return res.status(200).json(companies);
-    } catch (error) {
-      next(error);
-    }
-  });
-
 
   // Company routes (admin only)
   type CompanyDeleteRequest = ExpressRequest<{ id: string }> & AuthRequest;
@@ -1102,7 +1129,6 @@ interface ClientService {
   endDate: Date | null;
   status: string;
 }
-
 
 // Update PersonInfo interface to include HCP dates
 interface PersonInfo {
