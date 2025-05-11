@@ -12,6 +12,7 @@
   "dependencies": {
     "@azure/storage-blob": "^12.27.0",
     "@types/bcrypt": "^5.0.2",
+    "@typespec/ts-http-runtime": "^0.2.2",
     "bcrypt": "^5.1.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
@@ -23,6 +24,7 @@
     "fs-extra": "^11.3.0",
     "helmet": "^8.1.0",
     "multer": "^1.4.5-lts.2",
+    "negotiator": "^1.0.0",
     "pg": "^8.15.5",
     "sql-formatter": "^15.6.1",
     "vite": "^5.4.14",
