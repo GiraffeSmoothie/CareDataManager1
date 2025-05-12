@@ -1,15 +1,4 @@
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.table_constraints
-    WHERE constraint_name = 'master_data_service_unique'
-  ) THEN
-    ALTER TABLE master_data ADD CONSTRAINT master_data_service_unique UNIQUE (service_category, service_type, service_provider);
-  END IF;
-END $$;
-
--- Create client_services table
+-- Create client_services table if it doesn't exist
 CREATE TABLE IF NOT EXISTS client_services (
   id SERIAL PRIMARY KEY,
   client_id INTEGER REFERENCES person_info(id) NOT NULL,
@@ -22,5 +11,6 @@ CREATE TABLE IF NOT EXISTS client_services (
   status TEXT DEFAULT 'Planned' CHECK (status IN ('Planned', 'In Progress', 'Closed')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_by INTEGER REFERENCES users(id),
-  FOREIGN KEY (service_category, service_type, service_provider) REFERENCES master_data(service_category, service_type, service_provider)
+  FOREIGN KEY (service_category, service_type, service_provider) 
+    REFERENCES master_data(service_category, service_type, service_provider)
 );

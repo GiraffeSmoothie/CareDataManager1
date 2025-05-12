@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS person_info (
   next_of_kin_email TEXT DEFAULT '',
   next_of_kin_phone TEXT DEFAULT '',
   hcp_level TEXT DEFAULT '',
-  hcp_end_date TEXT DEFAULT '',
+  hcp_start_date TEXT DEFAULT '',
   status TEXT DEFAULT 'New',
   created_by INTEGER REFERENCES users(id)
 );
@@ -68,3 +68,22 @@ CREATE TABLE IF NOT EXISTS documents (
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_by INTEGER REFERENCES users(id)
 );
+
+-- Migration to add segments table and link it to person_info and master_data tables
+-- Create segments table
+CREATE TABLE segments (
+    id SERIAL PRIMARY KEY,
+    segment_name TEXT NOT NULL,
+    company_id INTEGER REFERENCES companies(company_id) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER REFERENCES users(id),
+    UNIQUE(segment_name, company_id)
+);
+
+-- Add segment_id to person_info table
+ALTER TABLE person_info 
+ADD COLUMN segment_id INTEGER REFERENCES segments(id);
+
+-- Add segment_id to master_data table
+ALTER TABLE master_data 
+ADD COLUMN segment_id INTEGER REFERENCES segments(id);

@@ -11,6 +11,7 @@ import { Loader2, Plus } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 import { ErrorDisplay } from "@/components/ui/error-display";
+import { useSegment } from "@/contexts/segment-context";
 
 import {
   Form,
@@ -61,7 +62,8 @@ const personInfoSchema = insertPersonInfoSchema.extend({
   nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
   hcpLevel: z.string().min(1, "HCP Level is required"),
   hcpStartDate: z.string().min(1, "HCP Start Date is required"),
-  status: z.enum(["New", "Active", "Paused", "Closed"]).default("New")
+  status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
+  segmentId: z.number().nullable().optional()
 });
 
 type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
@@ -69,43 +71,13 @@ type PersonInfoFormValues = z.infer<typeof personInfoSchema>;
 export default function ManageClient() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedSegment } = useSegment();
   const [useHomeAddress, setUseHomeAddress] = useState(true);
   const [selectedMember, setSelectedMember] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [buttonLabel, setButtonLabel] = useState("Add client");
   const [isEditing, setIsEditing] = useState(false);
   const [hideInactiveClients, setHideInactiveClients] = useState(true);
-
-  // Fetch all members
-  const { data: members = [], isLoading, error } = useQuery<PersonInfo[]>({
-    queryKey: ["/api/person-info"],
-    staleTime: 10000,
-  });
-
-  if (isLoading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <ErrorDisplay
-            variant="card"
-            title="Error Loading Clients"
-            message={error instanceof Error ? error.message : "Failed to load client data"}
-            className="max-w-md"
-          />
-        </div>
-      </AppLayout>
-    );
-  }
 
   const form = useForm<PersonInfoFormValues>({
     resolver: zodResolver(personInfoSchema),
@@ -134,37 +106,49 @@ export default function ManageClient() {
       hcpLevel: "",
       hcpStartDate: "",
       status: "New", 
+      segmentId: selectedSegment?.id || null,
     },
   });
 
-  // Filter clients based on search term
-  const filteredClients = members.filter(client => 
-    !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
-  );
-
-  // Handle edit client
-  const handleEdit = (client: PersonInfo) => {
-    setSelectedMember(client);
-    setIsEditing(true);
-    setButtonLabel("Update client");
-    setShowDialog(true);
-
-    // Populate form with client data
-    Object.entries(client).forEach(([key, value]) => {
-      if (key !== 'id' && key !== 'createdBy') {
-        form.setValue(key as any, value || "");
+  // Fetch all clients with segment filtering - using a better query approach
+  const { data: clients = [], isLoading, error, refetch } = useQuery<PersonInfo[]>({
+    queryKey: ["/api/person-info", selectedSegment?.id],
+    queryFn: async () => {
+      if (!selectedSegment) {
+        return []; // Don't fetch if no segment is selected
       }
-    });
-  };
+      
+      const url = `/api/person-info?segmentId=${selectedSegment.id}`;
+      console.log("Fetching clients from:", url);
+      const response = await fetch(url, { 
+        credentials: "include",
+        // Add cache busting params
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch clients");
+      }
+      
+      const data = await response.json();
+      console.log(`Fetched ${data.length} clients for segment ${selectedSegment.id}`);
+      return data;
+    },
+    enabled: !!selectedSegment, // Only run query when we have a segment
+    staleTime: 5000, // Shorter stale time
+  });
 
-  // Handle add new
-  const handleAddNew = () => {
-    setSelectedMember(null);
-    setIsEditing(false);
-    setButtonLabel("Add client");
-    setShowDialog(true);
-    form.reset();
-  };
+  // Refetch when selected segment changes
+  useEffect(() => {
+    if (selectedSegment) {
+      // Invalidate the query first to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/person-info", selectedSegment.id] });
+      refetch();
+    }
+  }, [selectedSegment, refetch, queryClient]);
 
   // When useHomeAddress changes, update mailing address fields
   useEffect(() => {
@@ -198,11 +182,17 @@ export default function ManageClient() {
     return () => subscription.unsubscribe();
   }, [form, useHomeAddress]);
 
+  // Update form when selected segment changes
+  useEffect(() => {
+    form.setValue("segmentId", selectedSegment?.id || null);
+  }, [selectedSegment, form]);
+
   const mutation = useMutation({
     mutationFn: async (data: PersonInfoFormValues) => {
       const requestData = {
         ...data,
-        status: data.status || (isEditing ? selectedMember?.status : 'New')
+        status: data.status || (isEditing ? selectedMember?.status : 'New'),
+        segmentId: selectedSegment?.id || data.segmentId
       };
 
       if (!isEditing) {
@@ -223,7 +213,7 @@ export default function ManageClient() {
       throw new Error("Invalid operation");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/person-info"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/person-info", selectedSegment?.id] });
       toast({
         title: "Success",
         description: isEditing ? "Client information updated successfully" : "New client added successfully",
@@ -249,6 +239,38 @@ export default function ManageClient() {
 
   const hcpLevels = ["1", "2", "3", "4"];
   const statusOptions = Object.keys(STATUS_CONFIGS);
+
+  // Filter clients based on search term and active status
+  const filteredClients = clients.filter(client => 
+    !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
+  );
+
+  // Handle edit client
+  const handleEdit = (client: PersonInfo) => {
+    setSelectedMember(client);
+    setIsEditing(true);
+    setButtonLabel("Update client");
+    setShowDialog(true);
+
+    // Populate form with client data
+    Object.entries(client).forEach(([key, value]) => {
+      if (key !== 'id' && key !== 'createdBy') {
+        form.setValue(key as any, value || "");
+      }
+    });
+  };
+
+  // Handle add new
+  const handleAddNew = () => {
+    setSelectedMember(null);
+    setIsEditing(false);
+    setButtonLabel("Add client");
+    setShowDialog(true);
+    form.reset({
+      ...form.getValues(),
+      segmentId: selectedSegment?.id || null,
+    });
+  };
 
   const columns: DataTableColumnDef<PersonInfo>[] = [
     {
@@ -297,15 +319,51 @@ export default function ManageClient() {
     }
   ];
 
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <ErrorDisplay
+            variant="card"
+            title="Error Loading Clients"
+            message={error instanceof Error ? error.message : "Failed to load client data"}
+            className="max-w-md"
+          />
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="container py-6">
         <Card className="mb-6">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Clients</CardTitle>
+              <div className="flex flex-col">
+                <CardTitle>Clients</CardTitle>
+                {selectedSegment && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Showing clients for segment: {selectedSegment.segment_name}
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
-                <Button onClick={handleAddNew}>
+                <Button 
+                  onClick={handleAddNew}
+                  disabled={!selectedSegment}
+                  title={!selectedSegment ? "Please select a segment first" : "Add new client"}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
                 </Button>
@@ -313,24 +371,32 @@ export default function ManageClient() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center mb-4">
-              <Checkbox 
-                id="hideInactiveClients" 
-                checked={hideInactiveClients}
-                onCheckedChange={(checked) => setHideInactiveClients(!!checked)}
-              />
-              <label
-                htmlFor="hideInactiveClients"
-                className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Hide closed and paused clients
-              </label>
-            </div>
-            <DataTable
-              data={filteredClients}
-              columns={columns}
-              searchPlaceholder="Search clients..."
-            />
+            {!selectedSegment ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <p className="mb-4 text-muted-foreground">Please select a segment from the dropdown in the top left corner</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center mb-4">
+                  <Checkbox 
+                    id="hideInactiveClients" 
+                    checked={hideInactiveClients}
+                    onCheckedChange={(checked) => setHideInactiveClients(!!checked)}
+                  />
+                  <label
+                    htmlFor="hideInactiveClients"
+                    className="ml-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Hide closed and paused clients
+                  </label>
+                </div>
+                <DataTable
+                  data={filteredClients}
+                  columns={columns}
+                  searchPlaceholder="Search clients..."
+                />
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -338,9 +404,21 @@ export default function ManageClient() {
           <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{isEditing ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+              {selectedSegment && (
+                <p className="text-sm text-muted-foreground">
+                  Segment: {selectedSegment.segment_name}
+                </p>
+              )}
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-16">
+                {/* Hidden segment ID field */}
+                <input 
+                  type="hidden" 
+                  {...form.register("segmentId")}
+                  value={selectedSegment?.id || ""}
+                />
+
                 {/* Personal Details Section */}
                 <div className="space-y-6">
                   <div className="border-b pb-2">
@@ -395,9 +473,9 @@ export default function ManageClient() {
                       name="middleName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Middle Name</FormLabel>
+                          <FormLabel>Middle Name (Optional)</FormLabel>
                           <FormControl>
-                            <Input placeholder="Middle name (optional)" {...field} />
+                            <Input placeholder="Middle name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -410,7 +488,7 @@ export default function ManageClient() {
                         <FormItem>
                           <FormLabel>Date of Birth</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} max={new Date().toISOString().split('T')[0]} />
+                            <Input type="date" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -437,9 +515,9 @@ export default function ManageClient() {
                       name="homePhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Home Phone</FormLabel>
+                          <FormLabel>Home Phone (Optional)</FormLabel>
                           <FormControl>
-                            <Input placeholder="Home phone (optional)" {...field} />
+                            <Input placeholder="Home phone number" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -452,156 +530,138 @@ export default function ManageClient() {
                         <FormItem>
                           <FormLabel>Mobile Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Mobile phone" {...field} />
+                            <Input placeholder="Mobile phone number" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {statusOptions.map((status) => (
-                              <SelectItem key={status} value={status}>
-                                {status}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
-                {/* Address Section */}
-                <div className="space-y-6 pt-4">
+                {/* Home Address Section */}
+                <div className="space-y-6">
                   <div className="border-b pb-2">
-                    <h3 className="text-lg font-medium">Address</h3>
+                    <h3 className="text-lg font-medium">Home Address</h3>
                   </div>
                   
-                  <div>
-                    <h4 className="text-md font-medium mb-4">Home Address</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="addressLine1"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Address Line 1</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Street address" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressLine2"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Address Line 2</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Apartment, suite, unit, etc. (optional)" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="addressLine3"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Address Line 3</FormLabel>
-                            <FormControl>
-                              <Input placeholder="City, town, etc. (optional)" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="postCode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Post Code</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Post code" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="addressLine1"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address Line 1</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Street address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
 
-                  <div className="pt-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-md font-medium">Mailing Address</h4>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id="useHomeAddress" 
-                          checked={useHomeAddress}
-                          onCheckedChange={(checked) => {
-                            setUseHomeAddress(!!checked);
-                            form.setValue("useHomeAddress", !!checked);
-                          }}
-                        />
-                        <label
-                          htmlFor="useHomeAddress"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          Same as home address
-                        </label>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="addressLine2"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address Line 2 (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Apartment, suite, etc." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="addressLine3"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address Line 3 (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Suburb, area, etc." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4", useHomeAddress && "opacity-50")}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="postCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postcode</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Postcode" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Mailing Address Section */}
+                <div className="space-y-6">
+                  <div className="border-b pb-2 flex justify-between items-center">
+                    <h3 className="text-lg font-medium">Mailing Address</h3>
+                    <div className="flex items-center">
+                      <Checkbox
+                        id="useHomeAddress"
+                        checked={useHomeAddress}
+                        onCheckedChange={(checked) => {
+                          setUseHomeAddress(!!checked);
+                          form.setValue("useHomeAddress", !!checked);
+                        }}
+                      />
+                      <label
+                        htmlFor="useHomeAddress"
+                        className="ml-2 text-sm font-medium leading-none"
+                      >
+                        Same as home address
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div className={cn("space-y-6", useHomeAddress ? "opacity-50" : "")}>
+                    <div className="grid grid-cols-1 gap-4">
                       <FormField
                         control={form.control}
                         name="mailingAddressLine1"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Address Line 1</FormLabel>
+                            <FormLabel>Mailing Address Line 1</FormLabel>
                             <FormControl>
                               <Input 
                                 placeholder="Street address" 
+                                disabled={useHomeAddress} 
                                 {...field} 
-                                disabled={useHomeAddress}
                               />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="mailingAddressLine2"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Address Line 2</FormLabel>
+                            <FormLabel>Mailing Address Line 2 (Optional)</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="Apartment, suite, unit, etc. (optional)" 
-                                {...field}
-                                disabled={useHomeAddress}
+                                placeholder="Apartment, suite, etc." 
+                                disabled={useHomeAddress} 
+                                {...field} 
                               />
                             </FormControl>
                             <FormMessage />
@@ -613,29 +673,32 @@ export default function ManageClient() {
                         name="mailingAddressLine3"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Address Line 3</FormLabel>
+                            <FormLabel>Mailing Address Line 3 (Optional)</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="City, town, etc. (optional)" 
-                                {...field}
-                                disabled={useHomeAddress}
+                                placeholder="Suburb, area, etc." 
+                                disabled={useHomeAddress} 
+                                {...field} 
                               />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="mailingPostCode"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Post Code</FormLabel>
+                            <FormLabel>Mailing Postcode</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="Post code" 
-                                {...field}
-                                disabled={useHomeAddress}
+                                placeholder="Postcode" 
+                                disabled={useHomeAddress} 
+                                {...field} 
                               />
                             </FormControl>
                             <FormMessage />
@@ -647,33 +710,52 @@ export default function ManageClient() {
                 </div>
 
                 {/* Next of Kin Section */}
-                <div className="space-y-6 pt-4">
+                <div className="space-y-6">
                   <div className="border-b pb-2">
                     <h3 className="text-lg font-medium">Next of Kin</h3>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  <div className="grid grid-cols-1 gap-4">
                     <FormField
                       control={form.control}
                       name="nextOfKinName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Name</FormLabel>
+                          <FormLabel>Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="Full name" {...field} />
+                            <Input placeholder="Next of Kin name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="nextOfKinAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Next of Kin address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="nextOfKinPhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Phone</FormLabel>
+                          <FormLabel>Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Phone number" {...field} />
+                            <Input placeholder="Next of Kin phone number" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -684,22 +766,9 @@ export default function ManageClient() {
                       name="nextOfKinEmail"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Email</FormLabel>
+                          <FormLabel>Email (Optional)</FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="Email address (optional)" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="nextOfKinAddress"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Next of Kin Address</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Full address" {...field} />
+                            <Input type="email" placeholder="Next of Kin email" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -709,11 +778,11 @@ export default function ManageClient() {
                 </div>
 
                 {/* HCP Information Section */}
-                <div className="space-y-6 pt-4">
+                <div className="space-y-6">
                   <div className="border-b pb-2">
                     <h3 className="text-lg font-medium">HCP Information</h3>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -751,6 +820,43 @@ export default function ManageClient() {
                           <FormControl>
                             <Input type="date" {...field} />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Status Section */}
+                <div className="space-y-6">
+                  <div className="border-b pb-2">
+                    <h3 className="text-lg font-medium">Status</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Client Status</FormLabel>
+                          <Select 
+                            onValueChange={field.onChange} 
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select client status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {statusOptions.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}

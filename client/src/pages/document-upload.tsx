@@ -15,10 +15,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiRequest } from "@/lib/queryClient";
 import { insertDocumentSchema, type PersonInfo, type Document } from "@shared/schema";
 import { ErrorDisplay } from "@/components/ui/error-display";
-import type { z } from "zod";
+import { useSegment } from "@/contexts/segment-context";
+import { z } from "zod";
+
+// Define the enhanced document schema
+const documentFormSchema = insertDocumentSchema.extend({
+  file: z.instanceof(FileList).refine(file => file.length > 0, {
+    message: "Please select a file",
+    path: ["file"]
+  })
+});
 
 // Define the type based on the schema
-type DocumentFormData = z.infer<typeof insertDocumentSchema> & { file: FileList | null };
+type DocumentFormData = z.infer<typeof documentFormSchema> & { file: FileList | null };
 
 // Document types for dropdown
 const documentTypes = [
@@ -39,12 +48,33 @@ export default function DocumentUpload() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { selectedSegment } = useSegment();
 
-  // Fetch all members
-  const { data: members = [] } = useQuery<PersonInfo[]>({
-    queryKey: ["/api/person-info"],
+  // Fetch all members filtered by the selected segment
+  const { data: members = [], refetch: refetchMembers } = useQuery<PersonInfo[]>({
+    queryKey: ["/api/person-info", selectedSegment?.id],
+    queryFn: async () => {
+      const url = selectedSegment 
+        ? `/api/person-info?segmentId=${selectedSegment.id}` 
+        : "/api/person-info";
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        throw new Error("Failed to fetch members");
+      }
+      return response.json();
+    },
     staleTime: 10000,
+    enabled: !!selectedSegment
   });
+
+  // Refetch when selected segment changes
+  useEffect(() => {
+    if (selectedSegment) {
+      refetchMembers();
+      setSelectedMember(null); // Reset selected member when segment changes
+      setSearchTerm("");
+    }
+  }, [selectedSegment, refetchMembers]);
 
   // Filtered members for dropdown
   const filteredMembers = searchTerm.length >= 4
@@ -71,10 +101,10 @@ export default function DocumentUpload() {
 
   // Fetch documents for selected member
   const { data: documents = [], isLoading: loadingDocuments } = useQuery<Document[]>({
-    queryKey: ["/api/documents/member", selectedMember?.id],
+    queryKey: ["/api/documents/client", selectedMember?.id, selectedSegment?.id],
     queryFn: async () => {
       if (!selectedMember) return [];
-      const response = await apiRequest("GET", `/api/documents/member/${selectedMember.id}`);
+      const response = await apiRequest("GET", `/api/documents/client/${selectedMember.id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
       }
@@ -85,20 +115,14 @@ export default function DocumentUpload() {
 
   // Form setup
   const form = useForm<DocumentFormData>({
-    resolver: zodResolver(insertDocumentSchema),
+    resolver: zodResolver(documentFormSchema),
     defaultValues: {
-      memberId: 0,
+      clientId: 0,
       documentName: "",
       documentType: "",
       file: null
     },
   });
-
-  // Select member handler
-  const handleSelectMember = (member: PersonInfo) => {
-    setSelectedMember(member);
-    form.setValue("memberId", member.id);
-  };
 
   // Document upload mutation
   const uploadMutation = useMutation({
@@ -108,10 +132,15 @@ export default function DocumentUpload() {
       }
 
       const formData = new FormData();
-      formData.append("memberId", data.memberId.toString());
+      formData.append("clientId", data.clientId.toString());
       formData.append("documentName", data.documentName);
       formData.append("documentType", data.documentType);
       formData.append("file", data.file[0]);
+      
+      // Add segment ID if available
+      if (selectedSegment) {
+        formData.append("segmentId", selectedSegment.id.toString());
+      }
 
       console.log("Uploading file:", data.file[0].name);
       
@@ -140,7 +169,7 @@ export default function DocumentUpload() {
       });
 
       form.reset({
-        memberId: selectedMember?.id || 0,
+        clientId: selectedMember?.id || 0,
         documentName: "",
         documentType: "",
         file: null
@@ -154,9 +183,8 @@ export default function DocumentUpload() {
       // Force refresh documents list
       if (selectedMember) {
         queryClient.invalidateQueries({ 
-          queryKey: ["/api/documents/member", selectedMember.id],
+          queryKey: ["/api/documents/client", selectedMember.id, selectedSegment?.id],
           exact: true,
-          refetchType: 'active'
         });
       }
       
@@ -177,6 +205,16 @@ export default function DocumentUpload() {
       });
       return;
     }
+    
+    if (!selectedSegment) {
+      toast({
+        title: "Error",
+        description: "Please select a segment first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     console.log("Form data before mutation:", data);
     uploadMutation.mutate(data);
   };
@@ -195,9 +233,20 @@ export default function DocumentUpload() {
         <Card className="max-w-5xl mx-auto">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Client Documents</CardTitle>
+              <div className="flex flex-col">
+                <CardTitle>Client Documents</CardTitle>
+                {selectedSegment && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Segment: {selectedSegment.segment_name}
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
-                <Button onClick={() => setShowDialog(true)} disabled={!selectedMember}>
+                <Button 
+                  onClick={() => setShowDialog(true)} 
+                  disabled={!selectedMember || !selectedSegment}
+                  title={!selectedSegment ? "Please select a segment first" : !selectedMember ? "Please select a member first" : "Upload document"}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
                 </Button>
@@ -205,45 +254,50 @@ export default function DocumentUpload() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Styled search field like Member Assignment */}
-            <div className="relative max-w-md mb-4" ref={searchRef}>
-              <div className="flex items-center border rounded-md">
-                <Search className="h-4 w-4 ml-2 text-gray-500" />
-                <Input
-                  type="text"
-                  placeholder="Search Client (minimum 4 characters)"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setShowDropdown(e.target.value.length >= 4 && filteredMembers.length > 0);
-                  }}
-                  onFocus={() => {
-                    if (filteredMembers.length > 0) setShowDropdown(true);
-                  }}
-                  className="border-0 focus:ring-0"
-                  autoComplete="off"
-                />
+            {!selectedSegment ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <p className="mb-4 text-muted-foreground">Please select a segment from the dropdown in the top left corner</p>
               </div>
-              {showDropdown && filteredMembers.length > 0 && (
-                <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
-                  {filteredMembers.map((client) => (
-                    <div
-                      key={client.id}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => {
-                        setSelectedMember(client);
-                        setSearchTerm(`${client.firstName} ${client.lastName}`);
-                        setShowDropdown(false);
-                        form.setValue("memberId", client.id);
-                      }}
-                    >
-                      {client.title ? client.title + " " : ""}
-                      {client.firstName} {client.lastName}
-                    </div>
-                  ))}
+            ) : (
+              <div className="relative max-w-md mb-4" ref={searchRef}>
+                <div className="flex items-center border rounded-md">
+                  <Search className="h-4 w-4 ml-2 text-gray-500" />
+                  <Input
+                    type="text"
+                    placeholder="Search Client (minimum 4 characters)"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setShowDropdown(e.target.value.length >= 4 && filteredMembers.length > 0);
+                    }}
+                    onFocus={() => {
+                      if (filteredMembers.length > 0) setShowDropdown(true);
+                    }}
+                    className="border-0 focus:ring-0"
+                    autoComplete="off"
+                  />
                 </div>
-              )}
-            </div>
+                {showDropdown && filteredMembers.length > 0 && (
+                  <div className="absolute w-full mt-1 bg-white border rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                    {filteredMembers.map((client) => (
+                      <div
+                        key={client.id}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setSelectedMember(client);
+                          setSearchTerm(`${client.firstName} ${client.lastName}`);
+                          setShowDropdown(false);
+                          form.setValue("clientId", client.id);
+                        }}
+                      >
+                        {client.title ? client.title + " " : ""}
+                        {client.firstName} {client.lastName}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -312,16 +366,18 @@ export default function DocumentUpload() {
           <DialogContent className="max-w-2xl" aria-describedby="dialog-description">
             <DialogHeader>
               <DialogTitle>Upload New Document</DialogTitle>
-              <p id="dialog-description" className="text-sm text-muted-foreground">
-                Upload a document for {selectedMember?.firstName} {selectedMember?.lastName}
-              </p>
+              {selectedMember && selectedSegment && (
+                <p id="dialog-description" className="text-sm text-muted-foreground">
+                  Upload a document for {selectedMember.firstName} {selectedMember.lastName} in segment {selectedSegment.segment_name}
+                </p>
+              )}
             </DialogHeader>
             <div className="mt-4">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="memberId"
+                    name="clientId"
                     render={({ field }) => (
                       <FormItem className="hidden">
                         <FormControl>

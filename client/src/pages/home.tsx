@@ -298,7 +298,7 @@ export default function Home() {
                       <div>
                         <p className="font-medium">{service.serviceName}</p>
                         <p className="text-sm text-muted-foreground">
-                          Assigned to client #{service.memberId}
+                          Assigned to client #{service.clientId}
                         </p>
                       </div>
                     </div>
