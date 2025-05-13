@@ -11,6 +11,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { ErrorDisplay } from "@/components/ui/error-display";
+import { 
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogFooter,
+  AlertDialogCancel
+} from "@/components/ui/alert-dialog";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -24,6 +33,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [_, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -109,9 +119,13 @@ export default function Login() {
                   <FormItem>
                     <div className="flex items-center justify-between">
                       <FormLabel>Password</FormLabel>
-                      <a href="#" className="text-sm font-medium text-primary hover:underline">
+                      <button 
+                        type="button"
+                        onClick={() => setForgotPasswordOpen(true)}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
                         Forgot password?
-                      </a>
+                      </button>
                     </div>
                     <FormControl>
                       <Input
@@ -140,6 +154,20 @@ export default function Login() {
           </Form>
         </CardContent>
       </Card>
+
+      <AlertDialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Password</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please contact your system administrator to reset your password.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

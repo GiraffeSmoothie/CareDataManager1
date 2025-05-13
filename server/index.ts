@@ -161,8 +161,8 @@ export async function initializeDatabase() {
       });
     }
 
-    // Use port from environment variable (Azure App Service expects 8080) or default to 3000
-    const port = process.env.WEBSITES_PORT || process.env.PORT || 8080;
+    // Use port from environment variable or default to 3000
+    const port = process.env.WEBSITES_PORT || process.env.PORT || 3000;
     server.listen(port, () => {
       console.log(`Server running on port ${port}`);
     });

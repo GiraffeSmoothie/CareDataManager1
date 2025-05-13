@@ -42,6 +42,7 @@ export type PersonInfo = {
   createdBy?: number;
   createdAt?: Date;
   updatedAt?: Date;
+  segmentId?: number;
 };
 
 export type Document = {
@@ -87,6 +88,7 @@ export type MasterData = {
   active: boolean;
   createdBy?: number;
   createdAt?: Date;
+  segmentId?: number;
 };
 
 export type Company = {
@@ -97,6 +99,14 @@ export type Company = {
   contact_person_name: string;
   contact_person_phone: string;
   contact_person_email: string;
+  created_at?: Date;
+  created_by?: number;
+};
+
+export type Segment = {
+  id: number;
+  segment_name: string;
+  company_id: number;
   created_at?: Date;
   created_by?: number;
 };
@@ -145,11 +155,12 @@ export const insertDocumentSchema = z.object({
   }),
   documentName: z.string({
     required_error: "Document name is required",
-  }),
+  }).min(1, "Document name is required"),
   documentType: z.string({
     required_error: "Document type is required",
-  }),
+  }).min(1, "Document type is required"),
   filePath: z.string().optional(),
+  segmentId: z.number().optional().nullable()
 });
 
 export const insertClientServiceSchema = z.object({
@@ -187,6 +198,7 @@ export const insertMasterDataSchema = z.object({
   serviceProvider: z.string({ required_error: "Please select or enter a service provider" }),
   active: z.boolean().default(true),
   createdBy: z.number().optional(),
+  segmentId: z.number().nullable().optional(),
 });
 
 export const insertCompanySchema = z.object({
@@ -196,5 +208,11 @@ export const insertCompanySchema = z.object({
   contact_person_name: z.string().min(1, "Contact person name is required"),
   contact_person_phone: z.string().min(1, "Contact person phone is required"),
   contact_person_email: z.string().email("Invalid email address"),
+  created_by: z.number().optional()
+});
+
+export const insertSegmentSchema = z.object({
+  segment_name: z.string().min(1, "Segment name is required"),
+  company_id: z.number({ required_error: "Company ID is required" }),
   created_by: z.number().optional()
 });

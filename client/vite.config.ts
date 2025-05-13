@@ -25,10 +25,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3000', // Reverted back to port 3000
         changeOrigin: true,
         secure: false,
         ws: true,
+        rewrite: (path) => path, // Keep this to ensure paths are preserved exactly
         configure: (proxy) => {
           proxy.on('error', (err) => {
             console.log('proxy error', err);
@@ -36,8 +37,8 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req) => {
             console.log('Sending Request:', req.method, req.url);
           });
-          proxy.on('proxyRes', (proxyRes) => {
-            console.log('Received Response:', proxyRes.statusCode);
+          proxy.on('proxyRes', (proxyRes, req) => { 
+            console.log('Received Response:', proxyRes.statusCode, 'for', req.url);
           });
         }
       }

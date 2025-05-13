@@ -18,6 +18,8 @@ import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS } from "@/lib/constants";
+import { useSegment } from "@/contexts/segment-context";
+import { cn } from "@/lib/utils"; // Add this import for the cn utility function
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -57,6 +59,7 @@ interface ClientService {
 
 export default function ClientAssignment() {
   const { toast } = useToast();
+  const { selectedSegment } = useSegment();
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedClient, setSelectedClient] = useState<PersonInfo | null>(null);
@@ -76,9 +79,27 @@ export default function ClientAssignment() {
     { label: "Sunday", value: "Sunday" }
   ];
 
-  // Fetch master data
+  // Fetch master data with segment filtering
   const { data: masterData = [] } = useQuery<MasterDataType[]>({
-    queryKey: ["/api/master-data"],
+    queryKey: ["/api/master-data", selectedSegment?.id],
+    queryFn: async () => {
+      const url = selectedSegment 
+        ? `/api/master-data?segmentId=${selectedSegment.id}` 
+        : "/api/master-data";
+      const response = await fetch(url, { 
+        credentials: "include",
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch master data");
+      }
+      return response.json();
+    },
+    enabled: !!selectedSegment,
+    staleTime: 5000,
   });
 
   // Get unique categories, types, and providers from active services only
@@ -103,10 +124,32 @@ export default function ClientAssignment() {
     .map(item => item.serviceProvider)
   ));
 
-  // Fetch all clients
+  // Fetch all clients with segment filtering
   const { data: clients = [] } = useQuery<PersonInfo[]>({
-    queryKey: ["/api/person-info"],
-    queryFn: getQueryFn({ on401: "throw" }),
+    queryKey: ["/api/person-info", selectedSegment?.id],
+    queryFn: async () => {
+      if (!selectedSegment) {
+        return [];
+      }
+      const url = `/api/person-info?segmentId=${selectedSegment.id}`;
+      console.log("Fetching clients from:", url);
+      
+      const response = await fetch(url, { 
+        credentials: "include",
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch clients");
+      }
+      
+      return response.json();
+    },
+    enabled: !!selectedSegment,
+    staleTime: 5000,
   });
 
   // Get URL parameters after clients are fetched
@@ -124,14 +167,36 @@ export default function ClientAssignment() {
     }
   }, [clients]);
 
-  // Fetch client services
+  // Fetch client services with segment filtering
   const { data: clientServices = [], isLoading: isServicesLoading, error: servicesError } = useQuery<ClientService[]>({
-    queryKey: ["/api/client-services/client", selectedClient?.id],
-    queryFn: () => 
-      selectedClient 
-        ? apiRequest("GET", `/api/client-services/client/${selectedClient.id}`).then(res => res.json())
-        : Promise.resolve([]),
-    enabled: !!selectedClient,
+    queryKey: ["/api/client-services/client", selectedClient?.id, selectedSegment?.id],
+    queryFn: async () => {
+      if (!selectedClient) {
+        return [];
+      }
+      
+      const url = selectedSegment
+        ? `/api/client-services/client/${selectedClient.id}?segmentId=${selectedSegment.id}`
+        : `/api/client-services/client/${selectedClient.id}`;
+        
+      console.log("Fetching client services from:", url);
+      
+      const response = await fetch(url, {
+        credentials: "include",
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch client services");
+      }
+      
+      return response.json();
+    },
+    enabled: !!selectedClient && !!selectedSegment,
+    staleTime: 5000,
   });
 
   // Form setup
@@ -215,7 +280,8 @@ export default function ClientAssignment() {
           serviceCategory: data.careCategory,
           serviceType: data.careType,
           serviceProvider: data.serviceProvider,
-          active: true
+          active: true,
+          segmentId: selectedSegment?.id || null
         });
       } catch (error) {
         // Ignore error if master data already exists
@@ -230,7 +296,8 @@ export default function ClientAssignment() {
         serviceStartDate: data.serviceStartDate,
         serviceDays: data.serviceDays,
         serviceHours: parseInt(data.serviceHours),
-        status: "Planned"
+        status: "Planned",
+        segmentId: selectedSegment?.id || null
       };
       console.log("[Assign Service] Sending serviceData to API:", serviceData);
       const response = await apiRequest("POST", "/api/client-services", serviceData);
@@ -254,7 +321,7 @@ export default function ClientAssignment() {
       });
       form.reset();
       setShowDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client-services/client", selectedClient?.id, selectedSegment?.id] });
     },
     onError: (error: Error) => {
       toast({
@@ -272,7 +339,7 @@ export default function ClientAssignment() {
   );
 
   const statusOptions = Object.keys(STATUS_CONFIGS)
-    .filter(status => ["Active", "Paused", "In Progress", "Closed"].includes(status));
+    .filter(status => ["Planned", "In Progress", "Closed"].includes(status));
 
   const columns: DataTableColumnDef<ClientService>[] = [
     {
@@ -315,7 +382,7 @@ export default function ClientAssignment() {
                 await apiRequest("PATCH", `/api/client-services/${row.original.id}`, {
                   status: value
                 });
-                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id] });
+                await queryClient.refetchQueries({ queryKey: ["/api/client-services/client", selectedClient?.id, selectedSegment?.id] });
                 toast({
                   title: "Success",
                   description: "Service status updated",
@@ -642,7 +709,7 @@ export default function ClientAssignment() {
           service={selectedService}
           onSaved={() => {
             queryClient.invalidateQueries({ 
-              queryKey: ["/api/client-services", selectedClient?.id] 
+              queryKey: ["/api/client-services", selectedClient?.id, selectedSegment?.id] 
             });
           }}
         />

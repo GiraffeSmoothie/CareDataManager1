@@ -36,8 +36,16 @@ export async function setupVite(app: Express, server: Server) {
     });
 
     app.use(vite.middlewares);
+    
+    // Only handle non-API routes with the Vite SPA middleware
     app.use("*", async (req, res, next) => {
       const url = req.originalUrl;
+      
+      // Skip API routes - let them be handled by the API route handlers
+      if (url.startsWith('/api')) {
+        return next();
+      }
+      
       try {
         const template = await fs.promises.readFile(
           path.resolve(__dirname, "../client/index.html"),
@@ -61,13 +69,20 @@ export function serveStatic(app: Express) {
     fs.mkdirSync(clientDistPath, { recursive: true });
   }
 
-  app.use(express.static(clientDistPath));
-
-  // SPA fallback
-  app.use("*", (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.resolve(clientDistPath, "index.html"));
+  // Static file middleware - exclude API routes
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
     }
+    express.static(clientDistPath)(req, res, next);
+  });
+
+  // SPA fallback - only for non-API routes
+  app.use("*", (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.resolve(clientDistPath, "index.html"));
   });
 }
 

@@ -134,8 +134,55 @@ async function initializeUsers() {
 
 const PgStore = pgSession(session);
 
-// Initialize blob storage service
-const blobStorage = new BlobStorageService();
+// Initialize blob storage service only for production
+let blobStorage: BlobStorageService | null = null;
+try {
+  if (process.env.NODE_ENV === 'production') {
+    blobStorage = new BlobStorageService();
+    console.log('Blob storage service initialized for production');
+  } else {
+    console.log('Using local file storage for development mode');
+  }
+} catch (error) {
+  console.error('Error initializing blob storage service:', error);
+  console.log('Falling back to local file storage');
+}
+
+// Ensure uploads directory exists
+const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
+fs.mkdirSync(uploadsDir, { recursive: true });
+console.log(`Document uploads directory: ${uploadsDir}`);
+
+// Configure multer for appropriate storage based on environment
+const storage = process.env.NODE_ENV === 'production' 
+  ? multer.memoryStorage() // Use memory storage for production (for blob storage)
+  : multer.diskStorage({    // Use disk storage for development
+      destination: (req, file, cb) => {
+        cb(null, uploadsDir);
+      },
+      filename: (req, file, cb) => {
+        // Generate unique filename while preserving original extension
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext);
+      }
+    });
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only PDF, DOC, DOCX, JPG, JPEG, and PNG files are allowed."));
+    }
+  }
+});
 
 // Input validation middleware
 const validateInput = (schema: z.ZodSchema) => async (req: Request, res: Response, next: NextFunction) => {
@@ -304,7 +351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user: { 
           id: user.id, 
           username: user.username, 
-          role: user.role 
+          role: user.role,
+          name: user.name  // Add the name field here
         } 
       });
     } catch (error) {
@@ -322,27 +370,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
   
-  // Setup file upload
-  const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
-  
-  // Configure multer for memory storage (for blob uploads)
-  const storage = multer.memoryStorage();
-  const upload = multer({ 
-    storage: storage,
-    limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB limit
-    },
-    fileFilter: function (req, file, cb) {
-      const allowedTypes = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"];
-      const ext = path.extname(file.originalname).toLowerCase();
-      if (allowedTypes.includes(ext)) {
-        cb(null, true);
-      } else {
-        cb(new Error("Invalid file type. Only PDF, DOC, DOCX, JPG, JPEG, and PNG files are allowed."));
-      }
-    }
-  });
-
   // Protected routes
   app.use("/api", authMiddleware);
 
@@ -350,7 +377,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users", validateInput(insertUserSchema), authMiddleware);
   app.post("/api/person-info", validateInput(insertPersonInfoSchema), authMiddleware);
   app.post("/api/master-data", validateInput(insertMasterDataSchema), authMiddleware);
-  app.post("/api/documents", validateInput(insertDocumentSchema), authMiddleware);
   app.post("/api/service-case-notes", validateInput(insertServiceCaseNoteSchema), authMiddleware);
   app.post("/api/client-services", validateInput(insertClientServiceSchema), authMiddleware);
   app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
@@ -362,19 +388,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "No active session found" });
       }
 
-      console.log("Received master data:", req.body);
-      const validatedData = insertMasterDataSchema.parse(req.body);
+      console.log("Received master data:", JSON.stringify(req.body));
+      
+      // Handle null/undefined segmentId before validation
+      const requestData = { ...req.body };
+      if (requestData.segmentId === null || requestData.segmentId === undefined) {
+        delete requestData.segmentId; // Remove it to avoid validation error
+      }
+      
+      const validatedData = insertMasterDataSchema.parse(requestData);
       
       // Add the current user as the creator
       const masterDataWithUser = {
         ...validatedData,
         createdBy: req.user.id,
         active: validatedData.active ?? true,
+        segmentId: req.body.segmentId // Explicitly use the original segmentId from request body
       };
       
-      console.log("Creating master data with:", masterDataWithUser);
+      console.log("Creating master data with:", JSON.stringify(masterDataWithUser));
       const createdData = await dbStorage.createMasterData(masterDataWithUser);
-      console.log("Created master data:", createdData);
+      console.log("Created master data:", JSON.stringify(createdData));
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -401,8 +435,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/master-data", async (req: Request, res: Response) => {
     try {
-      console.log("Fetching all master data");
-      const masterData = await dbStorage.getAllMasterData();
+      // Get segment ID from query parameter if provided
+      const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
+      
+      console.log(`Fetching master data${segmentId !== undefined ? ` for segmentId: ${segmentId}` : ''}`);
+      
+      const masterData = await dbStorage.getAllMasterData(segmentId);
       console.log("Fetched master data count:", masterData.length);
       return res.status(200).json(masterData);
     } catch (error) {
@@ -420,11 +458,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log("Updating master data for id:", id, "with data:", req.body);
-      const validatedData = insertMasterDataSchema.parse(req.body);
+      
+      // Handle null/undefined segmentId before validation
+      const requestData = { ...req.body };
+      if (requestData.segmentId === null || requestData.segmentId === undefined) {
+        delete requestData.segmentId; // Remove it to avoid validation error
+      }
+      
+      const validatedData = insertMasterDataSchema.parse(requestData);
       
       const updatedData = await dbStorage.updateMasterData(id, {
         ...validatedData,
-        createdBy: req.user!.id
+        createdBy: req.user!.id,
+        segmentId: req.body.segmentId // Use original value which can be null
       });
 
       console.log("Updated master data:", updatedData);
@@ -495,7 +541,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/person-info", async (req: Request, res: Response) => {
     try {
-      const personInfo = await dbStorage.getAllPersonInfo();
+      // Get segment ID from query parameter if provided
+      const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
+      const personInfo = await dbStorage.getAllPersonInfo(segmentId);
       return res.status(200).json(personInfo);
     } catch (error) {
       console.error("Error fetching person info:", error);
@@ -626,109 +674,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Modified document upload endpoint
-  app.post("/api/documents", upload.single("file"), createHandler(async (req, res) => {
-    console.log("Document upload request received");
-    console.log("Headers:", req.headers);
-    console.log("Body:", req.body);
-    console.log("File:", req.file);
-
+  // Get documents by client ID - this should be defined BEFORE the file path download route
+  app.get("/api/documents/client/:clientId", createHandler(async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
-      const { clientId, documentName, documentType } = req.body;
+      console.log(`Document list requested for client ID: ${req.params.clientId}`);
+      const clientId = parseInt(req.params.clientId);
+      const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
       
-      if (!clientId || !documentName || !documentType) {
-        return res.status(400).json({ 
-          message: "Missing required fields: clientId, documentName, and documentType are required" 
-        });
-      }
-      
-      // Check if client exists
-      const clientIdNum = parseInt(clientId);
-      if (isNaN(clientIdNum)) {
+      if (isNaN(clientId)) {
         return res.status(400).json({ message: "Invalid client ID format" });
       }
       
-      const client = await dbStorage.getPersonInfoById(clientIdNum);
-      if (!client) {
-        return res.status(404).json({ message: "Client not found" });
+      // Get all documents for the client from database
+      const documents = await dbStorage.getDocumentsByClientId(clientId, segmentId);
+      
+      if (!documents || documents.length === 0) {
+        console.log(`No documents found for client ${clientId}${segmentId ? ` in segment ${segmentId}` : ''}`);
+        return res.status(404).json({ message: "Document not found" });  // Return 404 if no documents found
       }
-
-      // Use original filename but sanitize it by removing any path components
-      const originalFilename = req.file.originalname;
-      const sanitizedFilename = originalFilename.replace(/^.*[\\\/]/, '');
-      const clientDirName = `${clientIdNum}_${client.firstName}_${client.lastName}`;
-      const blobPath = `${clientDirName}/${sanitizedFilename}`;
-
-      // Upload to blob storage
-      const fileBuffer = req.file.buffer;
-      await blobStorage.uploadFile(fileBuffer, blobPath, req.file.mimetype);
       
-      // Create document record in database
-      const documentRecord = await dbStorage.createDocument({
-        clientId: clientIdNum,
-        documentName,
-        documentType,
-        filename: sanitizedFilename,
-        filePath: blobPath,
-        createdBy: req.user.id,
-        uploadedAt: new Date()
+      // Verify that the document files actually exist and normalize the paths
+      const normalizedDocuments = documents.map(doc => {
+        let filePath = doc.filePath;
+        const isLocalDev = process.env.NODE_ENV !== 'production';
+        
+        if (isLocalDev) {
+          // For local development, check if the file exists in the file system
+          // and ensure the path is correct for the download endpoint
+          
+          // First check if file exists directly at the path stored in DB
+          let fullPath = filePath;
+          if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
+            fullPath = path.join(process.cwd(), filePath);
+          }
+          
+          // If file doesn't exist at direct path, check if it's in uploads directory
+          if (!fs.existsSync(fullPath)) {
+            const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
+            
+            // If file path starts with 'uploads/', try to find it directly in uploads dir
+            if (filePath.startsWith('uploads/')) {
+              const pathWithoutUploads = filePath.substring('uploads/'.length);
+              fullPath = path.join(uploadsDir, pathWithoutUploads);
+            } else {
+              // Otherwise try with the full path in uploads dir
+              fullPath = path.join(uploadsDir, filePath);
+            }
+            
+            // If file exists in the new location, update the path that will be sent to frontend
+            if (fs.existsSync(fullPath)) {
+              // Only send the path that the download endpoint will understand
+              filePath = fullPath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/') + '/', '');
+              console.log(`Found document at path: ${fullPath}, using path: ${filePath}`);
+            } else {
+              console.log(`Document file not found at: ${fullPath}`);
+              // Don't filter out documents that can't be found, just log it
+            }
+          }
+        }
+        
+        // Return document with normalized path that can be used with download endpoint
+        return {
+          ...doc,
+          filePath: filePath.replace(/\\/g, '/')  // Ensure forward slashes
+        };
       });
       
-      return res.status(201).json(documentRecord);
+      console.log(`Found ${documents.length} documents for client ${clientId}`);
+      return res.status(200).json(normalizedDocuments);
     } catch (error) {
-      console.error("Error uploading document:", error);
-      return res.status(500).json({ 
-        message: "Failed to upload document",
-        details: error instanceof Error ? error.message : "Unknown error"
-      });
+      console.error("Error fetching client documents:", error);
+      return res.status(500).json({ message: "Failed to fetch client documents" });
     }
   }));
 
-  // Modified document download endpoint
+  // Modified document download endpoint - Direct download by file path
+  // This is defined AFTER the client documents endpoint to avoid route conflicts
   app.get("/api/documents/:filePath(*)", createHandler(async (req, res) => {
-    const filePath = req.params.filePath;
-    const document = await dbStorage.getDocumentByFilePath(filePath);
-    
-    if (!document) {
-      return res.status(404).json({ message: "Document not found" });
-    }
-    
-    if (!document.filePath) {
-      return res.status(404).json({ message: "Document file path not found" });
-    }
-    
     try {
-      // Download from blob storage
-      const fileBuffer = await blobStorage.downloadFile(document.filePath);
+      const filePath = req.params.filePath;
+      console.log(`Document download requested for path: ${filePath}`);
       
-      // Get the original filename from the filePath
-      const originalFilename = document.filename;
+      // Check if path exists in database
+      const document = await dbStorage.getDocumentByFilePath(filePath);
       
-      // Set content type based on file extension
-      const ext = path.extname(originalFilename).toLowerCase();
-      const contentType = {
-        '.pdf': 'application/pdf',
-        '.doc': 'application/msword',
-        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png'
-      }[ext] || 'application/octet-stream';
+      if (!document) {
+        console.log(`Document not found in database with path: ${filePath}`);
+        return res.status(404).json({ message: "Document not found in database" });
+      }
+      
+      // Different handling for production (blob storage) vs development (file system)
+      if (process.env.NODE_ENV === 'production' && blobStorage) {
+        try {
+          // For production, use blob storage
+          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          
+          // Set content type based on file extension
+          const ext = path.extname(document.filename).toLowerCase();
+          const contentType = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png'
+          }[ext] || 'application/octet-stream';
 
-      res.setHeader('Content-Type', contentType);
-      // Use original filename in Content-Disposition
-      res.setHeader('Content-Disposition', `attachment; filename="${originalFilename}"`);
-      res.send(fileBuffer);
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+          res.send(fileBuffer);
+        } catch (error) {
+          console.error("Error downloading from blob storage:", error);
+          return res.status(404).json({ message: "Document not found in blob storage" });
+        }
+      } else {
+        // For development, find the file on disk
+        // Try different paths - with or without "uploads" prefix
+        let fullPath = document.filePath;
+        
+        // If path doesn't start with slash or drive letter, assume it's relative to cwd
+        if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
+          fullPath = path.join(process.cwd(), fullPath);
+        }
+        
+        console.log(`Attempting to access file at: ${fullPath}`);
+        
+        if (!fs.existsSync(fullPath)) {
+          // If not found with direct path, check if it's in uploads directory
+          fullPath = path.join(uploadsDir, path.basename(document.filePath));
+          console.log(`File not found, trying uploads dir: ${fullPath}`);
+          
+          // If still not found, try removing "uploads" from the start of the path
+          if (!fs.existsSync(fullPath) && document.filePath.startsWith('uploads/')) {
+            const pathWithoutUploads = document.filePath.substring('uploads/'.length);
+            fullPath = path.join(uploadsDir, pathWithoutUploads);
+            console.log(`File not found, trying without uploads prefix: ${fullPath}`);
+          }
+        }
+        
+        if (!fs.existsSync(fullPath)) {
+          console.error(`File not found at any attempted path: ${fullPath}`);
+          return res.status(404).json({ message: "Document file not found on disk" });
+        }
+        
+        // Set content type based on file extension
+        const ext = path.extname(document.filename).toLowerCase();
+        const contentType = {
+          '.pdf': 'application/pdf',
+          '.doc': 'application/msword',
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png'
+        }[ext] || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+        res.sendFile(fullPath);
+      }
     } catch (error) {
-      console.error("Error downloading document:", error);
-      return res.status(404).json({ message: "Document not found in blob storage" });
+      console.error("Error retrieving document:", error);
+      return res.status(500).json({ message: "Failed to retrieve document" });
     }
   }));
-
+  
   // Add client services routes
   app.get("/api/client-services", async (req: Request, res: Response) => {
     try {
@@ -784,8 +893,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(clientId)) {
         return res.status(400).json({ message: "Invalid client ID format" });
       }
+      
+      // Get segment ID from query parameter if provided
+      const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
+      console.log(`[API] Fetching client services with segmentId: ${segmentId || 'none'}`);
 
-      const services = await dbStorage.getClientServicesByClientId(clientId);
+      const services = await dbStorage.getClientServicesByClientId(clientId, segmentId);
       return res.status(200).json(services);
     } catch (error) {
       console.error("Error fetching client services:", error);
@@ -814,6 +927,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Service case notes endpoints
+  app.get("/api/service-case-notes/service/:serviceId", async (req: Request, res: Response) => {
+    try {
+      const serviceId = parseInt(req.params.serviceId);
+      if (isNaN(serviceId)) {
+        return res.status(400).json({ message: "Invalid service ID format" });
+      }
+
+      const notes = await dbStorage.getServiceCaseNotesByServiceId(serviceId);
+      return res.status(200).json(notes);
+    } catch (error) {
+      console.error("Error fetching service case notes:", error);
+      return res.status(500).json({ message: "Failed to fetch service case notes" });
+    }
+  });
+
   app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
@@ -928,6 +1056,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching users:", err);
       console.log ("[API /api/users] Failed to fetch users")
       return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+  
+  // Get a single user by ID (admin only)
+  app.get("/api/users/:id", authMiddleware, async (req, res) => {
+    try {
+      console.log(`[API /api/users/:id] Request received for user with ID: ${req.params.id}`);
+      console.log(`[API /api/users/:id] Request headers:`, req.headers);
+      
+      const currentUser = await dbStorage.getUserById(req.user.id);
+      if (!currentUser || currentUser.role !== "admin") {
+        console.log("[API /api/users/:id] Request rejected: User is not admin", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        console.log(`[API /api/users/:id] Invalid user ID format: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+      
+      console.log(`[API /api/users/:id] Looking up user with ID: ${userId}`);
+      const user = await dbStorage.getUserById(userId);
+      if (!user) {
+        console.log(`[API /api/users/:id] User not found with ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      console.log(`[API /api/users/:id] Found user: ${user.username}`);
+      
+      // Set explicit headers to ensure proper response type
+      res.setHeader('Content-Type', 'application/json');
+      
+      return res.status(200).json({ 
+        id: user.id, 
+        name: user.name, 
+        username: user.username, 
+        role: user.role,
+        company_id: user.company_id
+      });
+    } catch (err) {
+      console.error("[API /api/users/:id] Error fetching user:", err);
+      return res.status(500).json({ message: "Failed to fetch user", error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  // Update a user by ID (admin only)
+  app.put("/api/users/:id", authMiddleware, async (req, res) => {
+    try {
+      console.log(`[API PUT /api/users/:id] Update request received for user with ID: ${req.params.id}`);
+      
+      const currentUser = await dbStorage.getUserById(req.user.id);
+      if (!currentUser || (currentUser.role !== "admin" && currentUser.id !== parseInt(req.params.id))) {
+        console.log("[API PUT /api/users/:id] Request rejected: User is not admin or not updating own account", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required or can only update own account" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        console.log(`[API PUT /api/users/:id] Invalid user ID format: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+      
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(userId);
+      if (!existingUser) {
+        console.log(`[API PUT /api/users/:id] User not found with ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      console.log(`[API PUT /api/users/:id] Updating user with ID: ${userId}`);
+      
+      // Non-admin users can only update certain fields of their own account
+      let updateData = req.body;
+      if (currentUser.role !== "admin" && currentUser.id === userId) {
+        // Regular users can only update name and password
+        updateData = {
+          name: req.body.name
+        };
+        
+        if (req.body.password) {
+          updateData.password = req.body.password;
+        }
+      }
+      
+      const updatedUser = await dbStorage.updateUser(userId, updateData);
+      
+      // Set explicit headers to ensure proper response type
+      res.setHeader('Content-Type', 'application/json');
+      
+      return res.status(200).json({ 
+        id: updatedUser.id, 
+        name: updatedUser.name, 
+        username: updatedUser.username, 
+        role: updatedUser.role,
+        company_id: updatedUser.company_id
+      });
+    } catch (err) {
+      console.error("[API PUT /api/users/:id] Error updating user:", err);
+      return res.status(500).json({ message: "Failed to update user", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
 
@@ -1110,6 +1344,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting company:", error);
       return res.status(500).json({ message: "Failed to delete company" });
+    }
+  });
+
+  // Segment API endpoints
+  app.get("/api/segments/:companyId", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      if (isNaN(companyId)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const segments = await dbStorage.getAllSegmentsByCompany(companyId);
+      return res.status(200).json(segments);
+    } catch (error) {
+      console.error("Error fetching segments:", error);
+      return res.status(500).json({ message: "Failed to fetch segments" });
+    }
+  });
+
+  app.post("/api/segments", authMiddleware, async (req: AuthRequest & Request, res: Response) => {
+    try {
+      const { segment_name, company_id } = req.body;
+      
+      if (!segment_name || !company_id) {
+        return res.status(400).json({ message: "Segment name and company ID are required" });
+      }
+
+      const segmentData = {
+        segment_name,
+        company_id,
+        created_by: req.user.id
+      };
+
+      const newSegment = await dbStorage.createSegment(segmentData);
+      return res.status(201).json(newSegment);
+    } catch (error) {
+      console.error("Error creating segment:", error);
+      return res.status(500).json({ message: "Failed to create segment" });
+    }
+  });
+
+  app.put("/api/segments/:id", authMiddleware, async (req: AuthRequest & Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid segment ID" });
+      }
+
+      const { segment_name } = req.body;
+      
+      if (!segment_name) {
+        return res.status(400).json({ message: "Segment name is required" });
+      }
+
+      const segmentData = {
+        segment_name
+      };
+
+      const updatedSegment = await dbStorage.updateSegment(id, segmentData);
+      
+      if (!updatedSegment) {
+        return res.status(404).json({ message: "Segment not found" });
+      }
+
+      return res.status(200).json(updatedSegment);
+    } catch (error) {
+      console.error("Error updating segment:", error);
+      return res.status(500).json({ message: "Failed to update segment" });
+    }
+  });
+
+  app.delete("/api/segments/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid segment ID" });
+      }
+
+      const result = await dbStorage.deleteSegment(id);
+      
+      if (!result) {
+        return res.status(404).json({ message: "Segment not found" });
+      }
+
+      return res.status(200).json({ message: "Segment deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting segment:", error);
+      return res.status(500).json({ message: "Failed to delete segment" });
+    }
+  });
+
+  // Get segments for the current user
+  app.get("/api/user/segments", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      // Get current user with company_id
+      const user = await dbStorage.getUserById(req.user.id);
+      if (!user || !user.company_id) {
+        return res.status(200).json([]);
+      }
+
+      // Get segments for the company
+      const segments = await dbStorage.getAllSegmentsByCompany(user.company_id);
+      return res.status(200).json(segments);
+    } catch (error) {
+      console.error("Error fetching user segments:", error);
+      return res.status(500).json({ message: "Failed to fetch segments" });
     }
   });
 

@@ -323,8 +323,10 @@ export class Storage {
         paramCount++;
       }
       if (data.password) {
+        // Hash the password before storing it
+        const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
         updateFields.push(`password = $${paramCount}`);
-        values.push(data.password);
+        values.push(hashedPassword);
         paramCount++;
       }
       if (data.role) {
@@ -380,7 +382,8 @@ export class Storage {
         hcpLevel,
         hcpStartDate,
         status,
-        createdBy
+        createdBy,
+        segmentId
       } = data;
 
       const result = await this.pool.query(
@@ -389,8 +392,8 @@ export class Storage {
           home_phone, mobile_phone, address_line1, address_line2, address_line3,
           post_code, mailing_address_line1, mailing_address_line2, mailing_address_line3,
           mailing_post_code, use_home_address, next_of_kin_name, next_of_kin_address,
-          next_of_kin_email, next_of_kin_phone, hcp_level, hcp_start_date, status, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          next_of_kin_email, next_of_kin_phone, hcp_level, hcp_start_date, status, created_by, segment_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         RETURNING *`,
         [
           title,
@@ -417,7 +420,8 @@ export class Storage {
           hcpLevel,
           hcpStartDate,
           status,
-          createdBy
+          createdBy,
+          segmentId
         ]
       );
       return result.rows[0];
@@ -426,9 +430,17 @@ export class Storage {
     }
   }
 
-  async getAllPersonInfo(): Promise<PersonInfo[]> {
+  async getAllPersonInfo(segmentId?: number): Promise<PersonInfo[]> {
     try {
-      const result = await this.pool.query('SELECT * FROM person_info');
+      let query = 'SELECT * FROM person_info';
+      const params = [];
+      
+      if (segmentId) {
+        query += ' WHERE segment_id = $1';
+        params.push(segmentId);
+      }
+      
+      const result = await this.pool.query(query, params);
       return result.rows.map(row => ({
         id: row.id,
         title: row.title,
@@ -458,7 +470,8 @@ export class Storage {
         hcpLevel: row.hcp_level || null,
         hcpStartDate: row.hcp_start_date || null,
         status: row.status || 'New',
-        createdBy: row.created_by || null
+        createdBy: row.created_by || null,
+        segmentId: row.segment_id || null
       }));
     } catch (error) {
       handleDatabaseError(error, 'getAllPersonInfo');
@@ -504,7 +517,8 @@ export class Storage {
         hcpLevel: row.hcp_level || null,
         hcpStartDate: row.hcp_start_date || null,
         status: row.status || 'New',
-        createdBy: row.created_by || null
+        createdBy: row.created_by || null,
+        segmentId: row.segment_id || null
       };
     } catch (error) {
       handleDatabaseError(error, 'getPersonInfoById');
@@ -542,7 +556,8 @@ export class Storage {
         hcpLevel,
         hcpStartDate,
         status,
-        createdBy
+        createdBy,
+        segmentId
       } = data;
 
       const result = await this.pool.query(
@@ -553,8 +568,9 @@ export class Storage {
           post_code = $12, mailing_address_line1 = $13, mailing_address_line2 = $14,
           mailing_address_line3 = $15, mailing_post_code = $16, use_home_address = $17,
           next_of_kin_name = $18, next_of_kin_address = $19, next_of_kin_email = $20,
-          next_of_kin_phone = $21, hcp_level = $22, hcp_start_date = $23, status = $24
-        WHERE id = $25
+          next_of_kin_phone = $21, hcp_level = $22, hcp_start_date = $23, status = $24,
+          segment_id = $25
+        WHERE id = $26
         RETURNING *`,
         [
           title,
@@ -581,6 +597,7 @@ export class Storage {
           hcpLevel || '',
           hcpStartDate || '',
           status || 'New',
+          segmentId,
           id
         ]
       );
@@ -616,7 +633,8 @@ export class Storage {
         hcpLevel: row.hcp_level,
         hcpStartDate: row.hcp_start_date,
         status: row.status,
-        createdBy: row.created_by
+        createdBy: row.created_by,
+        segmentId: row.segment_id
       };
     } catch (error) {
       handleDatabaseError(error, 'updatePersonInfo');
@@ -651,14 +669,17 @@ export class Storage {
         throw new Error('A service with this combination of category, type, and provider already exists');
       }
 
+      console.log('Creating master data with segmentId:', data.segmentId);
+
       const result = await this.pool.query(
-        'INSERT INTO master_data (service_category, service_type, service_provider, active, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        'INSERT INTO master_data (service_category, service_type, service_provider, active, created_by, segment_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
         [
           data.serviceCategory,
           data.serviceType,
           data.serviceProvider || '',
           data.active ?? true,
-          data.createdBy
+          data.createdBy,
+          data.segmentId || null
         ]
       );
 
@@ -669,16 +690,27 @@ export class Storage {
         serviceProvider: result.rows[0].service_provider || undefined,
         active: result.rows[0].active,
         createdBy: result.rows[0].created_by,
-        createdAt: result.rows[0].created_at
+        createdAt: result.rows[0].created_at,
+        segmentId: result.rows[0].segment_id
       };
     } catch (error) {
       handleDatabaseError(error, 'createMasterData');
     }
   }
 
-  async getAllMasterData(): Promise<MasterData[]> {
+  async getAllMasterData(segmentId?: number): Promise<MasterData[]> {
     try {
-      const result = await this.pool.query('SELECT * FROM master_data ORDER BY id DESC');
+      let queryText = 'SELECT * FROM master_data';
+      const params = [];
+      
+      if (segmentId !== undefined) {
+        queryText += ' WHERE segment_id = $1 OR segment_id IS NULL';
+        params.push(segmentId);
+      }
+      
+      queryText += ' ORDER BY id DESC';
+      
+      const result = await this.pool.query(queryText, params);
       return result.rows.map(row => ({
         id: row.id,
         serviceCategory: row.service_category,
@@ -686,7 +718,8 @@ export class Storage {
         serviceProvider: row.service_provider,
         active: row.active,
         createdBy: row.created_by,
-        createdAt: row.created_at
+        createdAt: row.created_at,
+        segmentId: row.segment_id
       }));
     } catch (error) {
       handleDatabaseError(error, 'getAllMasterData');
@@ -716,13 +749,15 @@ export class Storage {
           service_category = $1,
           service_type = $2,
           service_provider = $3,
-          active = $4
-        WHERE id = $5 RETURNING *`,
+          active = $4,
+          segment_id = $5
+        WHERE id = $6 RETURNING *`,
         [
           data.serviceCategory,
           data.serviceType,
           data.serviceProvider || '',
           data.active,
+          data.segmentId || null,
           id
         ]
       );
@@ -738,41 +773,25 @@ export class Storage {
         serviceProvider: result.rows[0].service_provider || undefined,
         active: result.rows[0].active,
         createdBy: result.rows[0].created_by,
-        createdAt: result.rows[0].created_at
+        createdAt: result.rows[0].created_at,
+        segmentId: result.rows[0].segment_id
       };
     } catch (error) {
       handleDatabaseError(error, 'updateMasterData');
     }
   }
 
-  async createDocument(data: Omit<Document, 'id'>): Promise<Document> {
+  async getDocumentsByClientId(clientId: number, segmentId?: number): Promise<Document[]> {
     try {
-      const result = await this.pool.query(
-        'INSERT INTO documents (client_id, document_name, document_type, filename, file_path, created_by, uploaded_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [data.clientId, data.documentName, data.documentType, data.filename, data.filePath, data.createdBy, data.uploadedAt]
-      );
-      return {
-        id: result.rows[0].id,
-        clientId: result.rows[0].client_id,
-        documentName: result.rows[0].document_name,
-        documentType: result.rows[0].document_type,
-        filename: result.rows[0].filename,
-        filePath: result.rows[0].file_path,
-        uploadedAt: result.rows[0].uploaded_at,
-        createdBy: result.rows[0].created_by
-      };
-    } catch (error) {
-      handleDatabaseError(error, 'createDocument');
-    }
-  }
+      let queryText = 'SELECT * FROM documents WHERE client_id = $1';
+      const params = [clientId];
 
-  async getDocumentsByClientId(clientId: number): Promise<Document[]> {
-    if (!validateInput(clientId, 'id')) {
-      throw new Error('Invalid client ID format');
-    }
+      if (segmentId !== undefined) {
+        queryText += ' AND (segment_id = $2 OR segment_id IS NULL)';
+        params.push(segmentId);
+      }
 
-    try {
-      const result = await this.pool.query('SELECT * FROM documents WHERE client_id = $1', [clientId]);
+      const result = await this.pool.query(queryText, params);
       return result.rows.map(row => ({
         id: row.id,
         clientId: row.client_id,
@@ -781,10 +800,48 @@ export class Storage {
         filename: row.filename,
         filePath: row.file_path,
         uploadedAt: row.uploaded_at,
-        createdBy: row.created_by
+        createdBy: row.created_by,
+        segmentId: row.segment_id
       }));
     } catch (error) {
       handleDatabaseError(error, 'getDocumentsByClientId');
+    }
+  }
+
+  async createDocument(document: any): Promise<Document> {
+    try {
+      const {
+        clientId,
+        documentName,
+        documentType,
+        filename,
+        filePath,
+        createdBy,
+        uploadedAt,
+        segmentId
+      } = document;
+
+      const result = await this.pool.query(
+        `INSERT INTO documents (
+          client_id, document_name, document_type, filename, file_path, created_by, uploaded_at, segment_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [clientId, documentName, documentType, filename, filePath, createdBy, uploadedAt, segmentId]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        documentName: row.document_name,
+        documentType: row.document_type,
+        filename: row.filename,
+        filePath: row.file_path,
+        uploadedAt: row.uploaded_at,
+        createdBy: row.created_by,
+        segmentId: row.segment_id
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'createDocument');
     }
   }
 
@@ -840,53 +897,24 @@ export class Storage {
     }
   }
 
-  async createClientService(data: Omit<ClientService, 'id'>): Promise<ClientService> {
+  async getClientServicesByClientId(clientId: number, segmentId?: number): Promise<ClientService[]> {
     try {
-      const serviceDaysArray = Array.isArray(data.serviceDays) ? data.serviceDays : [data.serviceDays];
-      
-      const result = await this.pool.query(
-        `INSERT INTO client_services (
-          client_id, service_category, service_type, service_provider,
-          service_start_date, service_days, service_hours, status, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [
-          data.clientId,
-          data.serviceCategory,
-          data.serviceType,
-          data.serviceProvider,
-          new Date(data.serviceStartDate),
-          serviceDaysArray,
-          data.serviceHours,
-          data.status || 'Planned',
-          data.createdBy
-        ]
-      );
-      
-      return {
-        id: result.rows[0].id,
-        clientId: result.rows[0].client_id,
-        serviceCategory: result.rows[0].service_category,
-        serviceType: result.rows[0].service_type,
-        serviceProvider: result.rows[0].service_provider,
-        serviceStartDate: result.rows[0].service_start_date,
-        serviceDays: result.rows[0].service_days,
-        serviceHours: result.rows[0].service_hours,
-        status: result.rows[0].status,
-        createdAt: result.rows[0].created_at,
-        createdBy: result.rows[0].created_by
-      };
-    } catch (error) {
-      handleDatabaseError(error, 'createClientService');
-    }
-  }
+      let queryText = `
+        SELECT cs.*, p.first_name, p.last_name 
+        FROM client_services cs
+        JOIN person_info p ON cs.client_id = p.id
+        WHERE cs.client_id = $1
+      `;
+      const params = [clientId];
 
-  async getClientServicesByClientId(clientId: number): Promise<ClientService[]> {
-    if (!validateInput(clientId, 'id')) {
-      throw new Error('Invalid client ID format');
-    }
+      if (segmentId !== undefined) {
+        queryText += ' AND (cs.segment_id = $2 OR cs.segment_id IS NULL)';
+        params.push(segmentId);
+      }
 
-    try {
-      const result = await this.pool.query('SELECT * FROM client_services WHERE client_id = $1', [clientId]);
+      queryText += ' ORDER BY cs.created_at DESC';
+
+      const result = await this.pool.query(queryText, params);
       return result.rows.map(row => ({
         id: row.id,
         clientId: row.client_id,
@@ -898,10 +926,68 @@ export class Storage {
         serviceHours: row.service_hours,
         status: row.status,
         createdAt: row.created_at,
-        createdBy: row.created_by
+        createdBy: row.created_by,
+        segmentId: row.segment_id,
+        clientName: `${row.first_name} ${row.last_name}`
       }));
     } catch (error) {
       handleDatabaseError(error, 'getClientServicesByClientId');
+    }
+  }
+
+  async createClientService(data: any): Promise<ClientService> {
+    try {
+      const {
+        clientId,
+        serviceCategory,
+        serviceType,
+        serviceProvider,
+        serviceStartDate,
+        serviceDays,
+        serviceHours,
+        status,
+        createdBy,
+        createdAt,
+        segmentId
+      } = data;
+
+      const result = await this.pool.query(
+        `INSERT INTO client_services (
+          client_id, service_category, service_type, service_provider, 
+          service_start_date, service_days, service_hours, status, created_by, created_at, segment_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [
+          clientId,
+          serviceCategory,
+          serviceType,
+          serviceProvider,
+          serviceStartDate,
+          serviceDays,
+          serviceHours,
+          status || 'Planned',
+          createdBy,
+          createdAt || new Date(),
+          segmentId
+        ]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: row.service_days,
+        serviceHours: row.service_hours,
+        status: row.status,
+        createdAt: row.created_at,
+        createdBy: row.created_by,
+        segmentId: row.segment_id
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'createClientService');
     }
   }
 
@@ -1006,6 +1092,31 @@ export class Storage {
     }
   }
 
+  async getServiceCaseNotesByServiceId(serviceId: number): Promise<ServiceCaseNote[]> {
+    if (!validateInput(serviceId, 'id')) {
+      throw new Error('Invalid service ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM service_case_notes WHERE service_id = $1 ORDER BY created_at DESC',
+        [serviceId]
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        serviceId: row.service_id,
+        noteText: row.note_text,
+        createdAt: row.created_at,
+        createdBy: row.created_by,
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getServiceCaseNotesByServiceId');
+    }
+  }
+
   async getAllCompanies(): Promise<Company[]> {
     try {
       const result = await this.pool.query(
@@ -1104,6 +1215,94 @@ export class Storage {
       );
     } catch (error) {
       handleDatabaseError(error, 'deleteCompany');
+    }
+  }
+
+  async getAllSegmentsByCompany(companyId: number): Promise<any[]> {
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM segments WHERE company_id = $1 ORDER BY segment_name',
+        [companyId]
+      );
+      return result.rows;
+    } catch (error) {
+      handleDatabaseError(error, 'getAllSegmentsByCompany');
+      throw error;
+    }
+  }
+
+  async getSegmentById(id: number): Promise<any> {
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM segments WHERE id = $1',
+        [id]
+      );
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'getSegmentById');
+      throw error;
+    }
+  }
+
+  async createSegment(segmentData: {
+    segment_name: string;
+    company_id: number;
+    created_by: number;
+  }): Promise<any> {
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO segments (
+          segment_name,
+          company_id,
+          created_by
+        ) VALUES ($1, $2, $3) RETURNING *`,
+        [
+          segmentData.segment_name,
+          segmentData.company_id,
+          segmentData.created_by
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'createSegment');
+      throw error;
+    }
+  }
+
+  async updateSegment(
+    id: number,
+    segmentData: {
+      segment_name: string;
+    }
+  ): Promise<any> {
+    try {
+      const result = await this.pool.query(
+        `UPDATE segments SET 
+          segment_name = $1,
+          created_at = CURRENT_TIMESTAMP
+        WHERE id = $2 RETURNING *`,
+        [
+          segmentData.segment_name,
+          id
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      handleDatabaseError(error, 'updateSegment');
+      throw error;
+    }
+  }
+
+  async deleteSegment(id: number): Promise<boolean> {
+    try {
+      const result = await this.pool.query(
+        'DELETE FROM segments WHERE id = $1 RETURNING id',
+        [id]
+      );
+      return result.rowCount > 0;
+    } catch (error) {
+      handleDatabaseError(error, 'deleteSegment');
+      throw error;
     }
   }
 }

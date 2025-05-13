@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -32,6 +32,22 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Company, Segment } from "@shared/schema";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Define the company schema
 const companySchema = z.object({
@@ -43,13 +59,13 @@ const companySchema = z.object({
   contact_person_email: z.string().email("Invalid email address"),
 });
 
-type CompanyFormValues = z.infer<typeof companySchema>;
+// Define the segment schema
+const segmentSchema = z.object({
+  segment_name: z.string().min(1, "Segment name is required"),
+});
 
-interface Company extends CompanyFormValues {
-  company_id: number;
-  created_at: string;
-  created_by: number;
-}
+type CompanyFormValues = z.infer<typeof companySchema>;
+type SegmentFormValues = z.infer<typeof segmentSchema>;
 
 export default function CompanyPage() {
   const { toast } = useToast();
@@ -58,6 +74,14 @@ export default function CompanyPage() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // State for segments functionality
+  const [expandedCompany, setExpandedCompany] = useState<number | null>(null);
+  const [showSegmentDialog, setShowSegmentDialog] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
+  const [isEditingSegment, setIsEditingSegment] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [segmentToDelete, setSegmentToDelete] = useState<Segment | null>(null);
 
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
@@ -71,6 +95,13 @@ export default function CompanyPage() {
     },
   });
 
+  const segmentForm = useForm<SegmentFormValues>({
+    resolver: zodResolver(segmentSchema),
+    defaultValues: {
+      segment_name: "",
+    },
+  });
+
   // Fetch companies
   const { data: companies, isLoading, error: fetchError } = useQuery<Company[]>({
     queryKey: ["companies"],
@@ -78,6 +109,17 @@ export default function CompanyPage() {
       const response = await apiRequest("GET", "/api/companies");
       return response.json();
     },
+  });
+
+  // Fetch segments for a company
+  const { data: segments, isLoading: isLoadingSegments, refetch: refetchSegments } = useQuery<Segment[]>({
+    queryKey: ["segments", expandedCompany],
+    queryFn: async () => {
+      if (!expandedCompany) return [];
+      const response = await apiRequest("GET", `/api/segments/${expandedCompany}`);
+      return response.json();
+    },
+    enabled: !!expandedCompany,
   });
 
   if (fetchError) {
@@ -116,6 +158,49 @@ export default function CompanyPage() {
     },
   });
 
+  // Add/Update segment mutation
+  const segmentMutation = useMutation({
+    mutationFn: (data: { segment_name: string; company_id: number }) => {
+      if (isEditingSegment && selectedSegment) {
+        return apiRequest("PUT", `/api/segments/${selectedSegment.id}`, { segment_name: data.segment_name });
+      }
+      return apiRequest("POST", "/api/segments", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["segments", expandedCompany] });
+      setShowSegmentDialog(false);
+      segmentForm.reset();
+      setSelectedSegment(null);
+      setIsEditingSegment(false);
+      toast({
+        title: "Success",
+        description: `Segment ${isEditingSegment ? "updated" : "created"} successfully`,
+      });
+    },
+    onError: (err: any) => {
+      setError(err instanceof Error ? err : new Error(err.message || `Failed to ${isEditingSegment ? "update" : "create"} segment`));
+    },
+  });
+
+  // Delete segment mutation
+  const deleteSegmentMutation = useMutation({
+    mutationFn: (id: number) => {
+      return apiRequest("DELETE", `/api/segments/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["segments", expandedCompany] });
+      setShowDeleteDialog(false);
+      setSegmentToDelete(null);
+      toast({
+        title: "Success",
+        description: "Segment deleted successfully",
+      });
+    },
+    onError: (err: any) => {
+      setError(err instanceof Error ? err : new Error(err.message || "Failed to delete segment"));
+    },
+  });
+
   const handleEdit = (company: Company) => {
     setSelectedCompany(company);
     setIsEditing(true);
@@ -151,6 +236,51 @@ export default function CompanyPage() {
     setShowDialog(true);
   };
 
+  const handleToggleSegments = (companyId: number) => {
+    if (expandedCompany === companyId) {
+      setExpandedCompany(null);
+    } else {
+      setExpandedCompany(companyId);
+    }
+  };
+
+  const handleAddNewSegment = (companyId: number) => {
+    setSelectedSegment(null);
+    setIsEditingSegment(false);
+    segmentForm.reset({
+      segment_name: "",
+    });
+    setExpandedCompany(companyId);
+    setShowSegmentDialog(true);
+  };
+
+  const handleEditSegment = (segment: Segment) => {
+    setSelectedSegment(segment);
+    setIsEditingSegment(true);
+    segmentForm.reset({
+      segment_name: segment.segment_name,
+    });
+    setShowSegmentDialog(true);
+  };
+
+  const handleDeleteSegment = (segment: Segment) => {
+    setSegmentToDelete(segment);
+    setShowDeleteDialog(true);
+  };
+
+  const handleCloseSegmentDialog = () => {
+    setShowSegmentDialog(false);
+    setSelectedSegment(null);
+    setIsEditingSegment(false);
+    segmentForm.reset();
+  };
+
+  const handleConfirmDeleteSegment = () => {
+    if (segmentToDelete) {
+      deleteSegmentMutation.mutate(segmentToDelete.id);
+    }
+  };
+
   const columns = [
     {
       accessorKey: "company_name",
@@ -171,9 +301,38 @@ export default function CompanyPage() {
     {
       id: "actions",
       cell: ({ row }: any) => (
-        <Button variant="outline" size="sm" onClick={() => handleEdit(row.original)}>
-          Edit
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleEdit(row.original)}>
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleToggleSegments(row.original.company_id)}>
+            {expandedCompany === row.original.company_id ? 
+              <ChevronUp className="h-4 w-4 mr-1" /> : 
+              <ChevronDown className="h-4 w-4 mr-1" />
+            }
+            Segments
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const segmentColumns = [
+    {
+      accessorKey: "segment_name",
+      header: "Segment Name",
+    },
+    {
+      id: "actions",
+      cell: ({ row }: any) => (
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleEditSegment(row.original)}>
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteSegment(row.original)}>
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -206,15 +365,52 @@ export default function CompanyPage() {
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
-              <DataTable
-                data={companies || []}
-                columns={columns}
-                searchPlaceholder="Search companies..."
-              />
+              <div className="space-y-4">
+                <DataTable
+                  data={companies || []}
+                  columns={columns}
+                  searchPlaceholder="Search companies..."
+                />
+                {companies?.map((company) => (
+                  <Collapsible
+                    key={company.company_id}
+                    open={expandedCompany === company.company_id}
+                    className={expandedCompany === company.company_id ? "border rounded-lg p-4 mt-4" : "hidden"}
+                  >
+                    <CollapsibleContent>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-lg font-medium">Segments for {company.company_name}</h3>
+                          <Button size="sm" onClick={() => handleAddNewSegment(company.company_id)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Segment
+                          </Button>
+                        </div>
+                        {isLoadingSegments ? (
+                          <div className="flex justify-center py-4">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                          </div>
+                        ) : segments && segments.length > 0 ? (
+                          <DataTable
+                            data={segments}
+                            columns={segmentColumns}
+                            searchPlaceholder="Search segments..."
+                          />
+                        ) : (
+                          <div className="text-center py-4 text-muted-foreground">
+                            No segments found. Add a segment to get started.
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
 
+        {/* Company Dialog */}
         <Dialog open={showDialog} onOpenChange={handleCloseDialog}>
           <DialogContent>
             <DialogHeader>
@@ -322,6 +518,78 @@ export default function CompanyPage() {
             </Form>
           </DialogContent>
         </Dialog>
+
+        {/* Segment Dialog */}
+        <Dialog open={showSegmentDialog} onOpenChange={handleCloseSegmentDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{isEditingSegment ? 'Edit Segment' : 'Add New Segment'}</DialogTitle>
+            </DialogHeader>
+            <Form {...segmentForm}>
+              <form onSubmit={segmentForm.handleSubmit((data) => {
+                segmentMutation.mutate({
+                  segment_name: data.segment_name,
+                  company_id: selectedSegment?.company_id || expandedCompany as number
+                });
+              })} className="space-y-4">
+                <FormField
+                  control={segmentForm.control}
+                  name="segment_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Segment Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Home Care, Aged Care" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button 
+                  type="submit" 
+                  className="w-full"
+                  disabled={segmentMutation.isPending}
+                >
+                  {segmentMutation.isPending ? (
+                    <div className="flex items-center">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <span>Processing...</span>
+                    </div>
+                  ) : isEditingSegment ? "Update Segment" : "Create Segment"}
+                </Button>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete the segment "{segmentToDelete?.segment_name}".
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleConfirmDeleteSegment}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteSegmentMutation.isPending}
+              >
+                {deleteSegmentMutation.isPending ? (
+                  <div className="flex items-center">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </div>
+                ) : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

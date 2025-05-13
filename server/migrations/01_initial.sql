@@ -1,11 +1,41 @@
--- Create users table
+-- 8. Create companies table first (moved up)
+CREATE TABLE IF NOT EXISTS companies (
+  company_id SERIAL PRIMARY KEY,
+  company_name TEXT UNIQUE,
+  registered_address TEXT,
+  postal_address TEXT,
+  contact_person_name TEXT,
+  contact_person_phone TEXT,
+  contact_person_email TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  created_by INTEGER
+);
+
+-- 1. Create users table (with reference to companies now that it exists)
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
-  password TEXT NOT NULL
+  password TEXT NOT NULL,
+  role TEXT DEFAULT 'user',
+  name TEXT DEFAULT '',
+  company_id INTEGER REFERENCES companies(company_id)
 );
 
--- Create session store table with correct structure for connect-pg-simple
+-- Update the companies table to add the reference back to users
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.table_constraints 
+    WHERE constraint_name = 'companies_created_by_fkey'
+  ) THEN
+    ALTER TABLE companies
+    ADD CONSTRAINT companies_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES users(id);
+  END IF;
+END $$;
+
+-- 2. Create session store table
 DROP TABLE IF EXISTS "session";
 CREATE TABLE "session" (
   "sid" varchar NOT NULL COLLATE "default",
@@ -16,7 +46,7 @@ CREATE TABLE "session" (
 
 CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
 
--- Create person_info table
+-- 3. Create person_info table
 CREATE TABLE IF NOT EXISTS person_info (
   id SERIAL PRIMARY KEY,
   title TEXT NOT NULL,
@@ -41,12 +71,15 @@ CREATE TABLE IF NOT EXISTS person_info (
   next_of_kin_email TEXT DEFAULT '',
   next_of_kin_phone TEXT DEFAULT '',
   hcp_level TEXT DEFAULT '',
-  hcp_end_date TEXT DEFAULT '',
+  hcp_start_date TEXT DEFAULT '',
   status TEXT DEFAULT 'New',
-  created_by INTEGER REFERENCES users(id)
+  created_by INTEGER REFERENCES users(id),
+  home_phone_country_code TEXT,
+  mobile_phone_country_code TEXT,
+  emergency_phone_country_code TEXT
 );
 
--- Create master_data table
+-- 4. Create master_data table
 CREATE TABLE IF NOT EXISTS master_data (
   id SERIAL PRIMARY KEY,
   service_category TEXT NOT NULL,
@@ -56,8 +89,7 @@ CREATE TABLE IF NOT EXISTS master_data (
   created_by INTEGER REFERENCES users(id)
 );
 
-
--- Create documents table
+-- 5. Create documents table
 CREATE TABLE IF NOT EXISTS documents (
   id SERIAL PRIMARY KEY,
   client_id INTEGER REFERENCES person_info(id) NOT NULL,
@@ -66,5 +98,110 @@ CREATE TABLE IF NOT EXISTS documents (
   filename TEXT NOT NULL,
   file_path TEXT,
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  created_by INTEGER REFERENCES users(id)
+  created_by INTEGER REFERENCES users(id)  
 );
+
+-- Wrap PL/pgSQL code in DO blocks
+DO $$
+BEGIN
+  -- Update existing records to use the segment_id from their related person_info records
+  -- (This should run after segments are created and segment_id is added to documents)
+
+  -- Update foreign key constraints only if they don't exist
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.table_constraints 
+    WHERE constraint_name = 'documents_client_id_fkey'
+  ) THEN
+    ALTER TABLE documents 
+      DROP CONSTRAINT IF EXISTS documents_member_id_fkey,
+      ADD CONSTRAINT documents_client_id_fkey 
+      FOREIGN KEY (client_id) 
+      REFERENCES person_info(id);
+  END IF;
+END $$;
+
+-- 6. Create client_services table if it doesn't exist
+CREATE TABLE IF NOT EXISTS client_services (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER REFERENCES person_info(id) NOT NULL,
+  service_category TEXT NOT NULL,
+  service_type TEXT NOT NULL,
+  service_provider TEXT NOT NULL,
+  service_start_date DATE NOT NULL,
+  service_days TEXT[] NOT NULL,
+  service_hours INTEGER NOT NULL CHECK (service_hours >= 1 AND service_hours <= 24),
+  status TEXT DEFAULT 'Planned' CHECK (status IN ('Planned', 'In Progress', 'Closed')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_by INTEGER REFERENCES users(id),
+  FOREIGN KEY (service_category, service_type, service_provider) 
+    REFERENCES master_data(service_category, service_type, service_provider)
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.table_constraints 
+    WHERE constraint_name = 'client_services_client_id_fkey'
+  ) THEN
+    ALTER TABLE client_services 
+      DROP CONSTRAINT IF EXISTS member_services_member_id_fkey,
+      ADD CONSTRAINT client_services_client_id_fkey 
+      FOREIGN KEY (client_id) 
+      REFERENCES person_info(id);
+  END IF;
+END $$;
+
+-- 7. Create service_case_notes table if it doesn't exist
+CREATE TABLE IF NOT EXISTS service_case_notes (
+    id SERIAL PRIMARY KEY,
+    service_id INTEGER NOT NULL REFERENCES client_services(id) ON DELETE CASCADE,
+    note_text TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER REFERENCES users(id)
+);
+
+-- 9. Create segments table
+CREATE TABLE IF NOT EXISTS segments (
+    id SERIAL PRIMARY KEY,
+    segment_name TEXT NOT NULL,
+    company_id INTEGER REFERENCES companies(company_id) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER REFERENCES users(id),
+    UNIQUE(segment_name, company_id)
+);
+
+-- Add segment_id columns to tables
+ALTER TABLE person_info 
+ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
+
+ALTER TABLE client_services 
+ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
+
+ALTER TABLE documents 
+ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
+
+ALTER TABLE master_data 
+ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
+
+-- Update segment IDs
+DO $$
+BEGIN
+  UPDATE documents d
+  SET segment_id = p.segment_id
+  FROM person_info p
+  WHERE d.client_id = p.id AND p.segment_id IS NOT NULL;
+
+  UPDATE client_services cs
+  SET segment_id = p.segment_id
+  FROM person_info p
+  WHERE cs.client_id = p.id AND p.segment_id IS NOT NULL;
+END $$;
+
+
+
+
+

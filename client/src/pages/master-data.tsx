@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import AppLayout from "@/layouts/app-layout";
 import { ErrorDisplay } from "@/components/ui/error-display";
+import { useSegment } from "@/contexts/segment-context"; // Add segment context import
 
 const masterDataSchema = z.object({
   serviceCategory: z.string({ required_error: "Please select a service category" }),
@@ -33,6 +34,7 @@ export default function MasterData() {
   const [editingData, setEditingData] = useState<MasterDataType | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { selectedSegment } = useSegment(); // Get the selected segment from context
 
   // Populate form when editing data changes
   useEffect(() => {
@@ -48,7 +50,18 @@ export default function MasterData() {
 
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading, refetch } = useQuery<MasterDataType[]>({
-    queryKey: ["/api/master-data"],
+    queryKey: ["/api/master-data", selectedSegment?.id],
+    queryFn: async () => {
+      const url = selectedSegment 
+        ? `/api/master-data?segmentId=${selectedSegment.id}` 
+        : "/api/master-data";
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to fetch master data");
+      }
+      return response.json();
+    },
+    enabled: true,
   });
 
   // Sort services by Service Category A -> Z
@@ -73,12 +86,18 @@ export default function MasterData() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: MasterDataFormValues) => {
+      // Include the segment ID in the request body
+      const requestBody = {
+        ...data,
+        segmentId: selectedSegment?.id || null
+      };
+      
       const response = await fetch("/api/master-data", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -115,7 +134,8 @@ export default function MasterData() {
             serviceCategory: data.serviceCategory,
             serviceType: data.serviceType,
             serviceProvider: data.serviceProvider,
-            active: data.active
+            active: data.active,
+            segmentId: selectedSegment?.id || null // Include segment ID in updates too
           }),
         });
 
@@ -219,6 +239,12 @@ export default function MasterData() {
                 </div>
                 <Button onClick={() => {
                   setEditingData(null);
+                  form.reset({
+                    serviceCategory: "",
+                    serviceType: "",
+                    serviceProvider: "",
+                    active: true,
+                  });
                   setShowDialog(true);
                 }}>
                   <Plus className="h-4 w-4 mr-2" />
