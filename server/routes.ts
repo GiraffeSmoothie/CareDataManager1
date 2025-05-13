@@ -1058,6 +1058,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
+  
+  // Get a single user by ID (admin only)
+  app.get("/api/users/:id", authMiddleware, async (req, res) => {
+    try {
+      console.log(`[API /api/users/:id] Request received for user with ID: ${req.params.id}`);
+      console.log(`[API /api/users/:id] Request headers:`, req.headers);
+      
+      const currentUser = await dbStorage.getUserById(req.user.id);
+      if (!currentUser || currentUser.role !== "admin") {
+        console.log("[API /api/users/:id] Request rejected: User is not admin", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        console.log(`[API /api/users/:id] Invalid user ID format: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+      
+      console.log(`[API /api/users/:id] Looking up user with ID: ${userId}`);
+      const user = await dbStorage.getUserById(userId);
+      if (!user) {
+        console.log(`[API /api/users/:id] User not found with ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      console.log(`[API /api/users/:id] Found user: ${user.username}`);
+      
+      // Set explicit headers to ensure proper response type
+      res.setHeader('Content-Type', 'application/json');
+      
+      return res.status(200).json({ 
+        id: user.id, 
+        name: user.name, 
+        username: user.username, 
+        role: user.role,
+        company_id: user.company_id
+      });
+    } catch (err) {
+      console.error("[API /api/users/:id] Error fetching user:", err);
+      return res.status(500).json({ message: "Failed to fetch user", error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  // Update a user by ID (admin only)
+  app.put("/api/users/:id", authMiddleware, async (req, res) => {
+    try {
+      console.log(`[API PUT /api/users/:id] Update request received for user with ID: ${req.params.id}`);
+      
+      const currentUser = await dbStorage.getUserById(req.user.id);
+      if (!currentUser || (currentUser.role !== "admin" && currentUser.id !== parseInt(req.params.id))) {
+        console.log("[API PUT /api/users/:id] Request rejected: User is not admin or not updating own account", {
+          userId: currentUser?.id,
+          userRole: currentUser?.role
+        });
+        return res.status(403).json({ message: "Forbidden: Admin access required or can only update own account" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        console.log(`[API PUT /api/users/:id] Invalid user ID format: ${req.params.id}`);
+        return res.status(400).json({ message: "Invalid user ID format" });
+      }
+      
+      // Check if user exists
+      const existingUser = await dbStorage.getUserById(userId);
+      if (!existingUser) {
+        console.log(`[API PUT /api/users/:id] User not found with ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      console.log(`[API PUT /api/users/:id] Updating user with ID: ${userId}`);
+      
+      // Non-admin users can only update certain fields of their own account
+      let updateData = req.body;
+      if (currentUser.role !== "admin" && currentUser.id === userId) {
+        // Regular users can only update name and password
+        updateData = {
+          name: req.body.name
+        };
+        
+        if (req.body.password) {
+          updateData.password = req.body.password;
+        }
+      }
+      
+      const updatedUser = await dbStorage.updateUser(userId, updateData);
+      
+      // Set explicit headers to ensure proper response type
+      res.setHeader('Content-Type', 'application/json');
+      
+      return res.status(200).json({ 
+        id: updatedUser.id, 
+        name: updatedUser.name, 
+        username: updatedUser.username, 
+        role: updatedUser.role,
+        company_id: updatedUser.company_id
+      });
+    } catch (err) {
+      console.error("[API PUT /api/users/:id] Error updating user:", err);
+      return res.status(500).json({ message: "Failed to update user", error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
 
   // Add a new user (admin only)
   app.post("/api/users", async (req, res) => {

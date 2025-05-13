@@ -323,8 +323,10 @@ export class Storage {
         paramCount++;
       }
       if (data.password) {
+        // Hash the password before storing it
+        const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
         updateFields.push(`password = $${paramCount}`);
-        values.push(data.password);
+        values.push(hashedPassword);
         paramCount++;
       }
       if (data.role) {
