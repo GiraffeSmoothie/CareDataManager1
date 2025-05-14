@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS master_data (
   service_type TEXT NOT NULL,
   service_provider TEXT NOT NULL,
   active BOOLEAN NOT NULL DEFAULT true,  
-  created_by INTEGER REFERENCES users(id)
+  created_by INTEGER REFERENCES users(id),
+  UNIQUE(service_category, service_type, service_provider)
 );
 
 -- 5. Create documents table
@@ -133,9 +134,8 @@ CREATE TABLE IF NOT EXISTS client_services (
   service_hours INTEGER NOT NULL CHECK (service_hours >= 1 AND service_hours <= 24),
   status TEXT DEFAULT 'Planned' CHECK (status IN ('Planned', 'In Progress', 'Closed')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  created_by INTEGER REFERENCES users(id),
-  FOREIGN KEY (service_category, service_type, service_provider) 
-    REFERENCES master_data(service_category, service_type, service_provider)
+  created_by INTEGER REFERENCES users(id)
+  -- Foreign key constraint will be added after segment_id column is added
 );
 
 DO $$
@@ -187,6 +187,20 @@ ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
 ALTER TABLE master_data 
 ADD COLUMN IF NOT EXISTS segment_id INTEGER REFERENCES segments(id);
 
+-- Add a unique constraint that includes segment_id
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.table_constraints 
+    WHERE constraint_name = 'master_data_services_segment_unique'
+  ) THEN
+    ALTER TABLE master_data
+    ADD CONSTRAINT master_data_services_segment_unique
+    UNIQUE(service_category, service_type, service_provider, segment_id);
+  END IF;
+END $$;
+
 -- Update segment IDs
 DO $$
 BEGIN
@@ -199,6 +213,29 @@ BEGIN
   SET segment_id = p.segment_id
   FROM person_info p
   WHERE cs.client_id = p.id AND p.segment_id IS NOT NULL;
+END $$;
+
+-- Add the foreign key constraint to client_services after segment_id is added
+DO $$
+BEGIN
+  -- First, drop existing foreign key constraint if it exists
+  IF EXISTS (
+    SELECT 1 
+    FROM information_schema.table_constraints 
+    WHERE constraint_name = 'client_services_master_data_fkey'
+  ) THEN
+    ALTER TABLE client_services
+    DROP CONSTRAINT client_services_master_data_fkey;
+  END IF;
+
+  -- Add a single foreign key constraint that covers both cases
+  -- This constraint will match records with:
+  -- 1. Same service fields and NULL segment_id in both tables
+  -- 2. Same service fields and matching segment_id values
+  ALTER TABLE client_services
+  ADD CONSTRAINT client_services_master_data_fkey
+  FOREIGN KEY (service_category, service_type, service_provider, segment_id) 
+  REFERENCES master_data(service_category, service_type, service_provider, segment_id);
 END $$;
 
 
