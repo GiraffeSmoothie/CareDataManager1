@@ -34,8 +34,7 @@ export type PersonInfo = {
   nextOfKinName?: string;
   nextOfKinAddress?: string;
   nextOfKinEmail?: string;
-  nextOfKinPhoneCountryCode?: string;
-  nextOfKinPhone?: string;
+  nextOfKinPhoneCountryCode?: string;  nextOfKinPhone?: string;
   hcpLevel: string;
   hcpStartDate: string;
   status?: string;
@@ -54,6 +53,7 @@ export type Document = {
   filePath?: string;
   uploadedAt?: Date;
   createdBy?: number;
+  segmentId?: number;
 };
 
 export type ClientService = {
@@ -68,6 +68,7 @@ export type ClientService = {
   status?: string;
   createdAt?: Date;
   createdBy?: number;
+  segmentId?: number;
 };
 
 export type ServiceCaseNote = {
@@ -142,11 +143,11 @@ export const insertPersonInfoSchema = z.object({
   useHomeAddress: z.boolean().optional(),
   nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
   nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
-  nextOfKinEmail: z.string().email().optional().or(z.literal("")),
-  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
+  nextOfKinEmail: z.string().email().optional().or(z.literal("")),  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
   hcpLevel: z.string().min(1, "HCP Level is required"),
   hcpStartDate: z.string().min(1, "HCP Start Date is required"),
-  sttus: z.string().optional()
+  status: z.string().optional(),
+  segmentId: z.number().nullable().optional()
 });
 
 export const insertDocumentSchema = z.object({

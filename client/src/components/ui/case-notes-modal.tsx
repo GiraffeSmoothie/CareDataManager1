@@ -6,8 +6,26 @@ import { Label } from "./label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { MemberService } from "@shared/schema";
 import { ErrorDisplay } from "./error-display";
+
+// Define MemberService interface since it's not exported from schema
+interface MemberService {
+  id: number;
+  clientId: number;
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  serviceStartDate?: string;
+  serviceDays?: string[];
+  serviceHours?: number;
+  notes?: string;
+  status: string;
+  createdAt?: string;
+  createdBy?: number;
+  personId?: number;
+  serviceName?: string;
+  frequency?: string;
+}
 
 // Define a type for case notes
 interface CaseNote {
@@ -27,7 +45,7 @@ export function CaseNotesModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  service: MemberService;
+  service: MemberService | null;
   onSaved?: () => void;
 }) {
   const { toast } = useToast();
@@ -66,10 +84,12 @@ export function CaseNotesModal({
       fetchCaseNotes();
     }
   }, [service?.id, isOpen]);
-
   // Function to fetch existing case notes
   const fetchCaseNotes = async () => {
-    if (!service?.id) return;
+    if (!service?.id) {
+      setError("No service selected");
+      return;
+    }
 
     setIsLoadingNotes(true);
     setError(null);
@@ -92,7 +112,6 @@ export function CaseNotesModal({
       setIsLoadingNotes(false);
     }
   };
-
   const handleSubmit = async () => {
     const notes = textareaRef.current?.value;
     if (!notes?.trim()) {
@@ -103,6 +122,12 @@ export function CaseNotesModal({
     // Check if user is logged in
     if (!currentUser?.id) {
       setError("You must be logged in to add case notes");
+      return;
+    }
+
+    // Check if service is available
+    if (!service?.id) {
+      setError("No service selected");
       return;
     }
 

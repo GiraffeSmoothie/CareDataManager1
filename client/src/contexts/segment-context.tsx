@@ -57,13 +57,12 @@ export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children })
       const data = await response.json();
       console.log("Fetched segments:", data);
       setSegments(data);
-      
-      // Set the first segment as selected by default if available
+        // Set the first segment as selected by default if available
       if (data.length > 0 && !selectedSegment) {
         // Check if there's a stored segment preference
-        const storedSegmentId = localStorage.getItem('selectedSegmentId');
+        const storedSegmentId = localStorage.getItem('selectedSegmentId');        
         if (storedSegmentId) {
-          const segmentFromStorage = data.find(s => s.id.toString() === storedSegmentId);
+          const segmentFromStorage = data.find((s: Segment) => s.id.toString() === storedSegmentId);
           if (segmentFromStorage) {
             setSelectedSegment(segmentFromStorage);
           } else {
@@ -72,6 +71,10 @@ export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children })
         } else {
           setSelectedSegment(data[0]);
         }
+      } else if (data.length === 0) {
+        // Clear selected segment if the user has no segments (e.g., admin without company assignment)
+        setSelectedSegment(null);
+        localStorage.removeItem('selectedSegmentId');
       }
       // Reset retry count on success
       setRetryCount(0);

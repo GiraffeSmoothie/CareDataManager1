@@ -7,7 +7,7 @@ import { Loader2, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { ErrorDisplay } from "@/components/ui/error-display";
 import {
   Card,
@@ -36,7 +36,6 @@ import { Company, Segment } from "@shared/schema";
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
   AlertDialog,
@@ -110,9 +109,8 @@ export default function CompanyPage() {
       return response.json();
     },
   });
-
   // Fetch segments for a company
-  const { data: segments, isLoading: isLoadingSegments, refetch: refetchSegments } = useQuery<Segment[]>({
+  const { data: segments, isLoading: isLoadingSegments } = useQuery<Segment[]>({
     queryKey: ["segments", expandedCompany],
     queryFn: async () => {
       if (!expandedCompany) return [];

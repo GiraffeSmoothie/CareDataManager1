@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, Loader2, RefreshCcw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useQuery } from '@tanstack/react-query';
 
 export default function SegmentSelector() {
   const { segments, selectedSegment, setSelectedSegment, isLoading, error, refetchSegments } = useSegment();
@@ -45,8 +46,23 @@ export default function SegmentSelector() {
       </TooltipProvider>
     );
   }
-
   if (segments.length === 0) {
+    // Fetch auth status to check if user is admin
+    const { data: authData } = useQuery({
+      queryKey: ["authStatus"],
+      queryFn: async () => {
+        const response = await fetch('/api/auth/status', { 
+          credentials: 'include'
+        });
+        if (!response.ok) {
+          return { authenticated: false };
+        }
+        return response.json();
+      },
+    });
+
+    const isAdmin = authData?.user?.role === "admin";
+    
     return (
       <TooltipProvider>
         <Tooltip>
@@ -64,7 +80,11 @@ export default function SegmentSelector() {
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p>No segments found for your account. Click to refresh.</p>
+            {isAdmin ? (
+              <p>Admin accounts need to be assigned to a company to access segments.</p>
+            ) : (
+              <p>No segments found for your account. Click to refresh.</p>
+            )}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

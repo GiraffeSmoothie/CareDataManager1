@@ -20,14 +20,17 @@ import { z } from "zod";
 
 // Define the enhanced document schema
 const documentFormSchema = insertDocumentSchema.extend({
-  file: z.instanceof(FileList).refine(file => file.length > 0, {
-    message: "Please select a file",
-    path: ["file"]
-  })
+  file: z.instanceof(FileList).optional().or(z.null()).refine(
+    file => !file || file.length > 0, 
+    {
+      message: "Please select a file",
+      path: ["file"]
+    }
+  )
 });
 
 // Define the type based on the schema
-type DocumentFormData = z.infer<typeof documentFormSchema> & { file: FileList | null };
+type DocumentFormData = z.infer<typeof documentFormSchema>;
 
 // Document types for dropdown
 const documentTypes = [
@@ -123,11 +126,10 @@ export default function DocumentUpload() {
       file: null
     },
   });
-
   // Document upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (data: DocumentFormData) => {
-      if (!data.file || data.file.length === 0) {
+      if (!data.file) {
         throw new Error("No file selected");
       }
 

@@ -181,19 +181,29 @@ export default function ManageClient() {
 
     return () => subscription.unsubscribe();
   }, [form, useHomeAddress]);
-
   // Update form when selected segment changes
   useEffect(() => {
-    form.setValue("segmentId", selectedSegment?.id || null);
+    console.log("Selected segment changed:", selectedSegment);
+    // Only set a value if we have a valid segment ID, otherwise use undefined instead of null
+    if (selectedSegment?.id) {
+      form.setValue("segmentId", selectedSegment.id);
+    }
   }, [selectedSegment, form]);
-
   const mutation = useMutation({
     mutationFn: async (data: PersonInfoFormValues) => {
+      console.log("Form data before mutation:", data);
+      console.log("Selected segment:", selectedSegment);
+        // Ensure segmentId is a valid number or undefined (not null)
+      const segmentId = selectedSegment?.id || data.segmentId;
+      
       const requestData = {
         ...data,
         status: data.status || (isEditing ? selectedMember?.status : 'New'),
-        segmentId: selectedSegment?.id || data.segmentId
+        // If segmentId is null or undefined, don't include it in the request
+        ...(segmentId ? { segmentId } : {})
       };
+      
+      console.log("Request data with segment:", requestData);
 
       if (!isEditing) {
         const response = await apiRequest("POST", "/api/person-info", requestData);
@@ -411,12 +421,19 @@ export default function ManageClient() {
               )}
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-16">
-                {/* Hidden segment ID field */}
-                <input 
-                  type="hidden" 
-                  {...form.register("segmentId")}
-                  value={selectedSegment?.id || ""}
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-16">                {/* Hidden segment ID field */}
+                <FormField
+                  control={form.control}
+                  name="segmentId"
+                  render={({ field }) => (
+                    <input 
+                      type="hidden" 
+                      name="segmentId"
+                      value={selectedSegment?.id || ""}
+                      onChange={field.onChange}
+                      ref={field.ref}
+                    />
+                  )}
                 />
 
                 {/* Personal Details Section */}

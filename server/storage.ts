@@ -94,7 +94,15 @@ pool.on('connect', () => {
   }
 })();
 
-// Initialize database and run migrations
+/**
+ * Initialize database and run migrations
+ * 
+ * Connects to the database and runs the initial migration script if needed.
+ * This ensures the database schema is properly set up with all required tables.
+ * 
+ * @returns {Promise<void>} Resolves when migration is complete or rejects on error
+ * @throws {Error} If database connection fails or migration script cannot be executed
+ */
 export async function initializeDatabase() {
   let client;
   try {
@@ -118,7 +126,16 @@ export async function initializeDatabase() {
   }
 }
 
-// Input validation helper
+/**
+ * Input validation helper
+ * 
+ * Validates input values based on their expected data type.
+ * Used throughout the Storage class to ensure data integrity.
+ * 
+ * @param {any} input - The value to validate
+ * @param {string} type - The expected data type ('id', 'string', 'date', 'boolean', or 'array')
+ * @returns {boolean} True if input is valid for the specified type, false otherwise
+ */
 function validateInput(input: any, type: string): boolean {
   switch(type) {
     case 'id':
@@ -136,13 +153,30 @@ function validateInput(input: any, type: string): boolean {
   }
 }
 
-// SQL injection prevention helper
+/**
+ * SQL injection prevention helper
+ * 
+ * Sanitizes input strings by removing potentially dangerous SQL characters.
+ * This adds an extra layer of security beyond parameterized queries.
+ * 
+ * @param {string} input - The string to sanitize
+ * @returns {string} Sanitized string with dangerous characters removed
+ */
 function sanitizeInput(input: string): string {
   // Remove any dangerous SQL characters
   return input.replace(/['";\\]/g, '');
 }
 
-// Database error handler
+/**
+ * Database error handler
+ * 
+ * Processes database errors and throws meaningful exceptions based on error codes.
+ * Provides better context for debugging by logging operation details.
+ * 
+ * @param {any} error - The database error object
+ * @param {string} operation - Name of the operation that caused the error
+ * @throws {Error} A more descriptive error based on the database error code
+ */
 function handleDatabaseError(error: any, operation: string): never {
   console.error(`Database error during ${operation}:`, error);
   if (error.code === '23505') { // Unique violation
@@ -162,13 +196,36 @@ export interface NewServiceCaseNote {
 
 const SALT_ROUNDS = 10;
 
+/**
+ * Storage class for database interactions
+ * 
+ * Provides methods for all database operations in the Care Data Manager application.
+ * Handles CRUD operations for users, clients, services, documents, and other entities.
+ * Implements proper validation, error handling, and transaction management.
+ */
 export class Storage {
   private pool: Pool;
-
+  /**
+   * Constructor for Storage class
+   * 
+   * Initializes a new Storage instance with a database connection pool.
+   * 
+   * @param {Pool} pool - PostgreSQL connection pool
+   */
   constructor(pool: Pool) {
     this.pool = pool;
   }
-
+  /**
+   * Execute an operation within a database transaction
+   * 
+   * Manages transaction lifecycle (BEGIN, COMMIT, ROLLBACK) and client connection.
+   * Ensures proper cleanup of database resources even if an error occurs.
+   * 
+   * @template T - Return type of the operation
+   * @param {Function} operation - Async function to execute within the transaction
+   * @returns {Promise<T>} Result of the operation
+   * @throws {Error} If the transaction fails for any reason
+   */
   async withTransaction<T>(operation: (client: any) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -183,7 +240,15 @@ export class Storage {
       client.release();
     }
   }
-
+  /**
+   * Get all users
+   * 
+   * Retrieves all users from the database with basic information.
+   * Does not include sensitive information like passwords.
+   * 
+   * @returns {Promise<User[]>} Array of user records
+   * @throws {Error} If database query fails
+   */
   async getAllUsers(): Promise<User[]> {
     try {
       const result = await this.pool.query(
@@ -194,7 +259,16 @@ export class Storage {
       handleDatabaseError(error, 'getAllUsers');
     }
   }
-
+  /**
+   * Get user by username
+   * 
+   * Retrieves a user record by username, including sensitive information like password.
+   * Used for authentication and user lookup.
+   * 
+   * @param {string} username - Username to search for
+   * @returns {Promise<User | null>} User record if found, null otherwise
+   * @throws {Error} If username format is invalid or database query fails
+   */
   async getUserByUsername(username: string): Promise<User | null> {
     if (!validateInput(username, 'string')) {
       throw new Error('Invalid username format');
@@ -210,7 +284,16 @@ export class Storage {
       handleDatabaseError(error, 'getUserByUsername');
     }
   }
-
+  /**
+   * Get user by ID
+   * 
+   * Retrieves a user record by their unique ID.
+   * Does not include sensitive information like passwords.
+   * 
+   * @param {number} id - User ID to search for
+   * @returns {Promise<User | null>} User record if found, null otherwise
+   * @throws {Error} If ID format is invalid or database query fails
+   */
   async getUserById(id: number): Promise<User | null> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid ID format');
@@ -226,7 +309,17 @@ export class Storage {
       handleDatabaseError(error, 'getUserById');
     }
   }
-
+  /**
+   * Verify user password
+   * 
+   * Checks if the provided password matches the stored password for a user.
+   * Uses bcrypt to securely compare passwords without exposing the hash.
+   * 
+   * @param {string} username - Username to verify password for
+   * @param {string} password - Plain text password to verify
+   * @returns {Promise<boolean>} True if password matches, false otherwise
+   * @throws {Error} If username/password format is invalid or database query fails
+   */
   async verifyPassword(username: string, password: string): Promise<boolean> {
     if (!validateInput(username, 'string') || !validateInput(password, 'string')) {
       throw new Error('Invalid username or password format');
@@ -243,7 +336,17 @@ export class Storage {
       handleDatabaseError(error, 'verifyPassword');
     }
   }
-
+  /**
+   * Update user password
+   * 
+   * Changes the password for a user identified by their ID.
+   * Securely hashes the new password before storing it.
+   * 
+   * @param {number} id - ID of the user whose password to update
+   * @param {string} newPassword - New plain text password to set
+   * @returns {Promise<void>} Resolves when password is updated
+   * @throws {Error} If ID/password format is invalid or database update fails
+   */
   async updateUserPassword(id: number, newPassword: string): Promise<void> {
     if (!validateInput(id, 'id') || !validateInput(newPassword, 'string')) {
       throw new Error('Invalid ID or password format');
@@ -259,7 +362,15 @@ export class Storage {
       handleDatabaseError(error, 'updateUserPassword');
     }
   }
-
+  /**
+   * Reset admin password
+   * 
+   * Resets the admin user's password back to the default value.
+   * Used for system recovery when admin credentials are lost.
+   * 
+   * @returns {Promise<void>} Resolves when admin password is reset
+   * @throws {Error} If the admin user cannot be found or database update fails
+   */
   async resetAdminPassword(): Promise<void> {
     try {
       const defaultPassword = 'password';
@@ -276,7 +387,21 @@ export class Storage {
       handleDatabaseError(error, 'resetAdminPassword');
     }
   }
-
+  /**
+   * Create a new user
+   * 
+   * Creates a new user in the system with the specified details.
+   * Uses transaction to ensure data integrity and prevent duplicate usernames.
+   * 
+   * @param {object} user - User data object
+   * @param {string} user.name - Full name of the user
+   * @param {string} user.username - Unique username for login
+   * @param {string} user.password - Password in plain text (will be hashed)
+   * @param {string} [user.role] - User role (defaults to 'user' if not specified)
+   * @param {number} [user.company_id] - Optional company ID to associate with user
+   * @returns {Promise<User>} Created user record
+   * @throws {Error} If validation fails or username already exists
+   */
   async createUser(user: { name: string; username: string; password: string; role?: string; company_id?: number }): Promise<User> {
     if (!validateInput(user.name, 'string') || 
         !validateInput(user.username, 'string') || 
@@ -306,7 +431,22 @@ export class Storage {
       handleDatabaseError(error, 'createUser');
     }
   }
-
+  /**
+   * Update user information
+   * 
+   * Updates one or more fields of a user record.
+   * Only updates fields that are provided in the data object.
+   * Securely hashes password if it is being updated.
+   * 
+   * @param {number} id - ID of the user to update
+   * @param {object} data - Data fields to update
+   * @param {string} [data.name] - Updated user name
+   * @param {string} [data.password] - New password (will be hashed)
+   * @param {string} [data.role] - Updated user role
+   * @param {number} [data.company_id] - Updated company association
+   * @returns {Promise<User>} Updated user record
+   * @throws {Error} If ID format is invalid or database update fails
+   */
   async updateUser(id: number, data: { name?: string; password?: string; role?: string; company_id?: number }): Promise<User> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid ID format');
@@ -354,7 +494,36 @@ export class Storage {
       handleDatabaseError(error, 'updateUser');
     }
   }
+  /**
+   * Delete a user
+   * 
+   * Permanently removes a user from the system by their ID.
+   * 
+   * @param {number} id - ID of the user to delete
+   * @returns {Promise<void>} Resolves when user is deleted
+   * @throws {Error} If ID format is invalid or database delete fails
+   */
+  async deleteUser(id: number): Promise<void> {
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid ID format');
+    }
 
+    try {
+      await this.pool.query('DELETE FROM users WHERE id = $1', [id]);
+    } catch (error) {
+      handleDatabaseError(error, 'deleteUser');
+    }
+  }
+  /**
+   * Create person information record
+   * 
+   * Creates a new client/person record with personal information, contact details,
+   * address, and other relevant information.
+   * 
+   * @param {Omit<PersonInfo, 'id'>} data - Complete person information object without ID
+   * @returns {Promise<PersonInfo>} Created person record with generated ID
+   * @throws {Error} If database insertion fails
+   */
   async createPersonInfo(data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     try {
       const {
@@ -429,7 +598,16 @@ export class Storage {
       handleDatabaseError(error, 'createPersonInfo');
     }
   }
-
+  /**
+   * Get all person information records
+   * 
+   * Retrieves all client/person records from the database.
+   * Can be filtered by segment ID if provided.
+   * 
+   * @param {number} [segmentId] - Optional segment ID to filter by
+   * @returns {Promise<PersonInfo[]>} Array of person information records
+   * @throws {Error} If database query fails
+   */
   async getAllPersonInfo(segmentId?: number): Promise<PersonInfo[]> {
     try {
       let query = 'SELECT * FROM person_info';
@@ -477,7 +655,15 @@ export class Storage {
       handleDatabaseError(error, 'getAllPersonInfo');
     }
   }
-
+  /**
+   * Get person information by ID
+   * 
+   * Retrieves a specific client/person record by their unique ID.
+   * 
+   * @param {number} id - ID of the person to retrieve
+   * @returns {Promise<PersonInfo | null>} Person record if found, null otherwise
+   * @throws {Error} If ID format is invalid or database query fails
+   */
   async getPersonInfoById(id: number): Promise<PersonInfo | null> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid ID format');
@@ -524,7 +710,17 @@ export class Storage {
       handleDatabaseError(error, 'getPersonInfoById');
     }
   }
-
+  /**
+   * Update person information
+   * 
+   * Updates an existing client/person record with new information.
+   * Performs comprehensive update of all fields.
+   * 
+   * @param {number} id - ID of the person record to update
+   * @param {Omit<PersonInfo, 'id'>} data - Complete updated person information
+   * @returns {Promise<PersonInfo>} Updated person record
+   * @throws {Error} If ID format is invalid or database update fails
+   */
   async updatePersonInfo(id: number, data: Omit<PersonInfo, 'id'>): Promise<PersonInfo> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid ID format');
@@ -640,7 +836,18 @@ export class Storage {
       handleDatabaseError(error, 'updatePersonInfo');
     }
   }
-
+  /**
+   * Check for duplicate service
+   * 
+   * Verifies if a service with the same category, type, and provider already exists.
+   * Used to prevent duplicate entries in the master data table.
+   * 
+   * @param {string} serviceCategory - Service category to check
+   * @param {string} serviceType - Service type to check
+   * @param {string} serviceProvider - Service provider to check
+   * @returns {Promise<boolean>} True if a duplicate exists, false otherwise
+   * @throws {Error} If input validation fails or database query fails
+   */
   async checkDuplicateService(serviceCategory: string, serviceType: string, serviceProvider: string): Promise<boolean> {
     if (!validateInput(serviceCategory, 'string') || !validateInput(serviceType, 'string') || !validateInput(serviceProvider, 'string')) {
       throw new Error('Invalid service data format');
@@ -656,7 +863,16 @@ export class Storage {
       handleDatabaseError(error, 'checkDuplicateService');
     }
   }
-
+  /**
+   * Create master data entry
+   * 
+   * Creates a new service definition in the master data table.
+   * Checks for duplicates before insertion.
+   * 
+   * @param {Omit<MasterData, 'id'>} data - Master data object without ID
+   * @returns {Promise<MasterData>} Created master data record with generated ID
+   * @throws {Error} If duplicate service exists or database insertion fails
+   */
   async createMasterData(data: Omit<MasterData, 'id'>): Promise<MasterData> {
     try {
       const isDuplicate = await this.checkDuplicateService(
@@ -697,7 +913,16 @@ export class Storage {
       handleDatabaseError(error, 'createMasterData');
     }
   }
-
+  /**
+   * Get all master data
+   * 
+   * Retrieves all service definitions from the master data table.
+   * Can be filtered by segment ID if provided.
+   * 
+   * @param {number} [segmentId] - Optional segment ID to filter by
+   * @returns {Promise<MasterData[]>} Array of master data records
+   * @throws {Error} If database query fails
+   */
   async getAllMasterData(segmentId?: number): Promise<MasterData[]> {
     try {
       let queryText = 'SELECT * FROM master_data';
@@ -725,7 +950,17 @@ export class Storage {
       handleDatabaseError(error, 'getAllMasterData');
     }
   }
-
+  /**
+   * Update master data status
+   * 
+   * Updates the status of a master data record.
+   * Used to enable/disable services or change their status.
+   * 
+   * @param {number} id - ID of the master data record to update
+   * @param {string} status - New status value
+   * @returns {Promise<void>} Resolves when status is updated
+   * @throws {Error} If ID or status format is invalid or database update fails
+   */
   async updateMasterDataStatus(id: number, status: string): Promise<void> {
     if (!validateInput(id, 'id') || !validateInput(status, 'string')) {
       throw new Error('Invalid ID or status format');
@@ -737,7 +972,17 @@ export class Storage {
       handleDatabaseError(error, 'updateMasterDataStatus');
     }
   }
-
+  /**
+   * Update master data record
+   * 
+   * Updates service definition fields in the master data table.
+   * Allows changing category, type, provider, active status, and segment.
+   * 
+   * @param {number} id - ID of the master data record to update
+   * @param {Omit<MasterData, 'id'>} data - Updated master data information
+   * @returns {Promise<MasterData>} Updated master data record
+   * @throws {Error} If ID format is invalid or database update fails
+   */
   async updateMasterData(id: number, data: Omit<MasterData, 'id'>): Promise<MasterData> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid ID format');
@@ -780,7 +1025,17 @@ export class Storage {
       handleDatabaseError(error, 'updateMasterData');
     }
   }
-
+  /**
+   * Get documents by client ID
+   * 
+   * Retrieves all documents associated with a specific client.
+   * Can be filtered by segment ID if provided.
+   * 
+   * @param {number} clientId - ID of the client whose documents to retrieve
+   * @param {number} [segmentId] - Optional segment ID to filter documents by
+   * @returns {Promise<Document[]>} Array of document records
+   * @throws {Error} If database query fails
+   */
   async getDocumentsByClientId(clientId: number, segmentId?: number): Promise<Document[]> {
     try {
       let queryText = 'SELECT * FROM documents WHERE client_id = $1';
@@ -807,7 +1062,24 @@ export class Storage {
       handleDatabaseError(error, 'getDocumentsByClientId');
     }
   }
-
+  /**
+   * Create document record
+   * 
+   * Creates a new document record in the database after uploading a file.
+   * Associates the document with a client.
+   * 
+   * @param {object} document - Document data object
+   * @param {number} document.clientId - ID of the client the document belongs to
+   * @param {string} document.documentName - Display name of the document
+   * @param {string} document.documentType - Type/category of the document
+   * @param {string} document.filename - Name of the file as stored in the filesystem
+   * @param {string} document.filePath - Path to the file in the storage system
+   * @param {number} document.createdBy - ID of the user who created the document
+   * @param {Date} document.uploadedAt - Timestamp of when the document was uploaded
+   * @param {number} [document.segmentId] - Optional segment ID to associate with the document
+   * @returns {Promise<Document>} Created document record
+   * @throws {Error} If database insertion fails
+   */
   async createDocument(document: any): Promise<Document> {
     try {
       const {
@@ -844,7 +1116,16 @@ export class Storage {
       handleDatabaseError(error, 'createDocument');
     }
   }
-
+  /**
+   * Get document by filename
+   * 
+   * Retrieves a document record by its filename.
+   * Used to check if a file already exists or to fetch document metadata.
+   * 
+   * @param {string} filename - Name of the file to search for
+   * @returns {Promise<Document | null>} Document record if found, null otherwise
+   * @throws {Error} If filename format is invalid or database query fails
+   */
   async getDocumentByFilename(filename: string): Promise<Document | null> {
     if (!validateInput(filename, 'string')) {
       throw new Error('Invalid filename format');
@@ -870,7 +1151,16 @@ export class Storage {
       handleDatabaseError(error, 'getDocumentByFilename');
     }
   }
-
+  /**
+   * Get document by file path
+   * 
+   * Retrieves a document record by its file path in the storage system.
+   * Used to locate documents based on their storage location.
+   * 
+   * @param {string} filePath - Path of the file to search for
+   * @returns {Promise<Document | null>} Document record if found, null otherwise
+   * @throws {Error} If file path format is invalid or database query fails
+   */
   async getDocumentByFilePath(filePath: string): Promise<Document | null> {
     if (!validateInput(filePath, 'string')) {
       throw new Error('Invalid file path format');
@@ -896,7 +1186,18 @@ export class Storage {
       handleDatabaseError(error, 'getDocumentByFilePath');
     }
   }
-
+  /**
+   * Get client services by client ID
+   * 
+   * Retrieves all services assigned to a specific client.
+   * Includes client name by joining with person_info table.
+   * Can be filtered by segment ID if provided.
+   * 
+   * @param {number} clientId - ID of the client whose services to retrieve
+   * @param {number} [segmentId] - Optional segment ID to filter services
+   * @returns {Promise<ClientService[]>} Array of client service records
+   * @throws {Error} If database query fails
+   */
   async getClientServicesByClientId(clientId: number, segmentId?: number): Promise<ClientService[]> {
     try {
       let queryText = `
@@ -934,7 +1235,58 @@ export class Storage {
       handleDatabaseError(error, 'getClientServicesByClientId');
     }
   }
-
+  /**
+   * Get all client services
+   * 
+   * Retrieves all service assignments across all clients.
+   * Used for administrative overview and reporting.
+   * 
+   * @returns {Promise<ClientService[]>} Array of all client service records
+   * @throws {Error} If database query fails
+   */
+  async getClientServices(): Promise<ClientService[]> {
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM client_services ORDER BY id'
+      );
+      return result.rows.map(row => ({
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: row.service_days,
+        serviceHours: row.service_hours,
+        status: row.status || null,
+        createdAt: row.created_at || null,
+        createdBy: row.created_by || null,
+        segmentId: row.segment_id || null
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getClientServices');
+    }
+  }
+  /**
+   * Create client service
+   * 
+   * Assigns a service to a client and records details about the service arrangement.
+   * 
+   * @param {object} data - Client service data
+   * @param {number} data.clientId - ID of the client receiving the service
+   * @param {string} data.serviceCategory - Category of the service
+   * @param {string} data.serviceType - Type of service within the category
+   * @param {string} data.serviceProvider - Provider delivering the service
+   * @param {Date} data.serviceStartDate - Date when service should begin
+   * @param {string} data.serviceDays - Days of the week when service is provided
+   * @param {string} data.serviceHours - Hours per day/week for the service
+   * @param {string} [data.status] - Current status of the service (defaults to 'Planned')
+   * @param {number} data.createdBy - ID of the user creating the service assignment
+   * @param {Date} [data.createdAt] - Timestamp of creation (defaults to current time)
+   * @param {number} [data.segmentId] - Segment ID this service belongs to
+   * @returns {Promise<ClientService>} Created client service record
+   * @throws {Error} If database insertion fails
+   */
   async createClientService(data: any): Promise<ClientService> {
     try {
       const {
@@ -990,7 +1342,17 @@ export class Storage {
       handleDatabaseError(error, 'createClientService');
     }
   }
-
+  /**
+   * Update client service status
+   * 
+   * Updates the status of a client service record.
+   * Used to track service lifecycle (e.g., planned, active, completed, cancelled).
+   * 
+   * @param {number} id - ID of the client service to update
+   * @param {string} status - New status value
+   * @returns {Promise<void>} Resolves when status is updated
+   * @throws {Error} If ID or status format is invalid or database update fails
+   */
   async updateClientServiceStatus(id: number, status: string): Promise<void> {
     if (!validateInput(id, 'id') || !validateInput(status, 'string')) {
       throw new Error('Invalid ID or status format');
@@ -1005,7 +1367,16 @@ export class Storage {
       handleDatabaseError(error, 'updateClientServiceStatus');
     }
   }
-
+  /**
+   * Get service case note
+   * 
+   * Retrieves the most recent case note for a service.
+   * Used to show the latest update or status of a service.
+   * 
+   * @param {number} serviceId - ID of the service to get case note for
+   * @returns {Promise<ServiceCaseNote | null>} Most recent case note if available, null otherwise
+   * @throws {Error} If service ID format is invalid or database query fails
+   */
   async getServiceCaseNote(serviceId: number): Promise<ServiceCaseNote | null> {
     if (!validateInput(serviceId, 'id')) {
       throw new Error('Invalid service ID format');
@@ -1034,7 +1405,19 @@ export class Storage {
       handleDatabaseError(error, 'getServiceCaseNote');
     }
   }
-
+  /**
+   * Create service case note
+   * 
+   * Creates a new case note for a service.
+   * Used to document observations, changes, or important information about service delivery.
+   * 
+   * @param {NewServiceCaseNote} data - Case note data
+   * @param {number} data.serviceId - ID of the service this note belongs to
+   * @param {string} data.noteText - Content of the case note
+   * @param {number} data.createdBy - ID of the user creating the note
+   * @returns {Promise<ServiceCaseNote>} Created case note record
+   * @throws {Error} If database insertion fails
+   */
   async createServiceCaseNote(data: NewServiceCaseNote): Promise<ServiceCaseNote> {
     try {
       const result = await this.pool.query(
@@ -1057,7 +1440,19 @@ export class Storage {
       handleDatabaseError(error, 'createServiceCaseNote');
     }
   }
-
+  /**
+   * Update service case note
+   * 
+   * Updates an existing case note for a service.
+   * Maintains creation history while tracking update information.
+   * 
+   * @param {number} serviceId - ID of the service whose case note to update
+   * @param {object} data - Updated case note data
+   * @param {string} data.noteText - New content for the case note
+   * @param {number} data.updatedBy - ID of the user making the update
+   * @returns {Promise<ServiceCaseNote>} Updated case note record
+   * @throws {Error} If note doesn't exist, validation fails, or database update fails
+   */
   async updateServiceCaseNote(serviceId: number, data: { noteText: string; updatedBy: number }): Promise<ServiceCaseNote> {
     if (!validateInput(serviceId, 'id') || !validateInput(data.noteText, 'string') || !validateInput(data.updatedBy, 'id')) {
       throw new Error('Invalid case note data format');
@@ -1091,7 +1486,16 @@ export class Storage {
       handleDatabaseError(error, 'updateServiceCaseNote');
     }
   }
-
+  /**
+   * Get all service case notes by service ID
+   * 
+   * Retrieves all case notes for a specific service.
+   * Returns notes in reverse chronological order (newest first).
+   * 
+   * @param {number} serviceId - ID of the service to get all case notes for
+   * @returns {Promise<ServiceCaseNote[]>} Array of case notes for the service
+   * @throws {Error} If service ID format is invalid or database query fails
+   */
   async getServiceCaseNotesByServiceId(serviceId: number): Promise<ServiceCaseNote[]> {
     if (!validateInput(serviceId, 'id')) {
       throw new Error('Invalid service ID format');
@@ -1116,7 +1520,15 @@ export class Storage {
       handleDatabaseError(error, 'getServiceCaseNotesByServiceId');
     }
   }
-
+  /**
+   * Get all companies
+   * 
+   * Retrieves all company records from the database.
+   * Returns companies sorted alphabetically by name.
+   * 
+   * @returns {Promise<Company[]>} Array of all company records
+   * @throws {Error} If database query fails
+   */
   async getAllCompanies(): Promise<Company[]> {
     try {
       const result = await this.pool.query(
@@ -1127,7 +1539,15 @@ export class Storage {
       handleDatabaseError(error, 'getAllCompanies');
     }
   }
-
+  /**
+   * Get company by ID
+   * 
+   * Retrieves a specific company record by its unique ID.
+   * 
+   * @param {number} id - ID of the company to retrieve
+   * @returns {Promise<Company | null>} Company record if found, null otherwise
+   * @throws {Error} If company ID format is invalid or database query fails
+   */
   async getCompanyById(id: number): Promise<Company | null> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid company ID format');
@@ -1143,7 +1563,22 @@ export class Storage {
       handleDatabaseError(error, 'getCompanyById');
     }
   }
-
+  /**
+   * Create company
+   * 
+   * Creates a new company record in the database.
+   * 
+   * @param {z.infer<typeof insertCompanySchema>} data - Company data validated against schema
+   * @param {string} data.company_name - Name of the company
+   * @param {string} data.registered_address - Registered business address
+   * @param {string} data.postal_address - Postal/mailing address
+   * @param {string} data.contact_person_name - Primary contact person name
+   * @param {string} data.contact_person_phone - Contact phone number
+   * @param {string} data.contact_person_email - Contact email address
+   * @param {number} data.created_by - ID of the user creating the company
+   * @returns {Promise<Company>} Created company record
+   * @throws {Error} If schema validation fails or database insertion fails
+   */
   async createCompany(data: z.infer<typeof insertCompanySchema>): Promise<Company> {
     try {
       const result = await this.pool.query(
@@ -1170,8 +1605,16 @@ export class Storage {
     } catch (error) {
       handleDatabaseError(error, 'createCompany');
     }
-  }
-
+  }  /**
+   * Update company
+   * 
+   * Updates an existing company record with new information.
+   * 
+   * @param {number} id - ID of the company to update
+   * @param {z.infer<typeof insertCompanySchema>} data - Updated company data
+   * @returns {Promise<Company>} Updated company record
+   * @throws {Error} If company ID format is invalid, schema validation fails, or database update fails
+   */
   async updateCompany(id: number, data: z.infer<typeof insertCompanySchema>): Promise<Company> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid company ID format');
@@ -1185,8 +1628,9 @@ export class Storage {
             postal_address = $3,
             contact_person_name = $4,
             contact_person_phone = $5,
-            contact_person_email = $6
-        WHERE company_id = $7 RETURNING *`,
+            contact_person_email = $6,
+            created_by = $7
+        WHERE company_id = $8 RETURNING *`,
         [
           data.company_name,
           data.registered_address,
@@ -1194,6 +1638,7 @@ export class Storage {
           data.contact_person_name,
           data.contact_person_phone,
           data.contact_person_email,
+          data.created_by,
           id
         ]
       );
@@ -1202,7 +1647,15 @@ export class Storage {
       handleDatabaseError(error, 'updateCompany');
     }
   }
-
+  /**
+   * Delete company
+   * 
+   * Permanently removes a company record from the database.
+   * 
+   * @param {number} id - ID of the company to delete
+   * @returns {Promise<void>} Resolves when company is deleted
+   * @throws {Error} If company ID format is invalid or database delete fails
+   */
   async deleteCompany(id: number): Promise<void> {
     if (!validateInput(id, 'id')) {
       throw new Error('Invalid company ID format');
@@ -1217,7 +1670,16 @@ export class Storage {
       handleDatabaseError(error, 'deleteCompany');
     }
   }
-
+  /**
+   * Get all segments by company
+   * 
+   * Retrieves all segments that belong to a specific company.
+   * Returns segments sorted alphabetically by name.
+   * 
+   * @param {number} companyId - ID of the company whose segments to retrieve
+   * @returns {Promise<any[]>} Array of segment records for the company
+   * @throws {Error} If database query fails
+   */
   async getAllSegmentsByCompany(companyId: number): Promise<any[]> {
     try {
       const result = await this.pool.query(
@@ -1230,7 +1692,15 @@ export class Storage {
       throw error;
     }
   }
-
+  /**
+   * Get segment by ID
+   * 
+   * Retrieves a specific segment record by its unique ID.
+   * 
+   * @param {number} id - ID of the segment to retrieve
+   * @returns {Promise<any>} Segment record
+   * @throws {Error} If database query fails
+   */
   async getSegmentById(id: number): Promise<any> {
     try {
       const result = await this.pool.query(
@@ -1243,7 +1713,19 @@ export class Storage {
       throw error;
     }
   }
-
+  /**
+   * Create segment
+   * 
+   * Creates a new segment under a company.
+   * Segments are used to organize and categorize data within a company.
+   * 
+   * @param {object} segmentData - Segment data
+   * @param {string} segmentData.segment_name - Name of the segment
+   * @param {number} segmentData.company_id - ID of the company this segment belongs to
+   * @param {number} segmentData.created_by - ID of the user creating the segment
+   * @returns {Promise<any>} Created segment record
+   * @throws {Error} If database insertion fails
+   */
   async createSegment(segmentData: {
     segment_name: string;
     company_id: number;
@@ -1268,7 +1750,18 @@ export class Storage {
       throw error;
     }
   }
-
+  /**
+   * Update segment
+   * 
+   * Updates an existing segment with new information.
+   * Currently only supports updating the segment name.
+   * 
+   * @param {number} id - ID of the segment to update
+   * @param {object} segmentData - Updated segment data
+   * @param {string} segmentData.segment_name - New name for the segment
+   * @returns {Promise<any>} Updated segment record
+   * @throws {Error} If database update fails
+   */
   async updateSegment(
     id: number,
     segmentData: {
@@ -1291,15 +1784,22 @@ export class Storage {
       handleDatabaseError(error, 'updateSegment');
       throw error;
     }
-  }
-
+  }  /**
+   * Delete segment
+   * 
+   * Permanently removes a segment from the database.
+   * 
+   * @param {number} id - ID of the segment to delete
+   * @returns {Promise<boolean>} True if segment was deleted, false if segment not found
+   * @throws {Error} If database delete fails
+   */
   async deleteSegment(id: number): Promise<boolean> {
     try {
       const result = await this.pool.query(
         'DELETE FROM segments WHERE id = $1 RETURNING id',
         [id]
       );
-      return result.rowCount > 0;
+      return result.rowCount! > 0; // Add non-null assertion
     } catch (error) {
       handleDatabaseError(error, 'deleteSegment');
       throw error;

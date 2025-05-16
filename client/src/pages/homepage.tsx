@@ -8,13 +8,12 @@ import { useSegment } from "@/contexts/segment-context"
 import { Loader2 } from "lucide-react"
 
 interface Member {
-  id: number
-  firstName: string
-  lastName: string
-  status: string
-  hcpLevel?: string
-  hcpEndDate?: string
-  hcpStartDate?: string
+  id: number;
+  firstName: string;
+  lastName: string;
+  status: string;
+  hcpLevel?: string;
+  hcpStartDate?: string;
 }
 
 export default function Homepage() {
@@ -85,12 +84,8 @@ export default function Homepage() {
                 <p className="text-sm text-gray-500">ID: {member.id}</p>
                 <p className="text-sm text-gray-500">
                   HCP Level: {member.hcpLevel || "-"}
-                </p>
-                <p className="text-sm text-gray-500">
+                </p>                <p className="text-sm text-gray-500">
                   HCP Start Date: {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : "-"}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {member.hcpEndDate ? `(End: ${new Date(member.hcpEndDate).toLocaleDateString()})` : ""}
                 </p>
                 <p className="text-sm mt-2">
                   <span className={`inline-block px-2 py-1 rounded-full ${getStatusBadgeColors(member.status)}`}>

@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
 import { Loader2, Search, Plus } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
-import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS } from "@/lib/constants";

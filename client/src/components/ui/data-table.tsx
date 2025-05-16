@@ -147,12 +147,14 @@ function getSearchColumnId<T extends object>(columns: ColumnDef<T>[], searchColu
   for (const column of columns) {
     if (column.id) return column.id;
     // If the column has an accessorKey, it will be used as the ID by TanStack Table
-    if (typeof column.accessorKey === 'string') return column.accessorKey;
+    // Use type assertion since we know our custom DataTableColumnDef includes accessorKey
+    const colDef = column as any;
+    if (typeof colDef.accessorKey === 'string') return colDef.accessorKey;
   }
   
   // Fallback to a safe default if no valid ID is found
   return columns.length > 0 ? 
     // For an accessorFn column, TanStack will auto-generate an ID
-    (columns[0].id || String(columns[0].accessorKey) || "id") : 
+    (columns[0].id || String((columns[0] as any).accessorKey) || "id") : 
     "id";
 }
