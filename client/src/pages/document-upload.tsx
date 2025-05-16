@@ -99,22 +99,7 @@ export default function DocumentUpload() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Fetch documents for selected member
-  const { data: documents = [], isLoading: loadingDocuments } = useQuery<Document[]>({
-    queryKey: ["/api/documents/client", selectedMember?.id, selectedSegment?.id],
-    queryFn: async () => {
-      if (!selectedMember) return [];
-      const response = await apiRequest("GET", `/api/documents/client/${selectedMember.id}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch documents');
-      }
-      return response.json();
-    },
-    enabled: !!selectedMember,
-  });
+    };  }, []);
 
   // Form setup
   const form = useForm<DocumentFormData>({
@@ -126,14 +111,31 @@ export default function DocumentUpload() {
       file: null
     },
   });
-  // Document upload mutation
+  // Initialize form when a member is selected
+  useEffect(() => {
+    if (selectedMember) {
+      form.setValue("clientId", selectedMember.id);
+    }
+  }, [selectedMember, form]);
+  // Fetch documents for selected member
+  const { data: documents = { data: [] }, isLoading: loadingDocuments } = useQuery<{ data: Document[] }>({
+    queryKey: ["/api/documents/client", selectedMember?.id, selectedSegment?.id],
+    queryFn: async () => {
+      if (!selectedMember) return { data: [] };
+      
+      const response = await apiRequest("GET", `/api/documents/client/${selectedMember.id}${selectedSegment ? `?segmentId=${selectedSegment.id}` : ''}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
+      }
+      return response.json();
+    },
+    enabled: !!selectedMember,
+  });
   const uploadMutation = useMutation({
     mutationFn: async (data: DocumentFormData) => {
       if (!data.file) {
         throw new Error("No file selected");
-      }
-
-      const formData = new FormData();
+      }      const formData = new FormData();
       formData.append("clientId", data.clientId.toString());
       formData.append("documentName", data.documentName);
       formData.append("documentType", data.documentType);
@@ -142,13 +144,6 @@ export default function DocumentUpload() {
       // Add segment ID if available
       if (selectedSegment) {
         formData.append("segmentId", selectedSegment.id.toString());
-      }
-
-      console.log("Uploading file:", data.file[0].name);
-      
-      // Debug log of form data
-      for (const pair of formData.entries()) {
-        console.log(pair[0], pair[1]);
       }
 
       const response = await fetch("/api/documents", {
@@ -211,13 +206,11 @@ export default function DocumentUpload() {
     if (!selectedSegment) {
       toast({
         title: "Error",
-        description: "Please select a segment first",
+        description: "Please select a segment from the dropdown in the top left corner",
         variant: "destructive",
       });
-      return;
-    }
+      return;    }
     
-    console.log("Form data before mutation:", data);
     uploadMutation.mutate(data);
   };
 
@@ -247,7 +240,7 @@ export default function DocumentUpload() {
                 <Button 
                   onClick={() => setShowDialog(true)} 
                   disabled={!selectedMember || !selectedSegment}
-                  title={!selectedSegment ? "Please select a segment first" : !selectedMember ? "Please select a member first" : "Upload document"}
+                  title={!selectedSegment ? "Please select a segment from the dropdown in the top left corner" : !selectedMember ? "Please select a member first" : "Upload document"}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
@@ -302,35 +295,32 @@ export default function DocumentUpload() {
             )}
           </CardContent>
         </Card>
-
+        
         {/* Documents List Section */}
         {selectedMember && (
           <Card className="max-w-5xl mx-auto mt-6">
             <CardHeader>
               <CardTitle>Documents for {selectedMember.firstName} {selectedMember.lastName}</CardTitle>
-              <CardDescription>Total documents: {documents.length}</CardDescription>
+              <CardDescription>Total documents: {documents.data?.length || 0}</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingDocuments ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : documents.length === 0 ? (
+              ) : (!documents.data || documents.data.length === 0) ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No documents found for this client. Click "Add New" to upload documents.
                 </div>
               ) : (
                 <Table>
-                  <TableHeader>
-                    <TableRow>
+                  <TableHeader>                    <TableRow>
                       <TableHead>Document Name</TableHead>
                       <TableHead>Document Type</TableHead>
                       <TableHead>Upload Date</TableHead>
                       <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documents.map((doc) => (
+                    </TableRow></TableHeader>                  <TableBody>
+                    {documents.data?.map((doc: Document) => (
                       <TableRow key={doc.id}>
                         <TableCell>{doc.documentName}</TableCell>
                         <TableCell>{doc.documentType}</TableCell>
@@ -439,12 +429,10 @@ export default function DocumentUpload() {
                         <FormLabel>Upload File</FormLabel>
                         <FormControl>
                           <Input
-                            type="file"
-                            onChange={(e) => {
+                            type="file"                            onChange={(e) => {
                               const files = e.target.files;
                               if (files) {
                                 onChange(files);
-                                console.log("File selected:", files[0]?.name);
                               }
                             }}
                             accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"

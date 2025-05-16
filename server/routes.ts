@@ -921,6 +921,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   /**
+   * Document upload endpoint
+   * 
+   * Uploads a document file and creates a document record in the database.
+   * Associates the document with a client and optionally a segment.
+   * Handles file storage using either local filesystem or Azure Blob Storage.
+   * 
+   * @route POST /api/documents
+   * @param {string} req.body.clientId - ID of the client the document belongs to
+   * @param {string} req.body.documentName - Display name of the document
+   * @param {string} req.body.documentType - Type/category of the document
+   * @param {File} req.file - Document file to upload
+   * @param {string} [req.body.segmentId] - Optional segment ID to associate with the document
+   * @returns {object} Created document record
+   */
+  app.post("/api/documents", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const { clientId, documentName, documentType, segmentId } = req.body;
+      
+      if (!clientId || !documentName || !documentType) {
+        return res.status(400).json({ message: "Missing required fields: clientId, documentName, and documentType are required" });
+      }      // Get client information to use in folder name
+      const client = await dbStorage.getPersonInfoById(parseInt(clientId));
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      
+      // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
+      const clientDir = path.join(uploadsDir, `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_'));
+      await fs.promises.mkdir(clientDir, { recursive: true });
+      
+      // Move the file from temp location to client directory
+      const filename = path.basename(req.file.path);
+      const filePath = path.join(clientDir, filename).replace(/\\/g, '/');
+      
+      // In development, move file within filesystem
+      if (process.env.NODE_ENV !== 'production') {
+        await fs.promises.rename(req.file.path, filePath);
+      } else if (blobStorage) {
+        // In production, upload to Azure Blob Storage
+        const fileBuffer = await fs.promises.readFile(req.file.path);
+        await blobStorage.uploadFile(fileBuffer, filePath, req.file.mimetype);
+        // Delete temp file
+        await fs.promises.unlink(req.file.path);
+      }
+      
+      // Create document record in database
+      const documentRecord = await dbStorage.createDocument({
+        clientId: parseInt(clientId),
+        documentName,
+        documentType,
+        filename: req.file.originalname,
+        filePath: filePath.replace(/\\/g, '/').replace(`${process.cwd().replace(/\\/g, '/')}/`, ''),
+        createdBy: req.user!.id,
+        uploadedAt: new Date(),
+        segmentId: segmentId ? parseInt(segmentId) : null
+      });
+      
+      return res.status(201).json(documentRecord);
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      return res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+  
+  /**
    * Get documents by client ID endpoint
    * 
    * Retrieves all documents associated with a specific client.

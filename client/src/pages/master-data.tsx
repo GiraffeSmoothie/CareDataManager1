@@ -305,8 +305,7 @@ export default function MasterData() {
               </div>
             ) : isAdmin && !selectedSegment ? (
               <div className="text-center py-4 text-amber-600">
-                <p>Admin users must select a segment to view master data.</p>
-                <p className="text-sm text-muted-foreground mt-1">Please use the segment selector above to choose a company segment.</p>
+                <p>Please select a segment from the dropdown in the top left corner</p>
               </div>
             ) : masterDataList.length === 0 ? (
               <div className="text-center py-4">No Services master data found.</div>
