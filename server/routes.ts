@@ -940,10 +940,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { clientId, documentName, documentType, segmentId } = req.body;
-      
       if (!clientId || !documentName || !documentType) {
-        return res.status(400).json({ message: "Missing required fields: clientId, documentName, and documentType are required" });
-      }      // Get client information to use in folder name
+        return res.status(400).json({ message: "Missing required fields: clientId, documentName, documentType, and file are required" });
+      }
+      
+      // Get client information to use in folder name
       const client = await dbStorage.getPersonInfoById(parseInt(clientId));
       if (!client) {
         return res.status(404).json({ message: "Client not found" });
@@ -951,21 +952,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
       const clientDir = path.join(uploadsDir, `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_'));
-      await fs.promises.mkdir(clientDir, { recursive: true });
       
-      // Move the file from temp location to client directory
-      const filename = path.basename(req.file.path);
+      // Generate a unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(req.file.originalname);
+      const filename = uniqueSuffix + ext;
       const filePath = path.join(clientDir, filename).replace(/\\/g, '/');
-      
+
       // In development, move file within filesystem
       if (process.env.NODE_ENV !== 'production') {
-        await fs.promises.rename(req.file.path, filePath);
+        await fs.promises.mkdir(clientDir, { recursive: true });
+        if (req.file.path) {
+          await fs.promises.rename(req.file.path, filePath);
+        }
       } else if (blobStorage) {
         // In production, upload to Azure Blob Storage
-        const fileBuffer = await fs.promises.readFile(req.file.path);
+        const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer);
         await blobStorage.uploadFile(fileBuffer, filePath, req.file.mimetype);
-        // Delete temp file
-        await fs.promises.unlink(req.file.path);
       }
       
       // Create document record in database
@@ -1149,15 +1152,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
           fullPath = path.join(process.cwd(), fullPath);
         }
+          console.log(`Attempting to access file at: ${fullPath}`);
         
-        console.log(`Attempting to access file at: ${fullPath}`);
-        
-        if (!fs.existsSync(fullPath)) {
-          // If not found with direct path, check if it's in uploads directory
-          fullPath = path.join(uploadsDir, path.basename(document.filePath));
-          console.log(`File not found, trying uploads dir: ${fullPath}`);
+        if (!fs.existsSync(fullPath) && document.filePath) {
+          // Try a series of fallback paths to find the file
           
-          // If still not found, try removing "uploads" from the start of the path
+          // Try 1: Just the basename in uploads directory
+          const basename = path.basename(document.filePath);
+          fullPath = path.join(uploadsDir, basename);
+          console.log(`File not found, trying uploads dir with basename: ${fullPath}`);
+          
+          // Try 2: Full path without "uploads/" prefix
           if (!fs.existsSync(fullPath) && document.filePath.startsWith('uploads/')) {
             const pathWithoutUploads = document.filePath.substring('uploads/'.length);
             fullPath = path.join(uploadsDir, pathWithoutUploads);

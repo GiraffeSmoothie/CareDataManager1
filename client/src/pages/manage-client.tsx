@@ -313,9 +313,8 @@ export default function ManageClient() {
     
     mutation.mutate(formattedData);
   };
-
   const hcpLevels = ["1", "2", "3", "4"];
-  const statusOptions = Object.keys(STATUS_CONFIGS);
+  const statusOptions = ["New", "Active", "Paused", "Closed"];
 
   // Filter clients based on search term and active status
   const filteredClients = clients.filter(client => 
