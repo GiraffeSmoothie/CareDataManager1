@@ -65,7 +65,7 @@ export default function CompanyPage() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-    // State for segments functionality
+  // State for segments functionality
   const [expandedCompany, setExpandedCompany] = useState<number | null>(null);
   const [showSegmentDialog, setShowSegmentDialog] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
@@ -98,6 +98,7 @@ export default function CompanyPage() {
       return response.json();
     },
   });
+  
   // Fetch segments for a company
   const { data: segments, isLoading: isLoadingSegments } = useQuery<Segment[]>({
     queryKey: ["segments", expandedCompany],
@@ -144,6 +145,7 @@ export default function CompanyPage() {
       setError(err instanceof Error ? err : new Error(err.message || `Failed to ${isEditing ? "update" : "create"} company`));
     },
   });
+  
   // Add/Update segment mutation
   const segmentMutation = useMutation({
     mutationFn: (data: { segment_name: string; company_id: number }) => {
@@ -220,6 +222,7 @@ export default function CompanyPage() {
     setExpandedCompany(companyId);
     setShowSegmentDialog(true);
   };
+  
   const handleEditSegment = (segment: Segment) => {
     setSelectedSegment(segment);
     setIsEditingSegment(true);
@@ -271,6 +274,7 @@ export default function CompanyPage() {
       ),
     },
   ];
+  
   const segmentColumns = [
     {
       accessorKey: "segment_name",
@@ -362,10 +366,15 @@ export default function CompanyPage() {
         </Card>
 
         {/* Company Dialog */}
-        <Dialog open={showDialog} onOpenChange={handleCloseDialog}>
+        <Dialog 
+          open={showDialog} 
+          onOpenChange={handleCloseDialog}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{isEditing ? 'Edit Company' : 'Add New Company'}</DialogTitle>
+              <DialogTitle>
+                {isEditing ? 'Edit Company' : 'Add New Company'}
+              </DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -423,13 +432,16 @@ export default function CompanyPage() {
                       <FormMessage />
                     </FormItem>
                   )}
-                />                <FormField
+                />
+                
+                <FormField
                   control={form.control}
                   name="contact_person_phone"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person Phone</FormLabel>
-                      <FormControl>                        <Input 
+                      <FormControl>
+                        <Input 
                           {...field} 
                           type="tel" 
                           maxLength={10}
@@ -479,7 +491,9 @@ export default function CompanyPage() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       <span>Processing...</span>
                     </div>
-                  ) : isEditing ? "Update Company" : "Create Company"}
+                  ) : (
+                    isEditing ? "Update Company" : "Create Company"
+                  )}
                 </Button>
               </form>
             </Form>
@@ -487,18 +501,26 @@ export default function CompanyPage() {
         </Dialog>
 
         {/* Segment Dialog */}
-        <Dialog open={showSegmentDialog} onOpenChange={handleCloseSegmentDialog}>
+        <Dialog 
+          open={showSegmentDialog} 
+          onOpenChange={handleCloseSegmentDialog}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{isEditingSegment ? 'Edit Segment' : 'Add New Segment'}</DialogTitle>
+              <DialogTitle>
+                {isEditingSegment ? 'Edit Segment' : 'Add New Segment'}
+              </DialogTitle>
             </DialogHeader>
             <Form {...segmentForm}>
-              <form onSubmit={segmentForm.handleSubmit((data) => {
-                segmentMutation.mutate({
-                  segment_name: data.segment_name,
-                  company_id: selectedSegment?.company_id || expandedCompany as number
-                });
-              })} className="space-y-4">
+              <form 
+                onSubmit={segmentForm.handleSubmit((data) => {
+                  segmentMutation.mutate({
+                    segment_name: data.segment_name,
+                    company_id: selectedSegment?.company_id || expandedCompany as number
+                  });
+                })} 
+                className="space-y-4"
+              >
                 <FormField
                   control={segmentForm.control}
                   name="segment_name"
@@ -523,11 +545,14 @@ export default function CompanyPage() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       <span>Processing...</span>
                     </div>
-                  ) : isEditingSegment ? "Update Segment" : "Create Segment"}
+                  ) : (
+                    isEditingSegment ? "Update Segment" : "Create Segment"
+                  )}
                 </Button>
               </form>
             </Form>
-          </DialogContent>        </Dialog>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

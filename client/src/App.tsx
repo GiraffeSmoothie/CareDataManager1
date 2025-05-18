@@ -22,10 +22,10 @@ import { Loader2 } from "lucide-react";
 
 interface AuthData {
   authenticated: boolean;
-  user?: {
-    id: number;
+  user?: {    id: number;
     username: string;
     role: string;
+    company_id?: number;
   };
 }
 

@@ -4,12 +4,12 @@ import { Session } from "express-session";
 import { AuthService } from "./src/services/auth.service";
 
 // Define session types
-declare module "express-session" {
-  interface Session {
+declare module "express-session" {  interface Session {
     user?: {
       id: number;
       username: string;
       role: string;
+      company_id?: number;
     };
   }
 }
@@ -427,12 +427,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await AuthService.validateUser(username, password);
       if (!user) {
         return res.status(401).json({ success: false, error: "Invalid credentials" });
-      }
-
-      req.session.user = {
+      }      req.session.user = {
         id: user.id,
         username: user.username,
-        role: user.role
+        role: user.role,
+        company_id: user.company_id
       };
       
       return res.json({ success: true, user });
@@ -481,15 +480,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (err) console.error("Error destroying invalid session:", err);
         });
         return res.status(401).json({ authenticated: false });
-      }
-
-      return res.status(200).json({ 
+      }        return res.status(200).json({ 
         authenticated: true, 
         user: { 
           id: user.id, 
           username: user.username, 
           role: user.role,
-          name: user.name  // Add the name field here
+          name: user.name,
+          company_id: user.company_id
         } 
       });
     } catch (error) {
@@ -1224,15 +1222,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {object} Created client service record
    * @throws {ApiError} 400 - If validation fails
    * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 409 - If username already exists
    */  app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      console.log("[API] Received client service data:", req.body);
-      
-      // Ensure segmentId is explicitly handled
+      console.log("[API] Received client service data:", req.body);      // Ensure segmentId is explicitly handled
       const requestData = {
         ...req.body,
         segmentId: req.body.segmentId === undefined ? null : req.body.segmentId,
@@ -1247,7 +1244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.serviceCategory,
         validatedData.serviceType,
         validatedData.serviceProvider,
-        validatedData.segmentId
+        validatedData.segmentId === null ? undefined : validatedData.segmentId
       );
       
       if (!exists) {
@@ -2080,24 +2077,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * @route GET /api/user/segments
    * @returns {Array} List of segments for the user's company
-   */
-  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
+   */  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;    
     try {
       // Get current user with company_id
       const user = await dbStorage.getUserById(authReq.user.id);
       
-      // If user is an admin without a company assigned, return an empty array
-      // This prevents admins without company assignment from seeing segments
-      if (!user || !user.company_id) {
-        console.log(`User ${user?.id} (${user?.username}) has no company_id assigned, returning empty segments array`);
+      // Return 401 if user not found
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }      // Log user details for debugging
+      console.log('Fetching segments for user:', {
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        companyId: user.company_id
+      });
+      
+      // For users with company_id (regardless of role), return their company's segments
+      if (user.company_id) {
+        console.log(`Fetching segments for user's company: ${user.company_id}`);
+        const segments = await dbStorage.getAllSegmentsByCompany(user.company_id);
+        console.log(`Found ${segments.length} segments for company ${user.company_id}`);
+        return res.status(200).json(segments);
+      }
+      
+      // For admins without company_id, return empty array (segments are company-specific)
+      if (!user.company_id) {
+        console.log(`user ${user.id} has no company assignment, returning empty array`);
+        return res.status(200).json([]);
+      }
+/*
+      // For admins without company_id, return empty array (segments are company-specific)
+      if (user.role === 'admin' && !user.company_id) {
+        console.log(`Admin user ${user.id} has no company assignment, returning empty array`);
         return res.status(200).json([]);
       }
 
-      // Get segments for the company
-      const segments = await dbStorage.getAllSegmentsByCompany(user.company_id);
-      return res.status(200).json(segments);
+      // Regular users without company_id get empty array
+      if (user.role !== 'admin' && !user.company_id) {
+        console.log(`Regular user ${user.id} has no company assignment, returning empty array`);
+        return res.status(200).json([]);
+      }
+*/
+      // Fallback case - return empty array
+      console.log('Unhandled user case, returning empty array:', user);
+      return res.status(200).json([]);
     } catch (error) {
       console.error("Error fetching user segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });

@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 
 declare module "express" {
-  interface Request {
-    user?: {
+  interface Request {    user?: {
       id: number;
       username: string;
       role: string;
+      company_id?: number;
     };
     memberPath?: string;
     filePath?: string;

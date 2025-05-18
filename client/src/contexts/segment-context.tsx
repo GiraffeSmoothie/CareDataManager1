@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { apiRequest } from '@/lib/queryClient';
+// Removed apiRequest import since we're using fetch directly
 import { Segment } from '@shared/schema';
 import { useQuery } from '@tanstack/react-query';
 
@@ -14,14 +14,10 @@ interface SegmentContextType {
 
 const SegmentContext = createContext<SegmentContextType | undefined>(undefined);
 
-export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [segments, setSegments] = useState<Segment[]>([]);
+export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {  const [segments, setSegments] = useState<Segment[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-
-  // Query auth status to react to login/logout
+  // Query auth status and segments using tanstack query
   const { data: authData } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
@@ -35,83 +31,62 @@ export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children })
     },
     staleTime: 30000, // 30 seconds
   });
-
-  const fetchSegments = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Check if user is authenticated first
-      const authResponse = await fetch('/api/auth/status', { 
-        credentials: 'include'
+  const { data: segmentsData, error: segmentsError, refetch } = useQuery({
+    queryKey: ["segments", authData?.user?.company_id],
+    queryFn: async () => {
+      console.log("Fetching segments for company_id:", authData?.user?.company_id);
+      const response = await fetch('/api/user/segments', {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
-      
-      if (!authResponse.ok) {
-        // If not authenticated, don't try to fetch segments yet
-        setIsLoading(false);
-        return;
+      if (!response.ok) {
+        throw new Error(`Failed to fetch segments: ${response.status} ${response.statusText}`);
       }
-      
-      console.log("Fetching segments for user");
-      const response = await apiRequest('GET', '/api/user/segments');
       const data = await response.json();
-      console.log("Fetched segments:", data);
-      setSegments(data);
-        // Set the first segment as selected by default if available
-      if (data.length > 0 && !selectedSegment) {
+      console.log("Received segments:", data);
+      return data;
+    },
+    enabled: !!authData?.authenticated,
+    staleTime: 10000, // 10 seconds
+  });
+  // Update segments state when segmentsData changes
+  useEffect(() => {
+    if (segmentsData) {
+      console.log("Fetched segments:", segmentsData);
+      setSegments(segmentsData);
+      
+      // Set the first segment as selected by default if available
+      if (segmentsData.length > 0 && !selectedSegment) {
         // Check if there's a stored segment preference
-        const storedSegmentId = localStorage.getItem('selectedSegmentId');        
+        const storedSegmentId = localStorage.getItem('selectedSegmentId');
         if (storedSegmentId) {
-          const segmentFromStorage = data.find((s: Segment) => s.id.toString() === storedSegmentId);
+          const segmentFromStorage = segmentsData.find((s: Segment) => s.id.toString() === storedSegmentId);
           if (segmentFromStorage) {
             setSelectedSegment(segmentFromStorage);
           } else {
-            setSelectedSegment(data[0]);
+            setSelectedSegment(segmentsData[0]);
           }
         } else {
-          setSelectedSegment(data[0]);
+          setSelectedSegment(segmentsData[0]);
         }
-      } else if (data.length === 0) {
-        // Clear selected segment if the user has no segments (e.g., admin without company assignment)
+      } else if (segmentsData.length === 0) {
+        // Clear selected segment if the user has no segments
         setSelectedSegment(null);
         localStorage.removeItem('selectedSegmentId');
       }
-      // Reset retry count on success
-      setRetryCount(0);
-    } catch (err) {
-      console.error('Error fetching segments:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch segments'));
-      
-      // Implement retry logic with exponential backoff
-      if (retryCount < 3) {
-        const nextRetry = setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-          fetchSegments();
-        }, Math.pow(2, retryCount) * 1000); // 1s, 2s, 4s backoff
-        
-        return () => clearTimeout(nextRetry);
-      }
-    } finally {
-      setIsLoading(false);
+      setError(null);
     }
-  };
+  }, [segmentsData]);
 
-  // Fetch segments on component mount and when retryCount changes
+  // Update error state when segmentsError changes
   useEffect(() => {
-    fetchSegments();
-  }, [retryCount]);
-
-  // Refetch segments when authentication status changes
-  useEffect(() => {
-    if (authData?.authenticated) {
-      console.log("Authentication detected, fetching segments");
-      fetchSegments();
-    } else {
-      // Clear segments when logged out
-      setSegments([]);
-      setSelectedSegment(null);
+    if (segmentsError) {
+      setError(segmentsError instanceof Error ? segmentsError : new Error('Failed to fetch segments'));
     }
-  }, [authData?.authenticated]);
+  }, [segmentsError]);
 
   // Save selected segment to localStorage when it changes
   useEffect(() => {
@@ -121,17 +96,14 @@ export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [selectedSegment]);
 
   const refetchSegments = () => {
-    setRetryCount(0); // Reset retry count
-    fetchSegments();
+    refetch();
   };
-
   return (
-    <SegmentContext.Provider
-      value={{
+    <SegmentContext.Provider value={{
         segments,
         selectedSegment,
         setSelectedSegment,
-        isLoading,
+        isLoading: !authData || segmentsData === undefined,
         error,
         refetchSegments
       }}

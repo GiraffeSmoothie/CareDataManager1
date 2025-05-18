@@ -16,7 +16,13 @@ export class AuthController {
         throw new ApiError(401, "Invalid credentials", null, "INVALID_CREDENTIALS");
       }
 
-      req.session.user = user;
+      // Include company_id in session user
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        company_id: user.company_id
+      };
       return res.json({ success: true, user });
     } catch (error) {
       console.error("Login error:", error);
