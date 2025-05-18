@@ -31,10 +31,46 @@ type MasterDataFormValues = z.infer<typeof masterDataSchema>;
 export default function MasterData() {
   const { toast } = useToast();
   const [showDialog, setShowDialog] = useState(false);
-  const [editingData, setEditingData] = useState<MasterDataType | null>(null);
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [editingData, setEditingData] = useState<MasterDataType | null>(null);  const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const { selectedSegment } = useSegment(); // Get the selected segment from context
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check if user is admin
+  const { data: authData } = useQuery({
+    queryKey: ["authStatus"],
+    queryFn: async () => {
+      const response = await fetch('/api/auth/status', { 
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        return { authenticated: false };
+      }
+      return response.json();
+    },
+  });
+  useEffect(() => {
+    // Reset isAdmin to false when auth data changes - this ensures we correctly handle logout scenarios
+    if (authData?.user?.role === "admin") {
+      console.log("User is admin");
+      setIsAdmin(true);
+    } else {
+      console.log("User is not admin");
+      setIsAdmin(false);
+    }
+  }, [authData]);
+
+  // Determine if we should enable the master data query
+  // Only fetch data if either:
+  // 1. A segment is selected (for any user type), or
+  // 2. The user is not an admin (regular users with no company assignment shouldn't exist, but just in case)
+  const shouldFetchData = !!selectedSegment || !isAdmin;
+  
+  console.log("Master data fetch conditions:", {
+    selectedSegment: !!selectedSegment,
+    isAdmin,
+    shouldFetchData
+  });
 
   // Populate form when editing data changes
   useEffect(() => {
@@ -47,9 +83,8 @@ export default function MasterData() {
       });
     }
   }, [editingData]);
-
   // Fetch all master data for the View tab
-  const { data: masterDataList = [], isLoading, refetch } = useQuery<MasterDataType[]>({
+  const { data: masterDataList = [], isLoading, refetch, error: queryError } = useQuery<MasterDataType[]>({
     queryKey: ["/api/master-data", selectedSegment?.id],
     queryFn: async () => {
       const url = selectedSegment 
@@ -57,11 +92,12 @@ export default function MasterData() {
         : "/api/master-data";
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error("Failed to fetch master data");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch master data");
       }
       return response.json();
     },
-    enabled: true,
+    enabled: shouldFetchData,
   });
 
   // Sort services by Service Category A -> Z
@@ -207,13 +243,20 @@ export default function MasterData() {
   ];
 
   return (
-    <AppLayout>
-      <div className="container py-6">
+    <AppLayout>      <div className="container py-6">
         {error && (
           <ErrorDisplay 
             variant="alert"
             title="Error"
             message={error.message}
+            className="mb-4"
+          />
+        )}
+        {queryError && !isAdmin && (
+          <ErrorDisplay 
+            variant="alert"
+            title="Error Loading Data"
+            message={queryError instanceof Error ? queryError.message : "Failed to load master data"}
             className="mb-4"
           />
         )}
@@ -236,27 +279,33 @@ export default function MasterData() {
                       </span>
                     )}
                   </label>
-                </div>
-                <Button onClick={() => {
-                  setEditingData(null);
-                  form.reset({
-                    serviceCategory: "",
-                    serviceType: "",
-                    serviceProvider: "",
-                    active: true,
-                  });
-                  setShowDialog(true);
-                }}>
+                </div>                <Button 
+                  onClick={() => {
+                    setEditingData(null);
+                    form.reset({
+                      serviceCategory: "",
+                      serviceType: "",
+                      serviceProvider: "",
+                      active: true,
+                    });
+                    setShowDialog(true);
+                  }}
+                  disabled={isAdmin && !selectedSegment}
+                  title={isAdmin && !selectedSegment ? "Please select a segment first" : "Add new service"}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add New
                 </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
+          </CardHeader>          <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : isAdmin && !selectedSegment ? (
+              <div className="text-center py-4 text-amber-600">
+                <p>Please select a segment from the dropdown in the top left corner</p>
               </div>
             ) : masterDataList.length === 0 ? (
               <div className="text-center py-4">No Services master data found.</div>

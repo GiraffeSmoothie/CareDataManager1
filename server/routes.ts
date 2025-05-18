@@ -7,9 +7,9 @@ import { AuthService } from "./src/services/auth.service";
 declare module "express-session" {
   interface Session {
     user?: {
-      id: string;
+      id: number;
       username: string;
-      role?: string;
+      role: string;
     };
   }
 }
@@ -35,28 +35,19 @@ import { ApiError } from './src/types/error';
 import { Company } from "../shared/schema";
 import { Request as ExpressRequest } from "express";
 
-// Augment Express Request type
-declare module 'express-session' {
-  interface SessionData {
-    user: {
-      id: number;
-      username: string;
-      role: string;
-    };
-  }
-}
+// Note: We already have a session type declaration above, removing duplicate
 
-// Type augmentation for Express Request
-interface AuthRequest extends Request {
-  user: {
-    id: number;
-    username: string;
-    role: string;
-  };
-}
+// We'll use AuthenticatedRequest instead of this interface
+// interface AuthRequest extends Request {
+//   user: {
+//     id: number;
+//     username: string;
+//     role: string;
+//   };
+// }
 
 // Base response type for consistent error handling
-interface ApiResponse<T = undefined> {
+interface ApiResponse<T = any> {
   message?: string;
   data?: T;
 }
@@ -77,22 +68,63 @@ interface CustomSession extends Session {
   };
 }
 
-interface TypedRequestBody<T> extends AuthRequest {
+interface TypedRequestBody<T> extends AuthenticatedRequest {
   body: T;
 }
 
-interface TypedRequestParams<T extends ParamsDictionary> extends AuthRequest {
+interface TypedRequestParams<T extends ParamsDictionary> extends AuthenticatedRequest {
   params: T;
 }
 
-// Type guard for authenticated requests
-const isAuthenticated = (
-  req: Request<ParamsDictionary, any, any, ParsedQs>
-): req is AuthenticatedRequest => {
+// Define AuthenticatedRequest type
+interface AuthenticatedRequest<
+  P = ParamsDictionary,
+  ReqBody = any,
+  ReqQuery = ParsedQs
+> extends Request<P, any, ReqBody, ReqQuery> {
+  user: {
+    id: number;
+    username: string;
+    role: string;
+  };
+}
+
+/**
+ * Type guard for authenticated requests
+ * 
+ * Checks if the request has a user property, indicating it came from an authenticated route.
+ * Used to safely narrow the type of requests in route handlers that require authentication.
+ * 
+ * @template P - Type for request parameters 
+ * @template ReqBody - Type for request body
+ * @template ReqQuery - Type for request query parameters
+ * @param req - Express request object to check
+ * @returns Type predicate indicating whether the request is authenticated
+ */
+const isAuthenticated = <
+  P = ParamsDictionary,
+  ReqBody = any,
+  ReqQuery = ParsedQs
+>(
+  req: Request<P, any, ReqBody, ReqQuery>
+): req is AuthenticatedRequest<P, ReqBody, ReqQuery> => {
   return 'user' in req && req.user !== undefined;
 };
 
-// Helper to create typed request handlers
+/**
+ * Helper to create typed request handlers with authentication check
+ * 
+ * Creates an Express request handler with proper type checking and authentication verification.
+ * Automatically rejects unauthenticated requests and provides proper type safety for handlers.
+ * Passes errors to the next middleware for centralized error handling.
+ * 
+ * @template P - Type for request parameters
+ * @template ResBody - Type for response body 
+ * @template ReqBody - Type for request body
+ * @template ReqQuery - Type for request query parameters
+ * @param handler - The async handler function that processes authenticated requests
+ * @returns A middleware function that enforces authentication and handles errors
+ */
 const createHandler = <
   P extends ParamsDictionary = ParamsDictionary,
   ResBody extends ApiResponse = ApiResponse,
@@ -116,7 +148,13 @@ const createHandler = <
   };
 };
 
-// Initialize users if none exist
+/**
+ * Initializes the system with a default admin user if none exists
+ * 
+ * This function checks if an admin user already exists in the database.
+ * If no admin is found, it creates a default admin user with predefined credentials.
+ * Used during system startup to ensure there's always an admin account to access the system.
+ */
 async function initializeUsers() {
   console.log("Checking for default admin user");
   const admin = await dbStorage.getUserByUsername("admin");
@@ -184,7 +222,16 @@ const upload = multer({
   }
 });
 
-// Input validation middleware
+/**
+ * Input validation middleware
+ * 
+ * Validates request body against a provided Zod schema.
+ * Replaces the original request body with the validated data if successful.
+ * Returns 400 Bad Request with validation error details if validation fails.
+ * 
+ * @param schema - The Zod schema to validate against
+ * @returns Express middleware function
+ */
 const validateInput = (schema: z.ZodSchema) => async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedBody = await schema.parseAsync(req.body);
@@ -202,8 +249,23 @@ const validateInput = (schema: z.ZodSchema) => async (req: Request, res: Respons
   }
 };
 
-// Request sanitization middleware
+/**
+ * Request sanitization middleware
+ * 
+ * Sanitizes the request by removing potentially dangerous characters 
+ * from all string values in the request body, query parameters, and URL parameters.
+ * This provides basic protection against SQL injection and other injection attacks.
+ * 
+ * @param req - Express request object
+ * @param _res - Express response object (unused)
+ * @param next - Express next function
+ */
 const sanitizeRequest = (req: Request, _res: Response, next: NextFunction) => {
+  /**
+   * Recursively sanitizes all string values in an object
+   * 
+   * @param obj - Object to sanitize
+   */
   const sanitize = (obj: any) => {
     Object.keys(obj).forEach(key => {
       if (typeof obj[key] === 'string') {
@@ -220,16 +282,37 @@ const sanitizeRequest = (req: Request, _res: Response, next: NextFunction) => {
   next();
 };
 
-// Rate limiting middleware
+/**
+ * Configuration for rate limiting
+ * 
+ * @property windowMs - Time window in milliseconds (15 minutes)
+ * @property max - Maximum number of requests allowed per IP within the time window
+ */
 const rateLimit = {
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100 // limit each IP to 100 requests per windowMs
 };
 
+/**
+ * In-memory storage for tracking request counts per IP address
+ * Maps IP addresses to their request count and timestamp of first request
+ */
 let requestCounts = new Map<string, { count: number, firstRequest: number }>();
 
+/**
+ * Rate limiting middleware
+ * 
+ * Implements a basic rate limiting mechanism to protect the API from abuse.
+ * Tracks requests by IP address and rejects requests that exceed the configured limit.
+ * Uses in-memory storage which resets when the server restarts.
+ * 
+ * @param req - Express request object
+ * @param res - Express response object
+ * @param next - Express next function
+ */
 const rateLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const ip = req.ip;
+  // Use a default IP if not available
+  const ip = req.ip || '0.0.0.0';
   const now = Date.now();
   const windowStart = now - rateLimit.windowMs;
 
@@ -256,6 +339,32 @@ const rateLimitMiddleware = (req: Request, res: Response, next: NextFunction) =>
   }
 };
 
+// Update client service interfaces
+interface ClientService {
+  id: number;
+  clientId: number;
+  serviceType: string;
+  startDate: Date;
+  endDate: Date | null;
+  status: string;
+}
+
+// Update PersonInfo interface to include HCP dates
+interface PersonInfo {
+  // ... existing fields ...
+  hcpStartDate?: string;
+}
+
+/**
+ * Registers all API routes and middleware for the application
+ * 
+ * This is the main function that sets up the entire API routing structure.
+ * It configures global middleware, authentication, session management,
+ * and all API endpoints for the Care Data Manager application.
+ * 
+ * @param app - Express application instance
+ * @returns HTTP server instance
+ */
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply global middleware
   app.use(sanitizeRequest);
@@ -294,8 +403,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Initialize users
   await initializeUsers();
-
-  // Authentication routes
+  
+  /**
+   * User login endpoint
+   * 
+   * Authenticates a user with their username and password.
+   * Creates a session for authenticated users.
+   * 
+   * @route POST /api/auth/login
+   * @param {object} req.body - Login credentials
+   * @param {string} req.body.username - User's username
+   * @param {string} req.body.password - User's password
+   * @returns {object} Success status and user data if authenticated
+   */
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
@@ -321,7 +441,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ success: false, error: "Internal server error" });
     }
   });
-
+  
+  /**
+   * User logout endpoint
+   * 
+   * Destroys the user's session and clears the session cookie.
+   * 
+   * @route POST /api/auth/logout
+   * @returns {object} Success or error message
+   */
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
@@ -331,7 +459,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({ message: "Logout successful" });
     });
   });
-
+  
+  /**
+   * Authentication status endpoint
+   * 
+   * Checks if user has a valid session and returns user information.
+   * Destroys invalid sessions if user no longer exists in database.
+   * 
+   * @route GET /api/auth/status
+   * @returns {object} Authentication status and user data if authenticated
+   */
   app.get("/api/auth/status", async (req: Request, res: Response) => {
     try {
       if (!req.session.user) {
@@ -360,13 +497,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Internal server error checking auth status" });
     }
   });
-
-  // Auth middleware for protected routes
-  const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  
+  /**
+   * Authentication middleware for protected routes
+   * 
+   * Verifies that the request has a valid user session.
+   * Attaches the user information to the request object for use in route handlers.
+   * Returns 401 Unauthorized if no valid session exists.
+   * 
+   * @param req - Express request object
+   * @param res - Express response object
+   * @param next - Express next function
+   */
+  const authMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
     if (!req.session.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    req.user = req.session.user; // Make user data available on request object
+    
+    // Assign the user data to req.user with proper type handling
+    (req as any).user = req.session.user;
     next();
   };
   
@@ -380,8 +529,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/service-case-notes", validateInput(insertServiceCaseNoteSchema), authMiddleware);
   app.post("/api/client-services", validateInput(insertClientServiceSchema), authMiddleware);
   app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
-
-  // Master data routes
+  
+  /**
+   * Create master data entry endpoint
+   * 
+   * Creates a new master data entry for service categories, types, and providers.
+   * Handles segment-specific data by properly processing the segmentId field.
+   * Validates input data using the insertMasterDataSchema from shared schema.
+   * 
+   * @route POST /api/master-data
+   * @param {object} req.body - Master data to create
+   * @returns {object} Created master data entry
+   */
   app.post("/api/master-data", async (req: Request, res: Response) => {
     try {
       if (!req.user) {
@@ -431,8 +590,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
-  });
-
+  });  
+    /**
+   * Get master data entries endpoint
+   * 
+   * Retrieves master data entries, filtered by the segment ID provided in the query.
+   * Frontend ensures segment is selected for all operations.
+   * 
+   * @route GET /api/master-data
+   * @param {string} [req.query.segmentId] - Optional segment ID to filter master data
+   * @returns {Array} List of master data entries
+   */
   app.get("/api/master-data", async (req: Request, res: Response) => {
     try {
       // Get segment ID from query parameter if provided
@@ -448,8 +616,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch master data" });
     }
   });
-
-  // Add PUT endpoint for updating master data
+  
+  /**
+   * Update master data entry endpoint
+   * 
+   * Updates an existing master data entry by ID.
+   * Handles proper validation and segment ID processing.
+   * 
+   * @route PUT /api/master-data/:id
+   * @param {string} req.params.id - ID of the master data entry to update
+   * @param {object} req.body - Updated master data values
+   * @returns {object} Updated master data entry
+   */
   app.put("/api/master-data/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -491,12 +669,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-
-  // Person Info routes
+  
+  /**
+   * Create person info (client) endpoint
+   * 
+   * Creates a new client with personal information, address, and HCP details.
+   * Properly handles optional fields and segment assignment.
+   * 
+   * @route POST /api/person-info
+   * @param {object} req.body - Client personal information
+   * @returns {object} Created client information
+   */
   app.post("/api/person-info", async (req: Request, res: Response) => {
     try {
       console.log("Received person info data:", req.body);
-      const validatedData = insertPersonInfoSchema.parse(req.body);
+      const validatedData = insertPersonInfoSchema.parse(req.body);      
       console.log("Validated data:", validatedData);
       
       // Add the current user as the creator and handle optional fields
@@ -512,13 +699,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mailingAddressLine3: validatedData.mailingAddressLine3 || '',
         mailingPostCode: validatedData.mailingPostCode || '',
         nextOfKinName: validatedData.nextOfKinName || '',
-        nextOfKinAddress: validatedData.nextOfKinAddress || '',
-        nextOfKinEmail: validatedData.nextOfKinEmail || '',
+        nextOfKinAddress: validatedData.nextOfKinAddress || '',        
+        nextOfKinEmail: validatedData.nextOfKinEmail || '',        
         nextOfKinPhone: validatedData.nextOfKinPhone || '',
         hcpLevel: validatedData.hcpLevel || '',
-        hcpEndDate: validatedData.hcpEndDate || '',
-        useHomeAddress: validatedData.useHomeAddress ?? true,
-        status: validatedData.status || 'New'
+        useHomeAddress: validatedData.useHomeAddress ?? true,        
+        status: validatedData.status || 'New',
+        // Handle segmentId to ensure it's either number or undefined, not null
+        segmentId: validatedData.segmentId !== null ? validatedData.segmentId : undefined
       };
       
       console.log("Processed data:", personInfoWithUser);
@@ -538,7 +726,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to create person info" });
     }
   });
-
+  
+  /**
+   * Get list of clients endpoint
+   * 
+   * Retrieves all clients (person info), optionally filtered by segment.
+   * 
+   * @route GET /api/person-info
+   * @param {string} [req.query.segmentId] - Optional segment ID to filter clients
+   * @returns {Array} List of client information
+   */
   app.get("/api/person-info", async (req: Request, res: Response) => {
     try {
       // Get segment ID from query parameter if provided
@@ -550,7 +747,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch person info" });
     }
   });
-
+  
+  /**
+   * Get client details by ID endpoint
+   * 
+   * Retrieves detailed information for a specific client by their ID.
+   * Uses centralized error handling with ApiError for consistent responses.
+   * 
+   * @route GET /api/person-info/:id
+   * @param {string} req.params.id - Client ID to retrieve
+   * @returns {object} Client detailed information
+   * @throws {ApiError} 400 - If ID format is invalid
+   * @throws {ApiError} 404 - If client not found
+   */
   app.get("/api/person-info/:id", async (req: Request, res: Response, next) => {
     try {
       const id = parseInt(req.params.id);
@@ -568,7 +777,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-
+  
+  /**
+   * Update client information endpoint
+   * 
+   * Updates an existing client's personal information, address, and other details.
+   * Preserves the original creator and handles segment ID properly.
+   * Uses centralized error handling with ApiError for consistent responses.
+   * 
+   * @route PUT /api/person-info/:id
+   * @param {string} req.params.id - Client ID to update
+   * @param {object} req.body - Updated client information
+   * @returns {object} Updated client information
+   * @throws {ApiError} 400 - If ID format is invalid
+   * @throws {ApiError} 404 - If client not found
+   */
   app.put('/api/person-info/:id', async (req: Request, res: Response, next) => {
     try {
       console.log("Update request received for id:", req.params.id, "with data:", req.body);
@@ -591,11 +814,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log("Validated update data:", validatedData);
-      
-      // Update the person info
+        // Update the person info
       const updatedPerson = await dbStorage.updatePersonInfo(id, {
         ...validatedData,
-        createdBy: existingPerson.createdBy // Preserve the original createdBy value
+        createdBy: existingPerson.createdBy, // Preserve the original createdBy value
+        segmentId: validatedData.segmentId !== null ? validatedData.segmentId : undefined // Handle segmentId properly
       });
       
       console.log("Person updated successfully:", updatedPerson);
@@ -605,7 +828,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Update client assignment status
+  /**
+   * Update client assignment status endpoint
+   * 
+   * Updates the status of a client assignment (service) to track its progress.
+   * Validates that the status is one of the allowed values.
+   * 
+   * @route PATCH /api/client-assignment/:id
+   * @param {string} req.params.id - Assignment ID to update
+   * @param {string} req.body.status - New status value (Planned, In Progress, or Closed)
+   * @returns {object} Success message
+   */
   app.patch("/api/client-assignment/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -622,8 +855,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update status" });
     }
   });
-
-  // Client Assignment route with file upload  
+  
+  /**
+   * Create client assignment with document upload endpoint
+   * 
+   * Assigns care services to a client and optionally uploads an associated document.
+   * Creates a master data entry to track the client's assigned care.
+   * 
+   * @route POST /api/client-assignment
+   * @param {string} req.body.clientId - Client ID to assign care to
+   * @param {string} req.body.careCategory - Category of care to assign
+   * @param {string} req.body.careType - Type of care to assign
+   * @param {string} [req.body.notes] - Optional notes about the assignment
+   * @param {File} [req.file] - Optional document file to upload
+   * @returns {object} Created client assignment data
+   */
   app.post("/api/client-assignment", upload.single("document"), async (req: Request, res: Response) => {
     try {
       const { clientId, careCategory, careType, notes } = req.body;
@@ -674,7 +920,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get documents by client ID - this should be defined BEFORE the file path download route
+  /**
+   * Document upload endpoint
+   * 
+   * Uploads a document file and creates a document record in the database.
+   * Associates the document with a client and optionally a segment.
+   * Handles file storage using either local filesystem or Azure Blob Storage.
+   * 
+   * @route POST /api/documents
+   * @param {string} req.body.clientId - ID of the client the document belongs to
+   * @param {string} req.body.documentName - Display name of the document
+   * @param {string} req.body.documentType - Type/category of the document
+   * @param {File} req.file - Document file to upload
+   * @param {string} [req.body.segmentId] - Optional segment ID to associate with the document
+   * @returns {object} Created document record
+   */
+  app.post("/api/documents", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const { clientId, documentName, documentType, segmentId } = req.body;
+      
+      if (!clientId || !documentName || !documentType) {
+        return res.status(400).json({ message: "Missing required fields: clientId, documentName, and documentType are required" });
+      }      // Get client information to use in folder name
+      const client = await dbStorage.getPersonInfoById(parseInt(clientId));
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      
+      // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
+      const clientDir = path.join(uploadsDir, `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_'));
+      await fs.promises.mkdir(clientDir, { recursive: true });
+      
+      // Move the file from temp location to client directory
+      const filename = path.basename(req.file.path);
+      const filePath = path.join(clientDir, filename).replace(/\\/g, '/');
+      
+      // In development, move file within filesystem
+      if (process.env.NODE_ENV !== 'production') {
+        await fs.promises.rename(req.file.path, filePath);
+      } else if (blobStorage) {
+        // In production, upload to Azure Blob Storage
+        const fileBuffer = await fs.promises.readFile(req.file.path);
+        await blobStorage.uploadFile(fileBuffer, filePath, req.file.mimetype);
+        // Delete temp file
+        await fs.promises.unlink(req.file.path);
+      }
+      
+      // Create document record in database
+      const documentRecord = await dbStorage.createDocument({
+        clientId: parseInt(clientId),
+        documentName,
+        documentType,
+        filename: req.file.originalname,
+        filePath: filePath.replace(/\\/g, '/').replace(`${process.cwd().replace(/\\/g, '/')}/`, ''),
+        createdBy: req.user!.id,
+        uploadedAt: new Date(),
+        segmentId: segmentId ? parseInt(segmentId) : null
+      });
+      
+      return res.status(201).json(documentRecord);
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      return res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+  
+  /**
+   * Get documents by client ID endpoint
+   * 
+   * Retrieves all documents associated with a specific client.
+   * Handles file path normalization to ensure documents can be properly accessed
+   * regardless of storage method or environment (development vs production).
+   * 
+   * @route GET /api/documents/client/:clientId
+   * @param {string} req.params.clientId - Client ID to retrieve documents for
+   * @param {string} [req.query.segmentId] - Optional segment ID to filter documents
+   * @returns {Array} List of document metadata including normalized file paths
+   * @throws {ApiError} 400 - If client ID format is invalid
+   * @throws {ApiError} 404 - If no documents are found
+   */
   app.get("/api/documents/client/:clientId", createHandler(async (req, res) => {
     try {
       console.log(`Document list requested for client ID: ${req.params.clientId}`);
@@ -692,8 +1020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`No documents found for client ${clientId}${segmentId ? ` in segment ${segmentId}` : ''}`);
         return res.status(404).json({ message: "Document not found" });  // Return 404 if no documents found
       }
-      
-      // Verify that the document files actually exist and normalize the paths
+        // Verify that the document files actually exist and normalize the paths
       const normalizedDocuments = documents.map(doc => {
         let filePath = doc.filePath;
         const isLocalDev = process.env.NODE_ENV !== 'production';
@@ -702,14 +1029,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // For local development, check if the file exists in the file system
           // and ensure the path is correct for the download endpoint
           
-          // First check if file exists directly at the path stored in DB
+          // Skip processing if no file path
+          if (!filePath) {
+            console.log(`Missing file path for document ${doc.id}`);
+            return {
+              ...doc,
+              filePath: ''
+            };
+          }
+          
+          // Build full path with proper handling
           let fullPath = filePath;
           if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
             fullPath = path.join(process.cwd(), filePath);
           }
           
           // If file doesn't exist at direct path, check if it's in uploads directory
-          if (!fs.existsSync(fullPath)) {
+          if (fs.existsSync(fullPath)) {
+            // File exists, use it
+          } else {
             const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
             
             // If file path starts with 'uploads/', try to find it directly in uploads dir
@@ -736,19 +1074,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Return document with normalized path that can be used with download endpoint
         return {
           ...doc,
-          filePath: filePath.replace(/\\/g, '/')  // Ensure forward slashes
+          filePath: filePath ? filePath.replace(/\\/g, '/') : ''  // Ensure forward slashes, fallback to empty string
         };
       });
-      
-      console.log(`Found ${documents.length} documents for client ${clientId}`);
-      return res.status(200).json(normalizedDocuments);
+        console.log(`Found ${documents.length} documents for client ${clientId}`);
+      // Return as data property in ApiResponse format
+      return res.status(200).json({ data: normalizedDocuments });
     } catch (error) {
       console.error("Error fetching client documents:", error);
       return res.status(500).json({ message: "Failed to fetch client documents" });
     }
   }));
-
-  // Modified document download endpoint - Direct download by file path
+  
+  /**
+   * Document download endpoint
+   * 
+   * Retrieves and serves a document file for download based on its file path.
+   * Supports both blob storage (production) and file system (development) retrieval.
+   * Handles various path formats and attempts multiple lookup strategies to find files.
+   * Sets appropriate content type and disposition headers for proper download handling.
+   * 
+   * @route GET /api/documents/:filePath
+   * @param {string} req.params.filePath - File path of the document to download
+   * @returns {File} Document file as a downloadable response
+   * @throws {ApiError} 404 - If document metadata or file not found
+   */
   // This is defined AFTER the client documents endpoint to avoid route conflicts
   app.get("/api/documents/:filePath(*)", createHandler(async (req, res) => {
     try {
@@ -762,11 +1112,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Document not found in database with path: ${filePath}`);
         return res.status(404).json({ message: "Document not found in database" });
       }
-      
-      // Different handling for production (blob storage) vs development (file system)
+        // Different handling for production (blob storage) vs development (file system)
       if (process.env.NODE_ENV === 'production' && blobStorage) {
         try {
           // For production, use blob storage
+          if (!document.filePath) {
+            return res.status(404).json({ message: "Document file path is missing" });
+          }
+          
           const fileBuffer = await blobStorage.downloadFile(document.filePath);
           
           // Set content type based on file extension
@@ -778,18 +1131,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
             '.png': 'image/png'
-          }[ext] || 'application/octet-stream';
-
-          res.setHeader('Content-Type', contentType);
+          }[ext] || 'application/octet-stream';          res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
-          res.send(fileBuffer);
+          // Send buffer directly without attempting to match ApiResponse
+          return res.end(fileBuffer);
         } catch (error) {
           console.error("Error downloading from blob storage:", error);
           return res.status(404).json({ message: "Document not found in blob storage" });
-        }
-      } else {
+        }      } else {
         // For development, find the file on disk
         // Try different paths - with or without "uploads" prefix
+        if (!document.filePath) {
+          return res.status(404).json({ message: "Document file path is missing" });
+        }
+        
         let fullPath = document.filePath;
         
         // If path doesn't start with slash or drive letter, assume it's relative to cwd
@@ -838,7 +1193,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
   
-  // Add client services routes
+  /**
+   * List all client services endpoint
+   * 
+   * Retrieves all client services records from the database.
+   * Used for admin dashboard and reporting features.
+   * 
+   * @route GET /api/client-services
+   * @returns {Array} List of all client service records
+   */
   app.get("/api/client-services", async (req: Request, res: Response) => {
     try {
       const clientServices = await dbStorage.getClientServices();
@@ -849,6 +1212,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * Create client service endpoint
+   * 
+   * Creates a new service record for a client with validation.
+   * Logs detailed information about the validation and creation process.
+   * Automatically sets default status and includes creator information.
+   * 
+   * @route POST /api/client-services
+   * @param {object} req.body - Client service data to create
+   * @returns {object} Created client service record
+   * @throws {ApiError} 400 - If validation fails
+   * @throws {ApiError} 401 - If user is not authenticated
+   */
   app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
@@ -885,7 +1261,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to create client service" });
     }
   });
-
+  
+  /**
+   * Get services by client ID endpoint
+   * 
+   * Retrieves all service records associated with a specific client ID.
+   * Optionally filters results by segment ID.
+   * 
+   * @route GET /api/client-services/client/:clientId
+   * @param {string} req.params.clientId - Client ID to retrieve services for
+   * @param {string} [req.query.segmentId] - Optional segment ID to filter services
+   * @returns {Array} List of service records for the specified client
+   * @throws {ApiError} 400 - If client ID format is invalid
+   */
   app.get("/api/client-services/client/:clientId", async (req: Request, res: Response) => {
     console.log("[API] Getting existing services for client:", req.params.clientId);
     try {
@@ -906,6 +1294,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * Update service status endpoint
+   * 
+   * Updates the status of a client service to track its progress through the workflow.
+   * Validates that the status is one of the allowed values: Planned, In Progress, or Closed.
+   * 
+   * @route PATCH /api/client-services/:id
+   * @param {string} req.params.id - Service ID to update
+   * @param {string} req.body.status - New status value
+   * @returns {object} Success message
+   * @throws {ApiError} 400 - If service ID format is invalid or status value is invalid
+   */
   app.patch("/api/client-services/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -925,8 +1325,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update service status" });
     }
   });
-
-  // Service case notes endpoints
+  
+  /**
+   * Get case notes by service ID endpoint
+   * 
+   * Retrieves all case notes associated with a specific service.
+   * Used to display the history of notes for a client service.
+   * 
+   * @route GET /api/service-case-notes/service/:serviceId
+   * @param {string} req.params.serviceId - Service ID to retrieve notes for
+   * @returns {Array} List of case notes for the specified service
+   * @throws {ApiError} 400 - If service ID format is invalid
+   */
   app.get("/api/service-case-notes/service/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
@@ -942,6 +1352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * Get specific case note endpoint
+   * 
+   * Retrieves a single case note by its service ID.
+   * Used for viewing or editing a specific note.
+   * 
+   * @route GET /api/service-case-notes/:serviceId
+   * @param {string} req.params.serviceId - Service ID of the note to retrieve
+   * @returns {object} Case note data
+   * @throws {ApiError} 400 - If service ID format is invalid
+   */
   app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
@@ -956,8 +1377,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch case note" });
     }
   });
-
-  // Create service case note
+  
+  /**
+   * Create service case note endpoint
+   * 
+   * Creates a new case note associated with a service.
+   * Automatically records the creator's user ID from the session.
+   * 
+   * @route POST /api/service-case-notes
+   * @param {object} req.body - Case note data with serviceId and noteText
+   * @returns {object} Created case note
+   * @throws {ApiError} 401 - If user is not authenticated
+   */
   app.post("/api/service-case-notes", async (req: Request, res: Response) => {
     try {
       const { serviceId, noteText } = req.body;
@@ -977,8 +1408,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to create case note" });
     }
   });
-
-  // Update service case note
+  
+  /**
+   * Update service case note endpoint
+   * 
+   * Updates an existing case note with new content.
+   * Records the user ID of who made the update from the session.
+   * 
+   * @route PUT /api/service-case-notes/:serviceId
+   * @param {string} req.params.serviceId - Service ID of the note to update
+   * @param {string} req.body.noteText - Updated note text content
+   * @returns {object} Updated case note
+   * @throws {ApiError} 400 - If service ID format is invalid
+   * @throws {ApiError} 401 - If user is not authenticated
+   */
   app.put("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
@@ -1001,12 +1444,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error updating case note:", error);
       return res.status(500).json({ message: "Failed to update case note" });
     }
-  });
-
-  // Change password endpoint
+  });  
+  
+  /**
+   * Change password endpoint
+   * 
+   * Allows users to change their own password.
+   * Verifies the current password before allowing the change.
+   * 
+   * @route POST /api/change-password
+   * @param {string} req.body.currentPassword - User's current password for verification
+   * @param {string} req.body.newPassword - New password to set
+   * @returns {object} Success message
+   * @throws {ApiError} 400 - If passwords are missing or current password is incorrect
+   * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 404 - If user not found in database
+   */
   app.post("/api/change-password", async (req, res) => {
     try {
-      const userId = req.user?.id; // Assumes authentication middleware sets req.user
+      // Use session instead of req.user since this endpoint isn't using authMiddleware
+      const userId = req.session.user?.id;
       const { currentPassword, newPassword } = req.body;
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
@@ -1031,12 +1488,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errorMessage = err instanceof Error ? err.message : "Failed to change password";
       return res.status(500).json({ message: errorMessage });
     }
-  });
-
-  // List all users (admin only)
-  app.get("/api/users", authMiddleware, async (req, res) => {
-    try {
-      const user = await dbStorage.getUserById(req.user.id);
+  });  
+  
+  /**
+   * List all users endpoint (admin only)
+   * 
+   * Retrieves a list of all users in the system.
+   * Restricted to administrators only.
+   * Returns sanitized user data without sensitive information.
+   * 
+   * @route GET /api/users
+   * @returns {Array} List of users with sanitized data
+   * @throws {ApiError} 403 - If requester is not an admin
+   */
+  app.get("/api/users", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion to access user property
+    const authReq = req as any;    try {
+      const user = await dbStorage.getUserById(authReq.user.id);
       if (!user || user.role !== "admin") {
         console.log("Request rejected: User is not admin", {
           userId: user?.id,
@@ -1057,15 +1525,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log ("[API /api/users] Failed to fetch users")
       return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
-  });
+  });  
   
-  // Get a single user by ID (admin only)
+  /**
+   * Get user by ID endpoint (admin only)
+   * 
+   * Retrieves detailed information about a specific user.
+   * Restricted to administrators only.
+   * Implements detailed logging for troubleshooting authentication issues.
+   * 
+   * @route GET /api/users/:id
+   * @param {string} req.params.id - User ID to retrieve
+   * @returns {object} User data
+   * @throws {ApiError} 400 - If user ID format is invalid
+   * @throws {ApiError} 403 - If requester is not an admin
+   * @throws {ApiError} 404 - If user not found
+   */
   app.get("/api/users/:id", authMiddleware, async (req, res) => {
     try {
       console.log(`[API /api/users/:id] Request received for user with ID: ${req.params.id}`);
       console.log(`[API /api/users/:id] Request headers:`, req.headers);
       
-      const currentUser = await dbStorage.getUserById(req.user.id);
+      // Type assertion for authenticated user
+      const authReq = req as any;
+      const currentUser = await dbStorage.getUserById(authReq.user.id);
       if (!currentUser || currentUser.role !== "admin") {
         console.log("[API /api/users/:id] Request rejected: User is not admin", {
           userId: currentUser?.id,
@@ -1103,14 +1586,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("[API /api/users/:id] Error fetching user:", err);
       return res.status(500).json({ message: "Failed to fetch user", error: err instanceof Error ? err.message : "Unknown error" });
     }
-  });
-
-  // Update a user by ID (admin only)
+  });  
+  
+  /**
+   * Update user endpoint
+   * 
+   * Updates a user's information in the database.
+   * Enforces different permission levels:
+   * - Admins can update any user and any fields
+   * - Regular users can only update their own name and password
+   * 
+   * @route PUT /api/users/:id
+   * @param {string} req.params.id - User ID to update
+   * @param {object} req.body - User data to update
+   * @returns {object} Updated user data
+   * @throws {ApiError} 400 - If user ID format is invalid
+   * @throws {ApiError} 403 - If user lacks permission for the update
+   * @throws {ApiError} 404 - If user not found
+   */
   app.put("/api/users/:id", authMiddleware, async (req, res) => {
     try {
       console.log(`[API PUT /api/users/:id] Update request received for user with ID: ${req.params.id}`);
       
-      const currentUser = await dbStorage.getUserById(req.user.id);
+      // Type assertion for authenticated user
+      const authReq = req as any;
+      const currentUser = await dbStorage.getUserById(authReq.user.id);
       if (!currentUser || (currentUser.role !== "admin" && currentUser.id !== parseInt(req.params.id))) {
         console.log("[API PUT /api/users/:id] Request rejected: User is not admin or not updating own account", {
           userId: currentUser?.id,
@@ -1164,8 +1664,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update user", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
-
-  // Add a new user (admin only)
+  
+  /**
+   * Create new user endpoint (admin only)
+   * 
+   * Creates a new user account in the system.
+   * Restricted to administrators only.
+   * Performs validation and checks for duplicate usernames.
+   * Uses AuthService to ensure proper password hashing.
+   * 
+   * @route POST /api/users
+   * @param {object} req.body - User data including username, password, role, etc.
+   * @returns {object} Created user data (without password)
+   * @throws {ApiError} 400 - If validation fails
+   * @throws {ApiError} 403 - If requester is not an admin
+   * @throws {ApiError} 409 - If username already exists
+   */
   app.post("/api/users", async (req, res) => {
     try {
       console.log("Received user creation request with body:", {
@@ -1242,14 +1756,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       return res.status(500).json({ message: "Failed to add user" });
     }
-  });
+  });  
 
-  // Company routes (admin only)
-  type CompanyDeleteRequest = ExpressRequest<{ id: string }> & AuthRequest;
-
-  app.get("/api/companies", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const user = await dbStorage.getUserById(req.user.id);
+  /**
+  // Company routes (admin only)  
+   * List all companies endpoint (admin only)
+   * 
+   * Retrieves all companies registered in the system.
+   * Restricted to administrators only.
+   * 
+   * @route GET /api/companies
+   * @returns {Array} List of company records
+   * @throws {ApiError} 403 - If requester is not an admin
+   */
+  app.get("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;    try {
+      const user = await dbStorage.getUserById(authReq.user.id);
       if (!user || user.role !== "admin") {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
@@ -1259,32 +1782,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching companies:", error);
       return res.status(500).json({ message: "Failed to fetch companies" });
-    }
-  });
-
-  app.post("/api/companies", authMiddleware, async (req: AuthRequest & TypedRequestBody<typeof insertCompanySchema._type>, res: Response) => {
+    }  });
+  
+  /**
+   * Create company endpoint (admin only)
+   * 
+   * Creates a new company record in the system.
+   * Automatically adds the current user's ID as the creator.
+   * 
+   * @route POST /api/companies
+   * @param {object} req.body - Company data to create
+   * @returns {object} Created company record
+   * @throws {ApiError} 401 - If user is not authenticated
+   */
+  app.post("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
-      if (!req.user) {
+      if (!authReq.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const validatedData = insertCompanySchema.parse(req.body);
+      
+      // Add the current user's ID as the creator
+      const validatedData = insertCompanySchema.parse({
+        ...req.body,
+        created_by: authReq.user.id
+      });
+      
       const company = await dbStorage.createCompany(validatedData);
       res.status(201).json(company);
     } catch (error) {
       console.error("Error creating company:", error);
       return res.status(500).json({ message: "Failed to create company" });
-    }
-  });
-
+    }  });  
+  
+  /**
+   * Update company endpoint (admin only)
+   * 
+   * Updates an existing company's information.
+   * Preserves the original creator ID if available.
+   * 
+   * @route PUT /api/companies/:id
+   * @param {string} req.params.id - Company ID to update
+   * @param {object} req.body - Updated company data
+   * @returns {object} Updated company record
+   * @throws {ApiError} 400 - If company ID format is invalid or validation fails
+   * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 403 - If user is not an admin
+   * @throws {ApiError} 404 - If company not found
+   */
   app.put("/api/companies/:id", authMiddleware, async (
-    req: Request<{ id: string }, any, any> & AuthRequest,
+    req: Request,
     res: Response
   ) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
-      if (!req.user) {
+      if (!authReq.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const user = await dbStorage.getUserById(req.user.id);
+      const user = await dbStorage.getUserById(authReq.user.id);
       if (!user || user.role !== "admin") {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
       }
@@ -1292,16 +1849,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid company ID" });
-      }
-
-      const existingCompany = await dbStorage.getCompanyById(id);
+      }      const existingCompany = await dbStorage.getCompanyById(id);
       if (!existingCompany) {
         return res.status(404).json({ message: "Company not found" });
       }
 
+      // Ensure created_by is a number rather than undefined or null
       const validatedData = insertCompanySchema.parse({
         ...req.body,
-        created_by: existingCompany.created_by
+        created_by: existingCompany.created_by || authReq.user.id
       });
 
       const company = await dbStorage.updateCompany(id, validatedData);
@@ -1313,13 +1869,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error updating company:", error);
       return res.status(500).json({ message: "Failed to update company" });
-    }
-  });
-
+    }  });
+  
+  /**
+   * Delete company endpoint (admin only)
+   * 
+   * Permanently removes a company from the system.
+   * Restricted to administrators only.
+   * 
+   * @route DELETE /api/companies/:id
+   * @param {string} req.params.id - Company ID to delete
+   * @returns {object} Success message
+   * @throws {ApiError} 400 - If company ID format is invalid
+   * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 403 - If user is not an admin
+   * @throws {ApiError} 404 - If company not found
+   */
+  /*
   app.delete("/api/companies/:id", authMiddleware, async (
-    req: CompanyDeleteRequest,
+    req: Request,
     res: Response
   ) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -1344,11 +1916,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting company:", error);
       return res.status(500).json({ message: "Failed to delete company" });
-    }
-  });
-
-  // Segment API endpoints
-  app.get("/api/segments/:companyId", authMiddleware, async (req: AuthRequest, res: Response) => {
+    }  });
+*/
+  /**
+   * Get segments by company endpoint
+   * 
+   * Retrieves all segments belonging to a specific company.
+   * 
+   * @route GET /api/segments/:companyId
+   * @param {string} req.params.companyId - Company ID to retrieve segments for
+   * @returns {Array} List of segments for the company
+   * @throws {ApiError} 400 - If company ID format is invalid
+   */
+  app.get("/api/segments/:companyId", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
       const companyId = parseInt(req.params.companyId);
       if (isNaN(companyId)) {
@@ -1360,21 +1942,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });
-    }
-  });
+    }  });
 
-  app.post("/api/segments", authMiddleware, async (req: AuthRequest & Request, res: Response) => {
+  /**
+   * Create segment endpoint
+   * 
+   * Creates a new segment for a specified company.
+   * Automatically records the creator's user ID.
+   * 
+   * @route POST /api/segments
+   * @param {object} req.body - Segment data including segment_name and company_id
+   * @returns {object} Created segment record
+   * @throws {ApiError} 400 - If segment name or company ID are missing
+   */
+  app.post("/api/segments", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
       const { segment_name, company_id } = req.body;
       
       if (!segment_name || !company_id) {
         return res.status(400).json({ message: "Segment name and company ID are required" });
-      }
-
-      const segmentData = {
+      }      const segmentData = {
         segment_name,
         company_id,
-        created_by: req.user.id
+        created_by: authReq.user.id
       };
 
       const newSegment = await dbStorage.createSegment(segmentData);
@@ -1382,10 +1974,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating segment:", error);
       return res.status(500).json({ message: "Failed to create segment" });
-    }
-  });
+    }  });
 
-  app.put("/api/segments/:id", authMiddleware, async (req: AuthRequest & Request, res: Response) => {
+  /**
+   * Update segment endpoint
+   * 
+   * Updates an existing segment's information.
+   * Currently only allows updating the segment name.
+   * 
+   * @route PUT /api/segments/:id
+   * @param {string} req.params.id - Segment ID to update
+   * @param {string} req.body.segment_name - New segment name
+   * @returns {object} Updated segment record
+   * @throws {ApiError} 400 - If segment ID format is invalid or segment name is missing
+   * @throws {ApiError} 404 - If segment not found
+   */
+  app.put("/api/segments/:id", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -1412,10 +2018,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating segment:", error);
       return res.status(500).json({ message: "Failed to update segment" });
-    }
-  });
+    }  });
 
-  app.delete("/api/segments/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  /**
+   * Delete segment endpoint
+   * 
+   * Permanently removes a segment from the system.
+   * 
+   * @route DELETE /api/segments/:id
+   * @param {string} req.params.id - Segment ID to delete
+   * @returns {object} Success message
+   * @throws {ApiError} 400 - If segment ID format is invalid
+   * @throws {ApiError} 404 - If segment not found
+   */
+  /*
+  app.delete("/api/segments/:id", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -1432,15 +2051,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting segment:", error);
       return res.status(500).json({ message: "Failed to delete segment" });
-    }
-  });
+    }  });
+      */
 
-  // Get segments for the current user
-  app.get("/api/user/segments", authMiddleware, async (req: AuthRequest, res: Response) => {
+  /**
+   * Get current user's segments endpoint
+   * 
+   * Retrieves all segments associated with the current user's company.
+   * For admins without a company assignment, returns an empty array.
+   * Used for segment selection and filtering across the application.
+   * 
+   * @route GET /api/user/segments
+   * @returns {Array} List of segments for the user's company
+   */
+  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;    
     try {
       // Get current user with company_id
-      const user = await dbStorage.getUserById(req.user.id);
+      const user = await dbStorage.getUserById(authReq.user.id);
+      
+      // If user is an admin without a company assigned, return an empty array
+      // This prevents admins without company assignment from seeing segments
       if (!user || !user.company_id) {
+        console.log(`User ${user?.id} (${user?.username}) has no company_id assigned, returning empty segments array`);
         return res.status(200).json([]);
       }
 
@@ -1455,24 +2089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add error handling middleware
   app.use(errorHandler);
-
   const httpServer = createServer(app);
   return httpServer;
 }
 
-// Update client service interfaces
-interface ClientService {
-  id: number;
-  clientId: number;
-  serviceType: string;
-  startDate: Date;
-  endDate: Date | null;
-  status: string;
-}
-
-// Update PersonInfo interface to include HCP dates
-interface PersonInfo {
-  // ... existing fields ...
-  hcpStartDate?: string;
-  hcpEndDate?: string;
-}

@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { ErrorDisplay } from "@/components/ui/error-display";
+// ErrorDisplay will be used when needed
+// import { ErrorDisplay } from "@/components/ui/error-display";
 import { 
   AlertDialog,
   AlertDialogContent,
@@ -53,13 +54,12 @@ export default function Login() {
         },
         body: JSON.stringify(data),
         credentials: "include"
-      });
-
-      if (!response.ok) {
+      });      if (!response.ok) {
         throw new Error("Invalid username or password");
       }
 
-      const result = await response.json();
+      // Process response if needed
+      await response.json();
       
       // Invalidate auth status query to trigger refetch
       queryClient.invalidateQueries({ queryKey: ["authStatus"] });

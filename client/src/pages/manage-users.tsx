@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 // Form validation schema
-const userSchema = z.object({
+const createUserSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   name: z.string().min(1, "Name is required"),
@@ -55,7 +55,19 @@ const userSchema = z.object({
   company_id: z.number().optional(),
 });
 
-type UserFormValues = z.infer<typeof userSchema>;
+// Schema for editing user - password is optional
+const editUserSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().refine(val => val === '' || val.length >= 6, {
+    message: "Password must be at least 6 characters if provided",
+  }),
+  name: z.string().min(1, "Name is required"),
+  role: z.enum(["user", "admin"]).default("user"),
+  company_id: z.number().optional(),
+});
+
+// Use the create user schema type as our base form type
+type UserFormValues = z.infer<typeof createUserSchema>;
 
 interface User {
   id: number;
@@ -133,10 +145,18 @@ export default function ManageUsers() {
         </div>
       </AppLayout>
     );
-  }
+  }  // Create a resolver that uses the appropriate schema based on the editing state
+  const dynamicResolver = useCallback(
+    (data: any, context: any, options: any) => {
+      const schema = isEditing ? editUserSchema : createUserSchema;
+      return zodResolver(schema)(data, context, options);
+    },
+    [isEditing]
+  );
 
+  // Form setup with the dynamic resolver
   const form = useForm<UserFormValues>({
-    resolver: zodResolver(userSchema),
+    resolver: dynamicResolver,
     defaultValues: {
       username: "",
       password: "",
@@ -144,12 +164,22 @@ export default function ManageUsers() {
       role: "user",
       company_id: undefined,
     },
-  });
-
-  const mutation = useMutation({
-    mutationFn: async (data: UserFormValues) => {
-      if (isEditing && selectedUser) {
-        const response = await apiRequest("PUT", `/api/users/${selectedUser.id}`, data);
+    mode: "onBlur"
+  });  const mutation = useMutation({
+    mutationFn: async (data: UserFormValues) => {      if (isEditing && selectedUser) {
+        // Create a new object with only the fields we want to update
+        const updateData: Partial<UserFormValues> = {
+          name: data.name,
+          role: data.role,
+          company_id: data.company_id,
+        };
+        
+        // Only include password if it's not empty
+        if (data.password && data.password.trim() !== '') {
+          updateData.password = data.password;
+        }
+        
+        const response = await apiRequest("PUT", `/api/users/${selectedUser.id}`, updateData);
         if (!response.ok) {
           const error = await response.json();
           throw new Error(error.message || 'Failed to update user');
@@ -183,26 +213,46 @@ export default function ManageUsers() {
         variant: "destructive"
       });
     }
-  });
-
-  const handleEdit = (user: User) => {
+  });  const handleEdit = (user: User) => {
     setSelectedUser(user);
-    setIsEditing(true);
+    // First update the editing state so the resolver will use editUserSchema
+    setIsEditing(true); 
     setShowDialog(true);
-    form.reset({
-      username: user.username,
-      name: user.name,
-      role: user.role as "user" | "admin",
-      company_id: user.company_id,
-      password: "", // Don't populate password field when editing
-    });
+    
+    // After setting editing mode, reset the form with user data
+    setTimeout(() => {
+      form.reset({
+        username: user.username,
+        name: user.name,
+        role: user.role as "user" | "admin",
+        company_id: user.company_id,
+        password: "", // Don't populate password field when editing
+      });
+      
+      // Ensure no validation errors are shown initially
+      form.clearErrors();
+    }, 0);
   };
-
+  
   const handleAddNew = () => {
     setSelectedUser(null);
+    // First update the editing state so the resolver will use createUserSchema
     setIsEditing(false);
     setShowDialog(true);
-    form.reset();
+    
+    // After setting create mode, reset the form
+    setTimeout(() => {
+      form.reset({
+        username: "",
+        password: "",
+        name: "",
+        role: "user",
+        company_id: undefined,
+      });
+      
+      // Ensure no validation errors are shown initially
+      form.clearErrors();
+    }, 0);
   };
 
   const columns: DataTableColumnDef<User>[] = [
@@ -322,9 +372,7 @@ export default function ManageUsers() {
                       <FormMessage />
                     </FormItem>
                   )}
-                />
-
-                <FormField
+                />                <FormField
                   control={form.control}
                   name="password"
                   render={({ field }) => (
@@ -338,6 +386,11 @@ export default function ManageUsers() {
                         />
                       </FormControl>
                       <FormMessage />
+                      {isEditing && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          If you don't want to change the password, leave this field blank.
+                        </p>
+                      )}
                     </FormItem>
                   )}
                 />

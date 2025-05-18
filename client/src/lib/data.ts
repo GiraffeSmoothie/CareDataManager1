@@ -1,5 +1,6 @@
 
-import { z } from "zod";
+// Import zod if needed later
+// import { z } from "zod";
 
 export const serviceCategories = [
   { value: "personal_care", label: "Personal Care" },
