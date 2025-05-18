@@ -31,23 +31,29 @@ export const STATUS_CONFIGS = {
     badge: "secondary",
     order: 1
   },
+  Planned: {
+    label: "Planned",
+    color: "bg-blue-100 text-blue-800",
+    badge: "secondary",
+    order: 2
+  },
   "In Progress": {
     label: "In Progress",
-    color: "bg-green-100 text-green-800",
-    badge: "default",
-    order: 2
+    color: "bg-purple-100 text-purple-800",
+    badge: "secondary",
+    order: 3
   },
   Paused: {
     label: "Paused",
     color: "bg-amber-100 text-amber-800",
     badge: "secondary",
-    order: 3
+    order: 4
   },
   Closed: {
     label: "Closed",
     color: "bg-gray-100 text-gray-800",
     badge: "secondary",
-    order: 4
+    order: 5
   }
 } as const;
 

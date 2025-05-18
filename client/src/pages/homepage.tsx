@@ -6,6 +6,31 @@ import { useLocation } from "wouter"
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 import { useSegment } from "@/contexts/segment-context"
 import { Loader2 } from "lucide-react"
+import { useState, useEffect } from "react";
+
+// Helper function to properly format dates
+const formatDate = (dateString: string): string => {
+  if (!dateString) return "-";
+  
+  try {
+    // Check if in DD-MM-YYYY format
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
+      const [day, month, year] = dateString.split('-').map(Number);
+      // Create date object (month is 0-indexed in JS)
+      const date = new Date(year, month - 1, day);
+      return date.toLocaleDateString();
+    } 
+    // Check if in ISO format
+    else if (/^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+      return new Date(dateString).toLocaleDateString();
+    }
+    // Fallback to displaying the raw string
+    return dateString;
+  } catch (error) {
+    console.error("Error parsing date:", error);
+    return dateString; // Return raw value if parsing fails
+  }
+};
 
 interface Member {
   id: number;
@@ -81,11 +106,10 @@ export default function Homepage() {
                 <h3 className="font-semibold text-lg">
                   {member.firstName} {member.lastName}
                 </h3>
-                <p className="text-sm text-gray-500">ID: {member.id}</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500">ID: {member.id}</p>                <p className="text-sm text-gray-500">
                   HCP Level: {member.hcpLevel || "-"}
                 </p>                <p className="text-sm text-gray-500">
-                  HCP Start Date: {member.hcpStartDate ? new Date(member.hcpStartDate).toLocaleDateString() : "-"}
+                  HCP Start Date: {member.hcpStartDate ? formatDate(member.hcpStartDate) : "-"}
                 </p>
                 <p className="text-sm mt-2">
                   <span className={`inline-block px-2 py-1 rounded-full ${getStatusBadgeColors(member.status)}`}>

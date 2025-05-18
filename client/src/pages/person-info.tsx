@@ -40,18 +40,33 @@ import { cn } from "../lib/utils";
 // Extend the schema with validation
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
     .refine((date) => {
-      const parsedDate = new Date(date);
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
       return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
     }, "Please enter a valid date that is not in the future"),
   email: z.string()
     .email({ message: "Please enter a valid email address" }),
-  homePhone: z.string().optional(),
+  homePhone: z.string().optional()
+    .refine(val => !val || /^\d{10}$/.test(val), {
+      message: "Home phone must be 10 digits (no spaces or symbols)"
+    }),
   homePhoneCountryCode: z.string().default("61"),
   mobilePhone: z.string()
-    .min(8, { message: "Phone number must be at least 8 digits" }),
+    .refine(val => /^\d{10}$/.test(val), {
+      message: "Mobile phone must be 10 digits (no spaces or symbols)"
+    }),
   mobilePhoneCountryCode: z.string().default("61"),
+  postCode: z.string().min(1, "Post Code is required")
+    .refine(val => /^\d{4}$/.test(val), {
+      message: "Post code must be a 4-digit number"
+    }),
+  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required")
+    .refine(val => /^\d{10}$/.test(val), {
+      message: "Next of kin phone must be 10 digits (no spaces or symbols)"
+    }),
   hcpStartDate: z.string().min(1, "HCP Start Date is required")
 });
 
@@ -84,6 +99,8 @@ export default function PersonInfo() {
       mailingAddressLine3: "",
       mailingPostCode: "",
       useHomeAddress: true,
+      hcpStartDate: "", // Added default value for hcpStartDate
+      hcpLevel: "", // Added default value for hcpLevel
     },
   });
 
@@ -140,10 +157,53 @@ export default function PersonInfo() {
         variant: "destructive",
       });
     },
-  });
-
-  const onSubmit = (data: PersonInfoFormValues) => {
-    mutation.mutate(data);
+  });  const onSubmit = (data: PersonInfoFormValues) => {
+    // Format phone numbers to ensure they match validation (10 digits only)
+    const formatPhoneNumber = (phone: string): string => {
+      if (!phone) return phone;
+      // Remove any non-digit characters and ensure it's just 10 digits
+      return phone.replace(/\D/g, '').substring(0, 10);
+    };
+    
+    // Format postcode to ensure it's exactly 4 digits
+    const formatPostcode = (postcode: string): string => {
+      if (!postcode) return postcode;
+      // Remove any non-digit characters and ensure it's just 4 digits
+      return postcode.replace(/\D/g, '').substring(0, 4).padStart(4, '0');
+    };
+    
+    // Format date to ISO format for storage
+    const formatDateForStorage = (dateStr: string): string => {
+      if (!dateStr) return dateStr;
+      
+      // Parse the DD-MM-YYYY format
+      const [day, month, year] = dateStr.split('-').map(Number);
+      
+      // Create a date object (months are 0-indexed in JavaScript)
+      const date = new Date(year, month - 1, day);
+      
+      // Return ISO format (YYYY-MM-DD)
+      return date.toISOString();
+    };
+    
+    // Format data before submission
+    const formattedData = {
+      ...data,
+      // Format phone numbers
+      mobilePhone: formatPhoneNumber(data.mobilePhone),
+      homePhone: data.homePhone ? formatPhoneNumber(data.homePhone) : data.homePhone,
+      nextOfKinPhone: data.nextOfKinPhone ? formatPhoneNumber(data.nextOfKinPhone) : '',
+      
+      // Format postcodes
+      postCode: formatPostcode(data.postCode),
+      mailingPostCode: data.mailingPostCode ? formatPostcode(data.mailingPostCode) : data.mailingPostCode,
+      
+      // Format dates for proper storage
+      dateOfBirth: formatDateForStorage(data.dateOfBirth),
+      hcpStartDate: formatDateForStorage(data.hcpStartDate)
+    };
+    
+    mutation.mutate(formattedData);
   };
 
   return (
@@ -225,8 +285,8 @@ export default function PersonInfo() {
                       control={form.control}
                       name="dateOfBirth"
                       render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Date of Birth</FormLabel>
+                        <FormItem className="flex flex-col">                          
+                        <FormLabel>Date of Birth</FormLabel>
                           <Popover>
                             <PopoverTrigger asChild>
                               <FormControl>
@@ -236,32 +296,94 @@ export default function PersonInfo() {
                                     "w-full pl-3 text-left font-normal",
                                     !field.value && "text-muted-foreground"
                                   )}
-                                >
-                                  {field.value ? (
-                                    format(new Date(field.value), "PPP")
+                                >                                  {field.value ? (
+                                    field.value
                                   ) : (
-                                    <span>Pick a date</span>
+                                    <span>DD-MM-YYYY</span>
                                   )}
                                   <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                 </Button>
                               </FormControl>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value ? new Date(field.value) : undefined}
-                                onSelect={(date) => {
-                                  if (date) {
-                                    field.onChange(date.toISOString().split('T')[0]);
-                                  }
-                                }}
-                                disabled={(date) => date > new Date()}
-                                initialFocus
-                              />
+                              <div className="flex flex-col space-y-2 p-2">
+                                <div className="flex justify-between items-center">
+                                  <select 
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={field.value ? field.value.split('-')[2] : new Date().getFullYear()}
+                                    onChange={(e) => {
+                                      const selectedYear = e.target.value;
+                                      if (field.value) {
+                                        const [day, month, _] = field.value.split('-');
+                                        field.onChange(`${day}-${month}-${selectedYear}`);
+                                      } else {
+                                        const today = new Date();
+                                        const day = today.getDate().toString().padStart(2, '0');
+                                        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+                                        field.onChange(`${day}-${month}-${selectedYear}`);
+                                      }
+                                    }}
+                                  >
+                                    {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                                      <option key={year} value={year}>{year}</option>
+                                    ))}
+                                  </select>
+                                  <select 
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={field.value ? field.value.split('-')[1] : (new Date().getMonth() + 1).toString().padStart(2, '0')}
+                                    onChange={(e) => {
+                                      const selectedMonth = e.target.value;
+                                      if (field.value) {
+                                        const [day, _, year] = field.value.split('-');
+                                        
+                                        // Create a date object to validate the day in the new month
+                                        const lastDayOfMonth = new Date(parseInt(year), parseInt(selectedMonth), 0).getDate();
+                                        const validDay = Math.min(parseInt(day), lastDayOfMonth).toString().padStart(2, '0');
+                                        
+                                        field.onChange(`${validDay}-${selectedMonth}-${year}`);
+                                      } else {
+                                        const today = new Date();
+                                        const day = today.getDate().toString().padStart(2, '0');
+                                        field.onChange(`${day}-${selectedMonth}-${new Date().getFullYear()}`);
+                                      }
+                                    }}
+                                  >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                                      <option key={month} value={month.toString().padStart(2, '0')}>
+                                        {new Date(2000, month - 1, 1).toLocaleString('default', { month: 'long' })}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>                                  <Calendar
+                                  mode="single"
+                                  selected={field.value ? (() => {
+                                    const [day, month, year] = field.value.split('-').map(Number);
+                                    const date = new Date(year, month - 1, day);
+                                    return date;
+                                  })() : undefined}
+                                  month={field.value ? (() => {
+                                    const [_, month, year] = field.value.split('-').map(Number);
+                                    return new Date(year, month - 1, 1);
+                                  })() : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      // Format as DD-MM-YYYY
+                                      const day = date.getDate().toString().padStart(2, '0');
+                                      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                      const year = date.getFullYear();
+                                      field.onChange(`${day}-${month}-${year}`);
+                                    }
+                                  }} 
+                                  disabled={(date) => date > new Date()}
+                                  initialFocus
+                                />
+                              </div>
                             </PopoverContent>
                           </Popover>
                           <FormMessage />
-                        </FormItem>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Format: DD-MM-YYYY (e.g., 01-01-2023)
+                          </p>                        </FormItem>
                       )}
                     />
                   </div>
@@ -286,7 +408,7 @@ export default function PersonInfo() {
                 {/* Contact Information Section */}
                 <div className="pt-4 border-t">
                   <h3 className="text-lg font-medium mb-4">Contact Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                    
                     <FormField
                       control={form.control}
                       name="homePhone"
@@ -294,16 +416,15 @@ export default function PersonInfo() {
                         <FormItem>
                           <FormLabel>Home Phone</FormLabel>
                           <FormControl>
-                            <PhoneInput
-                              placeholder="Home phone (optional)"
-                              value={field.value}
-                              defaultCountry={form.getValues("homePhoneCountryCode")}
-                              onCountryChange={(country) => {
-                                form.setValue("homePhoneCountryCode", country);
-                              }}
+                            <Input
+                              placeholder="Home phone (10 digits)"
+                              {...field}
                             />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            If provided, must be 10 digits without spaces or symbols
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -314,16 +435,15 @@ export default function PersonInfo() {
                         <FormItem>
                           <FormLabel>Mobile Phone</FormLabel>
                           <FormControl>
-                            <PhoneInput
-                              placeholder="Mobile phone"
-                              value={field.value}
-                              defaultCountry={form.getValues("mobilePhoneCountryCode")}
-                              onCountryChange={(country) => {
-                                form.setValue("mobilePhoneCountryCode", country);
-                              }}
+                            <Input
+                              placeholder="Mobile phone (10 digits)"
+                              {...field}
                             />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be 10 digits without spaces or symbols
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -372,17 +492,19 @@ export default function PersonInfo() {
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
-                    <FormField
+                    />                    <FormField
                       control={form.control}
                       name="postCode"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Post Code</FormLabel>
                           <FormControl>
-                            <Input placeholder="Post code" {...field} />
+                            <Input placeholder="4-digit postcode" {...field} />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be a 4-digit number
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -462,28 +584,154 @@ export default function PersonInfo() {
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
-                    <FormField
+                    />                    <FormField
                       control={form.control}
                       name="mailingPostCode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Post Code</FormLabel>
+                          <FormLabel>Mailing Post Code</FormLabel>
                           <FormControl>
                             <Input 
-                              placeholder="Post code" 
-                              {...field}
+                              placeholder="4-digit postcode"
                               disabled={useHomeAddress}
+                              {...field} 
                             />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be a 4-digit number
+                          </p>                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* HCP Information Section */}
+                <div className="pt-4 border-t">
+                  <h3 className="text-lg font-medium mb-4">HCP Information</h3>
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="hcpLevel"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>HCP Level</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter HCP level" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="hcpStartDate"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">                          <FormLabel>HCP Start Date</FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value ? (
+                                    field.value
+                                  ) : (
+                                    <span>DD-MM-YYYY</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <div className="flex flex-col space-y-2 p-2">
+                                <div className="flex justify-between items-center">
+                                  <select 
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={field.value ? field.value.split('-')[2] : new Date().getFullYear()}
+                                    onChange={(e) => {
+                                      const selectedYear = e.target.value;
+                                      if (field.value) {
+                                        const [day, month, _] = field.value.split('-');
+                                        field.onChange(`${day}-${month}-${selectedYear}`);
+                                      } else {
+                                        const today = new Date();
+                                        const day = today.getDate().toString().padStart(2, '0');
+                                        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+                                        field.onChange(`${day}-${month}-${selectedYear}`);
+                                      }
+                                    }}
+                                  >
+                                    {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                                      <option key={year} value={year}>{year}</option>
+                                    ))}
+                                  </select>
+                                  <select 
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={field.value ? field.value.split('-')[1] : (new Date().getMonth() + 1).toString().padStart(2, '0')}
+                                    onChange={(e) => {
+                                      const selectedMonth = e.target.value;
+                                      if (field.value) {
+                                        const [day, _, year] = field.value.split('-');
+                                        
+                                        // Create a date object to validate the day in the new month
+                                        const lastDayOfMonth = new Date(parseInt(year), parseInt(selectedMonth), 0).getDate();
+                                        const validDay = Math.min(parseInt(day), lastDayOfMonth).toString().padStart(2, '0');
+                                        
+                                        field.onChange(`${validDay}-${selectedMonth}-${year}`);
+                                      } else {
+                                        const today = new Date();
+                                        const day = today.getDate().toString().padStart(2, '0');
+                                        field.onChange(`${day}-${selectedMonth}-${new Date().getFullYear()}`);
+                                      }
+                                    }}
+                                  >
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                                      <option key={month} value={month.toString().padStart(2, '0')}>
+                                        {new Date(2000, month - 1, 1).toLocaleString('default', { month: 'long' })}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>                                <Calendar
+                                  mode="single"
+                                  selected={field.value ? (() => {
+                                    const [day, month, year] = field.value.split('-').map(Number);
+                                    const date = new Date(year, month - 1, day);
+                                    return date;
+                                  })() : undefined}
+                                  month={field.value ? (() => {
+                                    const [_, month, year] = field.value.split('-').map(Number);
+                                    return new Date(year, month - 1, 1);
+                                  })() : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      // Format as DD-MM-YYYY
+                                      const day = date.getDate().toString().padStart(2, '0');
+                                      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                      const year = date.getFullYear();
+                                      field.onChange(`${day}-${month}-${year}`);
+                                    }
+                                  }}
+                                  initialFocus
+                                />
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Format: DD-MM-YYYY (e.g., 01-01-2023)
+                          </p>
                         </FormItem>
                       )}
                     />
                   </div>
                 </div>
 
-                <Button 
+                <Button
                   type="submit" 
                   className="w-full"
                   disabled={mutation.isPending}

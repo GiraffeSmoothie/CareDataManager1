@@ -4,12 +4,12 @@ import { Session } from "express-session";
 import { AuthService } from "./src/services/auth.service";
 
 // Define session types
-declare module "express-session" {
-  interface Session {
+declare module "express-session" {  interface Session {
     user?: {
       id: number;
       username: string;
       role: string;
+      company_id?: number;
     };
   }
 }
@@ -427,12 +427,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await AuthService.validateUser(username, password);
       if (!user) {
         return res.status(401).json({ success: false, error: "Invalid credentials" });
-      }
-
-      req.session.user = {
+      }      req.session.user = {
         id: user.id,
         username: user.username,
-        role: user.role
+        role: user.role,
+        company_id: user.company_id
       };
       
       return res.json({ success: true, user });
@@ -481,15 +480,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (err) console.error("Error destroying invalid session:", err);
         });
         return res.status(401).json({ authenticated: false });
-      }
-
-      return res.status(200).json({ 
+      }        return res.status(200).json({ 
         authenticated: true, 
         user: { 
           id: user.id, 
           username: user.username, 
           role: user.role,
-          name: user.name  // Add the name field here
+          name: user.name,
+          company_id: user.company_id
         } 
       });
     } catch (error) {
@@ -942,10 +940,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { clientId, documentName, documentType, segmentId } = req.body;
-      
       if (!clientId || !documentName || !documentType) {
-        return res.status(400).json({ message: "Missing required fields: clientId, documentName, and documentType are required" });
-      }      // Get client information to use in folder name
+        return res.status(400).json({ message: "Missing required fields: clientId, documentName, documentType, and file are required" });
+      }
+      
+      // Get client information to use in folder name
       const client = await dbStorage.getPersonInfoById(parseInt(clientId));
       if (!client) {
         return res.status(404).json({ message: "Client not found" });
@@ -953,21 +952,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
       const clientDir = path.join(uploadsDir, `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_'));
-      await fs.promises.mkdir(clientDir, { recursive: true });
       
-      // Move the file from temp location to client directory
-      const filename = path.basename(req.file.path);
+      // Generate a unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(req.file.originalname);
+      const filename = uniqueSuffix + ext;
       const filePath = path.join(clientDir, filename).replace(/\\/g, '/');
-      
+
       // In development, move file within filesystem
       if (process.env.NODE_ENV !== 'production') {
-        await fs.promises.rename(req.file.path, filePath);
+        await fs.promises.mkdir(clientDir, { recursive: true });
+        if (req.file.path) {
+          await fs.promises.rename(req.file.path, filePath);
+        }
       } else if (blobStorage) {
         // In production, upload to Azure Blob Storage
-        const fileBuffer = await fs.promises.readFile(req.file.path);
+        const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer);
         await blobStorage.uploadFile(fileBuffer, filePath, req.file.mimetype);
-        // Delete temp file
-        await fs.promises.unlink(req.file.path);
       }
       
       // Create document record in database
@@ -1151,15 +1152,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
           fullPath = path.join(process.cwd(), fullPath);
         }
+          console.log(`Attempting to access file at: ${fullPath}`);
         
-        console.log(`Attempting to access file at: ${fullPath}`);
-        
-        if (!fs.existsSync(fullPath)) {
-          // If not found with direct path, check if it's in uploads directory
-          fullPath = path.join(uploadsDir, path.basename(document.filePath));
-          console.log(`File not found, trying uploads dir: ${fullPath}`);
+        if (!fs.existsSync(fullPath) && document.filePath) {
+          // Try a series of fallback paths to find the file
           
-          // If still not found, try removing "uploads" from the start of the path
+          // Try 1: Just the basename in uploads directory
+          const basename = path.basename(document.filePath);
+          fullPath = path.join(uploadsDir, basename);
+          console.log(`File not found, trying uploads dir with basename: ${fullPath}`);
+          
+          // Try 2: Full path without "uploads/" prefix
           if (!fs.existsSync(fullPath) && document.filePath.startsWith('uploads/')) {
             const pathWithoutUploads = document.filePath.substring('uploads/'.length);
             fullPath = path.join(uploadsDir, pathWithoutUploads);
@@ -1224,21 +1227,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {object} Created client service record
    * @throws {ApiError} 400 - If validation fails
    * @throws {ApiError} 401 - If user is not authenticated
-   */
-  app.post("/api/client-services", async (req: Request, res: Response) => {
+   * @throws {ApiError} 409 - If username already exists
+   */  app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      console.log("[API] Received client service data:", req.body);
-      
-      const validatedData = insertClientServiceSchema.parse({
+      console.log("[API] Received client service data:", req.body);      // Ensure segmentId is explicitly handled
+      const requestData = {
         ...req.body,
+        segmentId: req.body.segmentId === undefined ? null : req.body.segmentId,
         createdBy: req.session.user.id
-      });
+      };
       
+      const validatedData = insertClientServiceSchema.parse(requestData);
       console.log("[API] Validated client service data:", validatedData);
+      
+      // Verify that the master data combination exists
+      const exists = await dbStorage.checkMasterDataExists(
+        validatedData.serviceCategory,
+        validatedData.serviceType,
+        validatedData.serviceProvider,
+        validatedData.segmentId === null ? undefined : validatedData.segmentId
+      );
+      
+      if (!exists) {
+        return res.status(400).json({ 
+          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
+        });
+      }
       
       const clientServiceWithUser = {
         ...validatedData,
@@ -1954,6 +1972,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {object} req.body - Segment data including segment_name and company_id
    * @returns {object} Created segment record
    * @throws {ApiError} 400 - If segment name or company ID are missing
+   * @throws {ApiError} 401 - If user is not authenticated
    */
   app.post("/api/segments", authMiddleware, async (req: Request, res: Response) => {
     // Type assertion for authenticated user
@@ -2063,27 +2082,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * @route GET /api/user/segments
    * @returns {Array} List of segments for the user's company
-   */
-  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
+   */  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;    
     try {
       // Get current user with company_id
       const user = await dbStorage.getUserById(authReq.user.id);
       
-      // If user is an admin without a company assigned, return an empty array
-      // This prevents admins without company assignment from seeing segments
-      if (!user || !user.company_id) {
-        console.log(`User ${user?.id} (${user?.username}) has no company_id assigned, returning empty segments array`);
+      // Return 401 if user not found
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }      // Log user details for debugging
+      console.log('Fetching segments for user:', {
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        companyId: user.company_id
+      });
+      
+      // For users with company_id (regardless of role), return their company's segments
+      if (user.company_id) {
+        console.log(`Fetching segments for user's company: ${user.company_id}`);
+        const segments = await dbStorage.getAllSegmentsByCompany(user.company_id);
+        console.log(`Found ${segments.length} segments for company ${user.company_id}`);
+        return res.status(200).json(segments);
+      }
+      
+      // For admins without company_id, return empty array (segments are company-specific)
+      if (!user.company_id) {
+        console.log(`user ${user.id} has no company assignment, returning empty array`);
+        return res.status(200).json([]);
+      }
+/*
+      // For admins without company_id, return empty array (segments are company-specific)
+      if (user.role === 'admin' && !user.company_id) {
+        console.log(`Admin user ${user.id} has no company assignment, returning empty array`);
         return res.status(200).json([]);
       }
 
-      // Get segments for the company
-      const segments = await dbStorage.getAllSegmentsByCompany(user.company_id);
-      return res.status(200).json(segments);
+      // Regular users without company_id get empty array
+      if (user.role !== 'admin' && !user.company_id) {
+        console.log(`Regular user ${user.id} has no company assignment, returning empty array`);
+        return res.status(200).json([]);
+      }
+*/
+      // Fallback case - return empty array
+      console.log('Unhandled user case, returning empty array:', user);
+      return res.status(200).json([]);
     } catch (error) {
       console.error("Error fetching user segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });
+    }
+  });
+  
+  /**
+   * Verify master data existence endpoint
+   * 
+   * Verifies that a specific combination of service category, type, and provider exists in the master data.
+   * Used to validate service assignments before creating a client service record.
+   * 
+   * @route GET /api/master-data/verify
+   * @param {string} req.query.category - Service category to verify
+   * @param {string} req.query.type - Service type to verify
+   * @param {string} req.query.provider - Service provider to verify
+   * @param {string} [req.query.segmentId] - Optional segment ID to check against
+   * @returns {object} Success or error message
+   */
+  app.get("/api/master-data/verify", async (req: Request, res: Response) => {
+    try {
+      const { category, type, provider, segmentId } = req.query;
+      
+      if (!category || !type || !provider) {
+        return res.status(400).json({ message: "Missing required parameters: category, type, and provider are required" });
+      }
+      
+      // Check if the master data combination exists
+      const exists = await dbStorage.checkMasterDataExists(
+        category as string, 
+        type as string, 
+        provider as string,
+        segmentId ? parseInt(segmentId as string) : undefined
+      );
+      
+      if (!exists) {
+        return res.status(404).json({ 
+          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
+        });
+      }
+      
+      return res.status(200).json({ 
+        success: true, 
+        message: "Service combination exists in master data" 
+      });
+    } catch (error) {
+      console.error("Error verifying master data:", error);
+      return res.status(500).json({ message: "Failed to verify master data" });
     }
   });
 

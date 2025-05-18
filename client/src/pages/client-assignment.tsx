@@ -23,14 +23,16 @@ import { cn } from "@/lib/utils"; // Add this import for the cn utility function
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
-  careCategory: z.string().min(1, "Service category is required"),
-  careType: z.string().min(1, "Service type is required"),
-  serviceProvider: z.string().min(1, "Service provider is required"),  serviceStartDate: z.string().min(1, "Start date is required"),
-  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
+  careCategory: z.string().min(1, "Service category is required"),  careType: z.string().min(1, "Service type is required"),
+  serviceProvider: z.string().min(1, "Service provider is required"),  serviceStartDate: z.string().min(1, "Start date is required"),  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
   serviceHours: z.string().min(1, "Hours per day is required").refine(val => {
+    // Ensure it's a valid decimal number between 0.5 and 24
     const hours = parseFloat(val);
-    return !isNaN(hours) && hours > 0 && hours <= 24;
-  }, "Hours must be between 0 and 24, and can include decimal values like 2.5")
+    // Check if it's a valid number and within the allowed range
+    return !isNaN(hours) && hours >= 0.5 && hours <= 24 && 
+      // Validate that the input is properly formatted as a number (no extra characters)
+      /^([0-9]+\.?[0-9]*|\.[0-9]+)$/.test(val.trim());
+  }, "Hours must be between 0.5 and 24, and can include decimal values like 2.5")
 });
 
 type ClientAssignmentFormValues = z.infer<typeof clientAssignmentSchema>;
@@ -266,34 +268,41 @@ export default function ClientAssignment() {
   }, [showDialog, form]);
 
   // Mutation for submitting the form
-  const createAssignmentMutation = useMutation({
-    mutationFn: async (data: ClientAssignmentFormValues) => {
+  const createAssignmentMutation = useMutation({    mutationFn: async (data: ClientAssignmentFormValues) => {
       if (!selectedClient) {
         throw new Error("No client selected");
       }
       console.log("[Assign Service] Submitting form data:", data);
       
-      // First ensure the master data combination exists
-      try {
-        await apiRequest("POST", "/api/master-data", {
-          serviceCategory: data.careCategory,
-          serviceType: data.careType,
-          serviceProvider: data.serviceProvider,
-          active: true,
-          segmentId: selectedSegment?.id || null
-        });
-      } catch (error) {
-        // Ignore error if master data already exists
-        console.log("Master data may already exist:", error);
+      // Verify that the master data combination exists
+      const masterDataCheck = await apiRequest("GET", `/api/master-data/verify?category=${encodeURIComponent(data.careCategory)}&type=${encodeURIComponent(data.careType)}&provider=${encodeURIComponent(data.serviceProvider)}&segmentId=${selectedSegment?.id || ""}`);
+      
+      if (!masterDataCheck.ok) {
+        const errorData = await masterDataCheck.json();
+        throw new Error(errorData.message || "The selected service combination doesn't exist in the master data. Please only use existing service combinations.");
       }
-        const serviceData = {
+
+      // Convert service hours to a number with proper validation
+      let serviceHours: number;
+      try {
+        const parsedHours = parseFloat(data.serviceHours);
+        if (isNaN(parsedHours) || parsedHours < 0.5 || parsedHours > 24) {
+          throw new Error(`Invalid service hours: ${data.serviceHours}. Must be between 0.5 and 24.`);
+        }
+        serviceHours = parsedHours;
+      } catch (error) {
+        console.error("Error parsing service hours:", error);
+        throw new Error(`Invalid service hours: ${data.serviceHours}. Please enter a valid number.`);
+      }
+      
+      const serviceData = {
         clientId: parseInt(selectedClient.id.toString()),
         serviceCategory: data.careCategory,
         serviceType: data.careType,
         serviceProvider: data.serviceProvider,
         serviceStartDate: data.serviceStartDate,
         serviceDays: data.serviceDays,
-        serviceHours: parseFloat(data.serviceHours),
+        serviceHours: serviceHours, // Use our validated service hours
         status: "Planned",
         segmentId: selectedSegment?.id || null
       };
@@ -320,8 +329,7 @@ export default function ClientAssignment() {
       form.reset();
       setShowDialog(false);
       queryClient.invalidateQueries({ queryKey: ["/api/client-services/client", selectedClient?.id, selectedSegment?.id] });
-    },
-    onError: (error: Error) => {
+    },    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to assign service",
@@ -361,10 +369,13 @@ export default function ClientAssignment() {
       accessorKey: "serviceDays",
       header: "Days",
       cell: ({ row }) => row.original.serviceDays.join(", ")
-    },
-    {
-      accessorKey: "serviceHours",
-      header: "Hours"
+    },    {      accessorKey: "serviceHours",
+      header: "Hours",
+      cell: ({ row }) => {
+        // Format the hours to always show 1 decimal place
+        const hours = parseFloat(row.original.serviceHours.toString());
+        return isNaN(hours) ? "" : hours.toFixed(1);
+      }
     },
     {
       accessorKey: "status",
@@ -669,20 +680,40 @@ export default function ClientAssignment() {
                         <FormMessage />
                       </FormItem>
                     )}
-                  />
-
-                  <FormField                    control={form.control}
+                  />                  <FormField                    control={form.control}
                     name="serviceHours"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Hours</FormLabel>
                         <FormControl>
-                          <Input {...field} type="number" min="0.5" max="24" step="0.5" placeholder="Number of hours per day (can use decimals)" />
+                          <Input 
+                            {...field} 
+                            type="number" 
+                            min="0.5" 
+                            max="24" 
+                            step="0.1" 
+                            placeholder="Number of hours per day (e.g., 1.5, 2.5)" 
+                            onChange={(e) => {
+                              // Ensure valid decimal input
+                              const value = e.target.value;
+                              const isValidDecimal = /^([0-9]*\.?[0-9]*|\.[0-9]*)$/.test(value);
+                              if (isValidDecimal || value === '') {
+                                field.onChange(value);
+                              }
+                            }}
+                          />
                         </FormControl>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Enter hours between 0.5 and 24. You can use decimal values like 1.5 or 2.5.
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                </div>
+
+                <div className="mb-4 text-sm text-muted-foreground">
+                  <p>Note: You can only assign services that already exist in the Master Data. Please create any new service combinations in the Master Data page first.</p>
                 </div>
 
                 <Button

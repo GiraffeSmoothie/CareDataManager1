@@ -7,61 +7,70 @@ import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, CalendarIcon } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
 import { ErrorDisplay } from "@/components/ui/error-display";
 import { useSegment } from "@/contexts/segment-context";
-
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "../components/ui/form";
-import { Input } from "../components/ui/input";
-import { Button } from "../components/ui/button";
-import { 
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle 
-} from "../components/ui/card";
-import { Checkbox } from "../components/ui/checkbox";
-import { cn } from "../lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
     .refine((date) => {
-      const parsedDate = new Date(date);
-      return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return !isNaN(parsedDate.getTime()) && 
+        parsedDate.getDate() === day &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getFullYear() === year &&
+        parsedDate <= new Date();
     }, "Please enter a valid date that is not in the future"),
   middleName: z.string().optional().or(z.literal("")),
-  homePhone: z.string().optional().or(z.literal("")),
+  homePhone: z.string().optional().or(z.literal(""))
+    .refine(val => !val || /^\d{10}$/.test(val), {
+      message: "Home phone must be 10 digits (no spaces or symbols)"
+    }),
+  mobilePhone: z.string()
+    .refine(val => /^\d{10}$/.test(val), {
+      message: "Mobile phone must be 10 digits (no spaces or symbols)"
+    }),
+  postCode: z.string().min(1, "Post Code is required")
+    .refine(val => /^\d{4}$/.test(val), {
+      message: "Post code must be a 4-digit number"
+    }),
   addressLine2: z.string().optional().or(z.literal("")),
   addressLine3: z.string().optional().or(z.literal("")),
   nextOfKinEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
-  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
+  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),  
   nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
-  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
+  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required")
+    .refine(val => /^\d{10}$/.test(val), {
+      message: "Next of kin phone must be 10 digits (no spaces or symbols)"
+    }),
   hcpLevel: z.string().min(1, "HCP Level is required"),
-  hcpStartDate: z.string().min(1, "HCP Start Date is required"),
+  hcpStartDate: z.string()
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
+    .refine((date) => {
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return !isNaN(parsedDate.getTime()) &&
+        parsedDate.getDate() === day &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getFullYear() === year &&
+        parsedDate <= new Date();
+    }, "Please enter a valid date that is not in the future"),
   status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
   segmentId: z.number().nullable().optional()
 });
@@ -240,22 +249,77 @@ export default function ManageClient() {
         variant: "destructive",
       });
     },
-  });
-
-  const onSubmit = (data: PersonInfoFormValues) => {
+  });  const onSubmit = (data: PersonInfoFormValues) => {
     console.log("Form submitted:", data, "isEditing:", isEditing, "selectedMember:", selectedMember);
-    mutation.mutate(data);
+    
+    // The dates should remain in DD-MM-YYYY format to match the schema validation
+    // The server expects dates in DD-MM-YYYY format based on the schema validation
+    
+    // Ensure dates are properly formatted as DD-MM-YYYY
+    const ensureCorrectDateFormat = (dateString: string): string => {
+      if (!dateString) return dateString;
+      
+      try {
+        // Check if already in DD-MM-YYYY format
+        if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
+          return dateString;
+        }
+        
+        // If it's in another format, try to parse and convert to DD-MM-YYYY
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}-${month}-${year}`;
+        }
+      } catch (error) {
+        console.error("Error formatting date:", error);
+      }
+      
+      return dateString; // Return original if conversion failed
+    };
+    
+    // Format phone numbers to ensure they match validation (10 digits only)
+    const formatPhoneNumber = (phone: string): string => {
+      if (!phone) return phone;
+      // Remove any non-digit characters and ensure it's just 10 digits
+      return phone.replace(/\D/g, '').substring(0, 10);
+    };
+    
+    // Format postcode to ensure it's exactly 4 digits
+    const formatPostcode = (postcode: string): string => {
+      if (!postcode) return postcode;
+      // Remove any non-digit characters and ensure it's just 4 digits
+      return postcode.replace(/\D/g, '').substring(0, 4).padStart(4, '0');
+    };
+    
+    // Format data before submission
+    const formattedData = {
+      ...data,
+      // Format phone numbers
+      mobilePhone: formatPhoneNumber(data.mobilePhone),
+      homePhone: data.homePhone ? formatPhoneNumber(data.homePhone) : data.homePhone,
+      nextOfKinPhone: formatPhoneNumber(data.nextOfKinPhone),
+      
+      // Format postcodes
+      postCode: formatPostcode(data.postCode),
+      mailingPostCode: data.mailingPostCode ? formatPostcode(data.mailingPostCode) : data.mailingPostCode,
+      
+      // Format dates
+      dateOfBirth: data.dateOfBirth ? ensureCorrectDateFormat(data.dateOfBirth) : data.dateOfBirth,
+      hcpStartDate: data.hcpStartDate ? ensureCorrectDateFormat(data.hcpStartDate) : data.hcpStartDate
+    };
+    
+    mutation.mutate(formattedData);
   };
-
   const hcpLevels = ["1", "2", "3", "4"];
-  const statusOptions = Object.keys(STATUS_CONFIGS);
+  const statusOptions = ["New", "Active", "Paused", "Closed"];
 
   // Filter clients based on search term and active status
   const filteredClients = clients.filter(client => 
     !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
-  );
-
-  // Handle edit client
+  );  // Handle edit client
   const handleEdit = (client: PersonInfo) => {
     setSelectedMember(client);
     setIsEditing(true);
@@ -265,7 +329,42 @@ export default function ManageClient() {
     // Populate form with client data
     Object.entries(client).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'createdBy') {
-        form.setValue(key as any, value || "");
+        // Format phone numbers to ensure they match validation
+        if ((key === 'mobilePhone' || key === 'homePhone' || key === 'nextOfKinPhone') && value) {
+          // Remove any non-digit characters and ensure it's just 10 digits
+          const formattedPhone = String(value).replace(/\D/g, '').substring(0, 10);
+          form.setValue(key as any, formattedPhone);
+        }
+        // Format postcode to ensure it's 4 digits
+        else if ((key === 'postCode' || key === 'mailingPostCode') && value) {
+          const formattedPostcode = String(value).replace(/\D/g, '').substring(0, 4);
+          form.setValue(key as any, formattedPostcode);
+        }
+        // Convert date from YYYY-MM-DD to DD-MM-YYYY format for date fields
+        else if ((key === 'dateOfBirth' || key === 'hcpStartDate') && value && typeof value === 'string') {
+          try {
+            // Check if it's already in DD-MM-YYYY format
+            if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+              form.setValue(key as any, value);
+            } else {
+              // Assume it's in YYYY-MM-DD format from the server
+              const date = new Date(value);
+              if (!isNaN(date.getTime())) {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const year = date.getFullYear();
+                form.setValue(key as any, `${day}-${month}-${year}`);
+              } else {
+                form.setValue(key as any, value || "");
+              }
+            }
+          } catch (error) {
+            console.error(`Error formatting date (${key}):`, error);
+            form.setValue(key as any, value || "");
+          }
+        } else {
+          form.setValue(key as any, value || "");
+        }
       }
     });
   };
@@ -295,8 +394,7 @@ export default function ManageClient() {
     {
       accessorKey: "mobilePhone",
       header: "Phone"
-    },
-    {
+    },    {
       accessorKey: "hcpLevel",
       header: "HCP Level",
       cell: ({ row }) => row.original.hcpLevel ? `Level ${row.original.hcpLevel}` : '-'
@@ -304,7 +402,28 @@ export default function ManageClient() {
     {
       accessorKey: "hcpStartDate",
       header: "HCP Start Date",
-      cell: ({ row }) => row.original.hcpStartDate ? new Date(row.original.hcpStartDate).toLocaleDateString() : '-'
+      cell: ({ row }) => {
+        if (!row.original.hcpStartDate) return '-';
+        
+        try {
+          // Check if in DD-MM-YYYY format
+          if (/^\d{2}-\d{2}-\d{4}$/.test(row.original.hcpStartDate)) {
+            const [day, month, year] = row.original.hcpStartDate.split('-').map(Number);
+            // Create date object (month is 0-indexed in JS)
+            const date = new Date(year, month - 1, day);
+            return date.toLocaleDateString();
+          } 
+          // Check if in ISO format
+          else if (/^\d{4}-\d{2}-\d{2}/.test(row.original.hcpStartDate)) {
+            return new Date(row.original.hcpStartDate).toLocaleDateString();
+          }
+          // Fallback to displaying the raw string
+          return row.original.hcpStartDate;
+        } catch (error) {
+          console.error("Error parsing date:", error);
+          return row.original.hcpStartDate; // Return raw value if parsing fails
+        }
+      }
     },
     {
       accessorKey: "status",
@@ -411,37 +530,18 @@ export default function ManageClient() {
         </Card>
 
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{isEditing ? 'Edit Client' : 'Add New Client'}</DialogTitle>
-              {selectedSegment && (
-                <p className="text-sm text-muted-foreground">
-                  Segment: {selectedSegment.segment_name}
-                </p>
-              )}
+              <DialogTitle>{buttonLabel}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-16">                {/* Hidden segment ID field */}
-                <FormField
-                  control={form.control}
-                  name="segmentId"
-                  render={({ field }) => (
-                    <input 
-                      type="hidden" 
-                      name="segmentId"
-                      value={selectedSegment?.id || ""}
-                      onChange={field.onChange}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 {/* Personal Details Section */}
                 <div className="space-y-6">
                   <div className="border-b pb-2">
                     <h3 className="text-lg font-medium">Personal Details</h3>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
@@ -449,9 +549,23 @@ export default function ManageClient() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Title</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Mr/Mrs/Ms/Dr" {...field} />
-                          </FormControl>
+                          <Select 
+                            onValueChange={field.onChange} 
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select title" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {["Mr", "Mrs", "Miss", "Ms", "Dr", "Prof"].map((title) => (
+                                <SelectItem key={title} value={title}>
+                                  {title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -490,7 +604,7 @@ export default function ManageClient() {
                       name="middleName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Middle Name (Optional)</FormLabel>
+                          <FormLabel>Middle Name</FormLabel>
                           <FormControl>
                             <Input placeholder="Middle name" {...field} />
                           </FormControl>
@@ -502,12 +616,47 @@ export default function ManageClient() {
                       control={form.control}
                       name="dateOfBirth"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                           <FormLabel>Date of Birth</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value ? field.value : <span>DD-MM-YYYY</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value ? (() => {
+                                  const [day, month, year] = field.value.split('-').map(Number);
+                                  return new Date(year, month - 1, day);
+                                })() : undefined}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const year = date.getFullYear();
+                                    field.onChange(`${day}-${month}-${year}`);
+                                  }
+                                }}
+                                disabled={(date) => date > new Date()}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            DD-MM-YYYY format (e.g., 01-01-1940)
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -526,17 +675,19 @@ export default function ManageClient() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                    <FormField
                       control={form.control}
                       name="homePhone"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Home Phone (Optional)</FormLabel>
                           <FormControl>
-                            <Input placeholder="Home phone number" {...field} />
+                            <Input placeholder="Home phone number (10 digits)" {...field} />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            If provided, must be 10 digits without spaces or symbols
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -547,9 +698,12 @@ export default function ManageClient() {
                         <FormItem>
                           <FormLabel>Mobile Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Mobile phone number" {...field} />
+                            <Input placeholder="Mobile phone number (10 digits)" {...field} />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be 10 digits without spaces or symbols
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -607,17 +761,19 @@ export default function ManageClient() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                    <FormField
                       control={form.control}
                       name="postCode"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Postcode</FormLabel>
                           <FormControl>
-                            <Input placeholder="Postcode" {...field} />
+                            <Input placeholder="4-digit postcode" {...field} />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be a 4-digit number
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -713,12 +869,15 @@ export default function ManageClient() {
                             <FormLabel>Mailing Postcode</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="Postcode" 
+                                placeholder="4-digit postcode" 
                                 disabled={useHomeAddress} 
                                 {...field} 
                               />
                             </FormControl>
                             <FormMessage />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Must be a 4-digit number
+                            </p>
                           </FormItem>
                         )}
                       />
@@ -729,7 +888,7 @@ export default function ManageClient() {
                 {/* Next of Kin Section */}
                 <div className="space-y-6">
                   <div className="border-b pb-2">
-                    <h3 className="text-lg font-medium">Next of Kin</h3>
+                    <h3 className="text-lg font-medium">Next of Kin Details</h3>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4">
@@ -738,9 +897,9 @@ export default function ManageClient() {
                       name="nextOfKinName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Name</FormLabel>
+                          <FormLabel>Next of Kin Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="Next of Kin name" {...field} />
+                            <Input placeholder="Full name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -754,9 +913,9 @@ export default function ManageClient() {
                       name="nextOfKinAddress"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Address</FormLabel>
+                          <FormLabel>Next of Kin Address</FormLabel>
                           <FormControl>
-                            <Input placeholder="Next of Kin address" {...field} />
+                            <Input placeholder="Full address" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -770,11 +929,14 @@ export default function ManageClient() {
                       name="nextOfKinPhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Phone</FormLabel>
+                          <FormLabel>Next of Kin Phone</FormLabel>
                           <FormControl>
-                            <Input placeholder="Next of Kin phone number" {...field} />
+                            <Input placeholder="Phone number (10 digits)" {...field} />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be 10 digits without spaces or symbols
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -783,9 +945,9 @@ export default function ManageClient() {
                       name="nextOfKinEmail"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email (Optional)</FormLabel>
+                          <FormLabel>Next of Kin Email (Optional)</FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="Next of Kin email" {...field} />
+                            <Input type="email" placeholder="Email address" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -794,10 +956,10 @@ export default function ManageClient() {
                   </div>
                 </div>
 
-                {/* HCP Information Section */}
+                {/* HCP Details Section */}
                 <div className="space-y-6">
                   <div className="border-b pb-2">
-                    <h3 className="text-lg font-medium">HCP Information</h3>
+                    <h3 className="text-lg font-medium">HCP Details</h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -832,12 +994,47 @@ export default function ManageClient() {
                       control={form.control}
                       name="hcpStartDate"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                           <FormLabel>HCP Start Date</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value ? field.value : <span>DD-MM-YYYY</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value ? (() => {
+                                  const [day, month, year] = field.value.split('-').map(Number);
+                                  return new Date(year, month - 1, day);
+                                })() : undefined}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const year = date.getFullYear();
+                                    field.onChange(`${day}-${month}-${year}`);
+                                  }
+                                }}
+                                disabled={(date) => date > new Date()}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            DD-MM-YYYY format (e.g., 01-01-2024)
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -863,7 +1060,7 @@ export default function ManageClient() {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select client status" />
+                                <SelectValue placeholder="Select status" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -880,25 +1077,31 @@ export default function ManageClient() {
                     />
                   </div>
                 </div>
+
+                <div className="flex justify-end space-x-4 pt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit"
+                    disabled={form.formState.isSubmitting}
+                  >
+                    {form.formState.isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      buttonLabel
+                    )}
+                  </Button>
+                </div>
               </form>
             </Form>
-            
-            {/* Sticky button at the bottom of the modal */}
-            <div className="sticky bottom-0 bg-white dark:bg-gray-950 pt-4 pb-4 border-t mt-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-10 px-6 mx-[-24px]">
-              <Button 
-                type="submit"
-                className="w-full"
-                disabled={mutation.isPending}
-                onClick={form.handleSubmit(onSubmit)}
-              >
-                {mutation.isPending ? (
-                  <div className="flex items-center">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    <span>Processing...</span>
-                  </div>
-                ) : buttonLabel}
-              </Button>
-            </div>
           </DialogContent>
         </Dialog>
       </div>

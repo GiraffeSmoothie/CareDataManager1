@@ -37,16 +37,6 @@ import {
   Collapsible,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 // Define the company schema
 const companySchema = z.object({
@@ -54,7 +44,9 @@ const companySchema = z.object({
   registered_address: z.string().min(1, "Registered address is required"),
   postal_address: z.string().min(1, "Postal address is required"),
   contact_person_name: z.string().min(1, "Contact person name is required"),
-  contact_person_phone: z.string().min(1, "Contact person phone is required"),
+  contact_person_phone: z.string()
+    .min(1, "Contact person phone is required")
+    .regex(/^\d{10}$/, "Phone number must be exactly 10 digits without any symbols"),
   contact_person_email: z.string().email("Invalid email address"),
 });
 
@@ -73,14 +65,11 @@ export default function CompanyPage() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  
   // State for segments functionality
   const [expandedCompany, setExpandedCompany] = useState<number | null>(null);
   const [showSegmentDialog, setShowSegmentDialog] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
   const [isEditingSegment, setIsEditingSegment] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [segmentToDelete, setSegmentToDelete] = useState<Segment | null>(null);
 
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
@@ -109,6 +98,7 @@ export default function CompanyPage() {
       return response.json();
     },
   });
+  
   // Fetch segments for a company
   const { data: segments, isLoading: isLoadingSegments } = useQuery<Segment[]>({
     queryKey: ["segments", expandedCompany],
@@ -155,7 +145,7 @@ export default function CompanyPage() {
       setError(err instanceof Error ? err : new Error(err.message || `Failed to ${isEditing ? "update" : "create"} company`));
     },
   });
-
+  
   // Add/Update segment mutation
   const segmentMutation = useMutation({
     mutationFn: (data: { segment_name: string; company_id: number }) => {
@@ -177,25 +167,6 @@ export default function CompanyPage() {
     },
     onError: (err: any) => {
       setError(err instanceof Error ? err : new Error(err.message || `Failed to ${isEditingSegment ? "update" : "create"} segment`));
-    },
-  });
-
-  // Delete segment mutation
-  const deleteSegmentMutation = useMutation({
-    mutationFn: (id: number) => {
-      return apiRequest("DELETE", `/api/segments/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["segments", expandedCompany] });
-      setShowDeleteDialog(false);
-      setSegmentToDelete(null);
-      toast({
-        title: "Success",
-        description: "Segment deleted successfully",
-      });
-    },
-    onError: (err: any) => {
-      setError(err instanceof Error ? err : new Error(err.message || "Failed to delete segment"));
     },
   });
 
@@ -251,7 +222,7 @@ export default function CompanyPage() {
     setExpandedCompany(companyId);
     setShowSegmentDialog(true);
   };
-
+  
   const handleEditSegment = (segment: Segment) => {
     setSelectedSegment(segment);
     setIsEditingSegment(true);
@@ -261,22 +232,11 @@ export default function CompanyPage() {
     setShowSegmentDialog(true);
   };
 
-  const handleDeleteSegment = (segment: Segment) => {
-    setSegmentToDelete(segment);
-    setShowDeleteDialog(true);
-  };
-
   const handleCloseSegmentDialog = () => {
     setShowSegmentDialog(false);
     setSelectedSegment(null);
     setIsEditingSegment(false);
     segmentForm.reset();
-  };
-
-  const handleConfirmDeleteSegment = () => {
-    if (segmentToDelete) {
-      deleteSegmentMutation.mutate(segmentToDelete.id);
-    }
   };
 
   const columns = [
@@ -314,7 +274,7 @@ export default function CompanyPage() {
       ),
     },
   ];
-
+  
   const segmentColumns = [
     {
       accessorKey: "segment_name",
@@ -326,9 +286,6 @@ export default function CompanyPage() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => handleEditSegment(row.original)}>
             Edit
-          </Button>
-          <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteSegment(row.original)}>
-            Delete
           </Button>
         </div>
       ),
@@ -409,10 +366,15 @@ export default function CompanyPage() {
         </Card>
 
         {/* Company Dialog */}
-        <Dialog open={showDialog} onOpenChange={handleCloseDialog}>
+        <Dialog 
+          open={showDialog} 
+          onOpenChange={handleCloseDialog}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{isEditing ? 'Edit Company' : 'Add New Company'}</DialogTitle>
+              <DialogTitle>
+                {isEditing ? 'Edit Company' : 'Add New Company'}
+              </DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -471,7 +433,7 @@ export default function CompanyPage() {
                     </FormItem>
                   )}
                 />
-
+                
                 <FormField
                   control={form.control}
                   name="contact_person_phone"
@@ -479,7 +441,26 @@ export default function CompanyPage() {
                     <FormItem>
                       <FormLabel>Contact Person Phone</FormLabel>
                       <FormControl>
-                        <Input {...field} type="tel" />
+                        <Input 
+                          {...field} 
+                          type="tel" 
+                          maxLength={10}
+                          pattern="[0-9]{10}"
+                          onKeyDown={(e) => {
+                            // Allow only numeric input, backspace, delete, tab, arrows
+                            const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+                            if (!/[0-9]/.test(e.key) && !allowedKeys.includes(e.key)) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onChange={(e) => {
+                            // Strip any non-numeric characters on paste or input
+                            const value = e.target.value.replace(/[^0-9]/g, '');
+                            e.target.value = value;
+                            field.onChange(value);
+                          }}
+                          placeholder="10-digit phone number"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -510,7 +491,9 @@ export default function CompanyPage() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       <span>Processing...</span>
                     </div>
-                  ) : isEditing ? "Update Company" : "Create Company"}
+                  ) : (
+                    isEditing ? "Update Company" : "Create Company"
+                  )}
                 </Button>
               </form>
             </Form>
@@ -518,18 +501,26 @@ export default function CompanyPage() {
         </Dialog>
 
         {/* Segment Dialog */}
-        <Dialog open={showSegmentDialog} onOpenChange={handleCloseSegmentDialog}>
+        <Dialog 
+          open={showSegmentDialog} 
+          onOpenChange={handleCloseSegmentDialog}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{isEditingSegment ? 'Edit Segment' : 'Add New Segment'}</DialogTitle>
+              <DialogTitle>
+                {isEditingSegment ? 'Edit Segment' : 'Add New Segment'}
+              </DialogTitle>
             </DialogHeader>
             <Form {...segmentForm}>
-              <form onSubmit={segmentForm.handleSubmit((data) => {
-                segmentMutation.mutate({
-                  segment_name: data.segment_name,
-                  company_id: selectedSegment?.company_id || expandedCompany as number
-                });
-              })} className="space-y-4">
+              <form 
+                onSubmit={segmentForm.handleSubmit((data) => {
+                  segmentMutation.mutate({
+                    segment_name: data.segment_name,
+                    company_id: selectedSegment?.company_id || expandedCompany as number
+                  });
+                })} 
+                className="space-y-4"
+              >
                 <FormField
                   control={segmentForm.control}
                   name="segment_name"
@@ -554,40 +545,14 @@ export default function CompanyPage() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       <span>Processing...</span>
                     </div>
-                  ) : isEditingSegment ? "Update Segment" : "Create Segment"}
+                  ) : (
+                    isEditingSegment ? "Update Segment" : "Create Segment"
+                  )}
                 </Button>
               </form>
             </Form>
           </DialogContent>
         </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete the segment "{segmentToDelete?.segment_name}".
-                This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleConfirmDeleteSegment}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteSegmentMutation.isPending}
-              >
-                {deleteSegmentMutation.isPending ? (
-                  <div className="flex items-center">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    <span>Deleting...</span>
-                  </div>
-                ) : "Delete"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </AppLayout>
   );

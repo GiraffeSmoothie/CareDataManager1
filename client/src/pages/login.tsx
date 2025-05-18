@@ -43,7 +43,6 @@ export default function Login() {
       password: "",
     },
   });
-
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     try {
@@ -69,7 +68,15 @@ export default function Login() {
         description: "Successfully logged in",
         variant: "default",
       });
-      setLocation("/homepage");
+      
+      // Check if there's a redirect path stored from a session timeout
+      const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+      if (redirectPath) {
+        sessionStorage.removeItem('redirectAfterLogin');
+        setLocation(redirectPath);
+      } else {
+        setLocation("/homepage");
+      }
     } catch (error) {
       toast({
         title: "Error",

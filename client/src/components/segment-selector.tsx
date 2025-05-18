@@ -8,10 +8,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, Loader2, RefreshCcw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useQuery } from '@tanstack/react-query';
 
 export default function SegmentSelector() {
   const { segments, selectedSegment, setSelectedSegment, isLoading, error, refetchSegments } = useSegment();
+
+  console.log("SegmentSelector - Segments:", segments);
+  console.log("SegmentSelector - Selected Segment:", selectedSegment);
 
   if (isLoading) {
     return (
@@ -45,49 +47,12 @@ export default function SegmentSelector() {
         </Tooltip>
       </TooltipProvider>
     );
-  }
-  if (segments.length === 0) {
-    // Fetch auth status to check if user is admin
-    const { data: authData } = useQuery({
-      queryKey: ["authStatus"],
-      queryFn: async () => {
-        const response = await fetch('/api/auth/status', { 
-          credentials: 'include'
-        });
-        if (!response.ok) {
-          return { authenticated: false };
-        }
-        return response.json();
-      },
-    });
-
-    const isAdmin = authData?.user?.role === "admin";
-    
+  }  if (segments.length === 0) {
+    // For users with no segments (user has no company or company has no segments)
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
-              <span>No segments available</span>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6" 
-                onClick={() => refetchSegments()}
-              >
-                <RefreshCcw className="h-3 w-3" />
-              </Button>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isAdmin ? (
-              <p>Admin accounts need to be assigned to a company to access segments.</p>
-            ) : (
-              <p>No segments found for your account. Click to refresh.</p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className="text-sm text-muted-foreground">
+        No segments available
+      </div>
     );
   }
 
