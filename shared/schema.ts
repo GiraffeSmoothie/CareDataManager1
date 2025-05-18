@@ -179,9 +179,8 @@ export const insertClientServiceSchema = z.object({
   }),
   serviceStartDate: z.string({
     required_error: "Start date is required",
-  }),
-  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
-  serviceHours: z.number().min(1).max(24),
+  }),  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
+  serviceHours: z.number().min(0.5).max(24),
   status: z.string().optional(),
   createdBy: z.number().optional(),
   createdAt: z.date().optional()

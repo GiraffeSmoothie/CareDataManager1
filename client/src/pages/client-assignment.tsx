@@ -25,13 +25,12 @@ const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
   careCategory: z.string().min(1, "Service category is required"),
   careType: z.string().min(1, "Service type is required"),
-  serviceProvider: z.string().min(1, "Service provider is required"),
-  serviceStartDate: z.string().min(1, "Start date is required"),
+  serviceProvider: z.string().min(1, "Service provider is required"),  serviceStartDate: z.string().min(1, "Start date is required"),
   serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
   serviceHours: z.string().min(1, "Hours per day is required").refine(val => {
-    const hours = parseInt(val);
-    return !isNaN(hours) && hours >= 1 && hours <= 24;
-  }, "Hours must be between 1 and 24")
+    const hours = parseFloat(val);
+    return !isNaN(hours) && hours > 0 && hours <= 24;
+  }, "Hours must be between 0 and 24, and can include decimal values like 2.5")
 });
 
 type ClientAssignmentFormValues = z.infer<typeof clientAssignmentSchema>;
@@ -287,15 +286,14 @@ export default function ClientAssignment() {
         // Ignore error if master data already exists
         console.log("Master data may already exist:", error);
       }
-      
-      const serviceData = {
+        const serviceData = {
         clientId: parseInt(selectedClient.id.toString()),
         serviceCategory: data.careCategory,
         serviceType: data.careType,
         serviceProvider: data.serviceProvider,
         serviceStartDate: data.serviceStartDate,
         serviceDays: data.serviceDays,
-        serviceHours: parseInt(data.serviceHours),
+        serviceHours: parseFloat(data.serviceHours),
         status: "Planned",
         segmentId: selectedSegment?.id || null
       };
@@ -673,14 +671,13 @@ export default function ClientAssignment() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
+                  <FormField                    control={form.control}
                     name="serviceHours"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Service Hours</FormLabel>
                         <FormControl>
-                          <Input {...field} type="number" min="1" max="24" placeholder="Number of hours per day" />
+                          <Input {...field} type="number" min="0.5" max="24" step="0.5" placeholder="Number of hours per day (can use decimals)" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
