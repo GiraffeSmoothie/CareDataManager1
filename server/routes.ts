@@ -1224,8 +1224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {object} Created client service record
    * @throws {ApiError} 400 - If validation fails
    * @throws {ApiError} 401 - If user is not authenticated
-   */
-  app.post("/api/client-services", async (req: Request, res: Response) => {
+   */  app.post("/api/client-services", async (req: Request, res: Response) => {
     try {
       if (!req.session?.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -1233,12 +1232,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("[API] Received client service data:", req.body);
       
-      const validatedData = insertClientServiceSchema.parse({
+      // Ensure segmentId is explicitly handled
+      const requestData = {
         ...req.body,
+        segmentId: req.body.segmentId === undefined ? null : req.body.segmentId,
         createdBy: req.session.user.id
-      });
+      };
       
+      const validatedData = insertClientServiceSchema.parse(requestData);
       console.log("[API] Validated client service data:", validatedData);
+      
+      // Verify that the master data combination exists
+      const exists = await dbStorage.checkMasterDataExists(
+        validatedData.serviceCategory,
+        validatedData.serviceType,
+        validatedData.serviceProvider,
+        validatedData.segmentId
+      );
+      
+      if (!exists) {
+        return res.status(400).json({ 
+          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
+        });
+      }
       
       const clientServiceWithUser = {
         ...validatedData,
@@ -1954,6 +1970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {object} req.body - Segment data including segment_name and company_id
    * @returns {object} Created segment record
    * @throws {ApiError} 400 - If segment name or company ID are missing
+   * @throws {ApiError} 401 - If user is not authenticated
    */
   app.post("/api/segments", authMiddleware, async (req: Request, res: Response) => {
     // Type assertion for authenticated user
@@ -2084,6 +2101,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });
+    }
+  });
+  
+  /**
+   * Verify master data existence endpoint
+   * 
+   * Verifies that a specific combination of service category, type, and provider exists in the master data.
+   * Used to validate service assignments before creating a client service record.
+   * 
+   * @route GET /api/master-data/verify
+   * @param {string} req.query.category - Service category to verify
+   * @param {string} req.query.type - Service type to verify
+   * @param {string} req.query.provider - Service provider to verify
+   * @param {string} [req.query.segmentId] - Optional segment ID to check against
+   * @returns {object} Success or error message
+   */
+  app.get("/api/master-data/verify", async (req: Request, res: Response) => {
+    try {
+      const { category, type, provider, segmentId } = req.query;
+      
+      if (!category || !type || !provider) {
+        return res.status(400).json({ message: "Missing required parameters: category, type, and provider are required" });
+      }
+      
+      // Check if the master data combination exists
+      const exists = await dbStorage.checkMasterDataExists(
+        category as string, 
+        type as string, 
+        provider as string,
+        segmentId ? parseInt(segmentId as string) : undefined
+      );
+      
+      if (!exists) {
+        return res.status(404).json({ 
+          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
+        });
+      }
+      
+      return res.status(200).json({ 
+        success: true, 
+        message: "Service combination exists in master data" 
+      });
+    } catch (error) {
+      console.error("Error verifying master data:", error);
+      return res.status(500).json({ message: "Failed to verify master data" });
     }
   });
 

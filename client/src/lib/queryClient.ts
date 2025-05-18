@@ -1,7 +1,50 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Session timeout handling
+let isRedirectingToLogin = false;
+const handleSessionTimeout = () => {
+  if (!isRedirectingToLogin && typeof window !== 'undefined') {
+    isRedirectingToLogin = true;
+    
+    // Store the current URL to redirect back after login
+    const currentPath = window.location.pathname;
+    if (currentPath !== '/login') {
+      sessionStorage.setItem('redirectAfterLogin', currentPath);
+      
+      // Show toast notification instead of an alert
+      // We can use a temporary div for notification if toast system isn't available
+      const notificationDiv = document.createElement('div');
+      notificationDiv.style.position = 'fixed';
+      notificationDiv.style.top = '20px';
+      notificationDiv.style.right = '20px';
+      notificationDiv.style.background = 'rgb(239, 68, 68)';
+      notificationDiv.style.color = 'white';
+      notificationDiv.style.padding = '12px 16px';
+      notificationDiv.style.borderRadius = '4px';
+      notificationDiv.style.zIndex = '9999';
+      notificationDiv.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+      notificationDiv.innerText = 'Your session has expired. Please log in again.';
+      
+      document.body.appendChild(notificationDiv);
+      
+      setTimeout(() => {
+        // Redirect to login page after a short delay to show the notification
+        window.location.href = '/login';
+      }, 1500);
+    } else {
+      // Already on login page, just reset the flag
+      isRedirectingToLogin = false;
+    }
+  }
+};
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Handle unauthorized (session timeout) specially
+    if (res.status === 401) {
+      handleSessionTimeout();
+    }
+    
     try {
       const errorData = await res.json();
       throw new Error(errorData.message || `${res.status}: ${res.statusText}`);
@@ -30,7 +73,6 @@ export async function apiRequest(
       body = JSON.stringify(data);
     }
   }
-
   const response = await fetch(url, {
     method,
     headers,
@@ -42,6 +84,12 @@ export async function apiRequest(
   const responseClone = response.clone();
   
   if (!response.ok) {
+    // Check for unauthorized error (session timeout)
+    if (response.status === 401) {
+      handleSessionTimeout();
+      throw new Error('Your session has expired. Please log in again.');
+    }
+    
     try {
       const errorData = await responseClone.json();
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -70,8 +118,14 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      } else {
+        // This will only trigger for endpoints that aren't auth related
+        // For auth status checks, we use "returnNull" behavior
+        handleSessionTimeout();
+      }
     }
 
     await throwIfResNotOk(res);

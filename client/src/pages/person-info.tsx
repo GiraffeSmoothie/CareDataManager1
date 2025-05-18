@@ -40,9 +40,11 @@ import { cn } from "../lib/utils";
 // Extend the schema with validation
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
     .refine((date) => {
-      const parsedDate = new Date(date);
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
       return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
     }, "Please enter a valid date that is not in the future"),
   email: z.string()

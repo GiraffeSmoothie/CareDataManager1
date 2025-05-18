@@ -122,13 +122,20 @@ export const insertUserSchema = z.object({
 });
 
 export const insertPersonInfoSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  firstName: z.string().min(1, "First name is required"),
+  title: z.string().min(1, "Title is required"),  firstName: z.string().min(1, "First name is required"),
   middleName: z.string().optional().default(""),
   lastName: z.string().min(1, "Last name is required"),
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
-    .refine((date) => !isNaN(Date.parse(date)), "Invalid date format"),
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
+    .refine((date) => {
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return !isNaN(parsedDate.getTime()) && 
+        parsedDate.getDate() === day &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getFullYear() === year;
+    }, "Invalid date format"),
   email: z.string().email("Invalid email address"),
   homePhone: z.string().optional(),
   mobilePhone: z.string(),
@@ -175,15 +182,17 @@ export const insertClientServiceSchema = z.object({
     required_error: "Service Type is required",
   }),
   serviceProvider: z.string({
-    required_error: "Service Provider is required",
-  }),
+    required_error: "Service Provider is required",  }),
   serviceStartDate: z.string({
     required_error: "Start date is required",
   }),  serviceDays: z.array(z.string()).min(1, "At least one service day is required"),
-  serviceHours: z.number().min(0.5).max(24),
+  serviceHours: z.number().refine(val => val >= 0.5 && val <= 24, {
+    message: "Service hours must be between 0.5 and 24"
+  }),
   status: z.string().optional(),
   createdBy: z.number().optional(),
-  createdAt: z.date().optional()
+  createdAt: z.date().optional(),
+  segmentId: z.number().optional().nullable()
 });
 
 export const insertServiceCaseNoteSchema = z.object({
@@ -206,7 +215,9 @@ export const insertCompanySchema = z.object({
   registered_address: z.string().min(1, "Registered address is required"),
   postal_address: z.string().min(1, "Postal address is required"),
   contact_person_name: z.string().min(1, "Contact person name is required"),
-  contact_person_phone: z.string().min(1, "Contact person phone is required"),
+  contact_person_phone: z.string()
+    .min(1, "Contact person phone is required")
+    .regex(/^\d{10}$/, "Phone number must be exactly 10 digits without any symbols"),
   contact_person_email: z.string().email("Invalid email address"),
   created_by: z.number().optional()
 });

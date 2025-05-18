@@ -173,16 +173,15 @@ export function CaseNotesModal({
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {service ? `Case Notes - ${service.serviceCategory} (${service.serviceType})` : 'Service Case Notes'}
           </DialogTitle>
           <DialogDescription>
-            View existing case notes and add new notes for this service.
+            Add new notes and view existing case notes for this service.
           </DialogDescription>
         </DialogHeader>
 
@@ -193,9 +192,20 @@ export function CaseNotesModal({
           />
         )}
 
-        <div className="grid gap-4 py-4">
-          {/* Display existing case notes */}
+        <div className="grid gap-4 py-4 overflow-y-auto flex-grow">
+          {/* Add new case note - moved to top */}
           <div className="space-y-2">
+            <Label htmlFor="case-notes">Add New Case Note</Label>
+            <Textarea
+              id="case-notes"
+              ref={textareaRef}
+              placeholder="Enter case notes here..."
+              className="min-h-[120px]"
+            />
+          </div>
+
+          {/* Display existing case notes - moved to bottom */}
+          <div className="space-y-2 pt-4 border-t">
             <h3 className="font-medium">Existing Case Notes</h3>
             {isLoadingNotes ? (
               <div className="flex justify-center p-4">
@@ -217,20 +227,9 @@ export function CaseNotesModal({
               <p className="text-gray-500 text-sm italic">No case notes yet.</p>
             )}
           </div>
-
-          {/* Add new case note */}
-          <div className="space-y-2 pt-4 border-t">
-            <Label htmlFor="case-notes">Add New Case Note</Label>
-            <Textarea
-              id="case-notes"
-              ref={textareaRef}
-              placeholder="Enter case notes here..."
-              className="min-h-[120px]"
-            />
-          </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 bg-white pt-2 border-t">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button onClick={handleSubmit} disabled={isLoading}>
             {isLoading ? (

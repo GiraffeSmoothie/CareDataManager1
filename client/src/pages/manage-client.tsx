@@ -47,21 +47,36 @@ import {
 
 const personInfoSchema = insertPersonInfoSchema.extend({
   dateOfBirth: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
     .refine((date) => {
-      const parsedDate = new Date(date);
-      return !isNaN(parsedDate.getTime()) && parsedDate <= new Date();
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return !isNaN(parsedDate.getTime()) && 
+        parsedDate.getDate() === day &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getFullYear() === year &&
+        parsedDate <= new Date();
     }, "Please enter a valid date that is not in the future"),
   middleName: z.string().optional().or(z.literal("")),
   homePhone: z.string().optional().or(z.literal("")),
   addressLine2: z.string().optional().or(z.literal("")),
   addressLine3: z.string().optional().or(z.literal("")),
   nextOfKinEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
-  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
-  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
+  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
   nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
   hcpLevel: z.string().min(1, "HCP Level is required"),
-  hcpStartDate: z.string().min(1, "HCP Start Date is required"),
+  hcpStartDate: z.string()
+    .regex(/^\d{2}-\d{2}-\d{4}$/, "Date must be in DD-MM-YYYY format")
+    .refine((date) => {
+      // Parse DD-MM-YYYY format
+      const [day, month, year] = date.split('-').map(Number);
+      const parsedDate = new Date(year, month - 1, day);
+      return !isNaN(parsedDate.getTime()) &&        parsedDate.getDate() === day &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getFullYear() === year &&
+        parsedDate <= new Date();
+    }, "Please enter a valid date that is not in the future"),
   status: z.enum(["New", "Active", "Paused", "Closed"]).default("New"),
   segmentId: z.number().nullable().optional()
 });
@@ -240,10 +255,35 @@ export default function ManageClient() {
         variant: "destructive",
       });
     },
-  });
-
-  const onSubmit = (data: PersonInfoFormValues) => {
+  });  const onSubmit = (data: PersonInfoFormValues) => {
     console.log("Form submitted:", data, "isEditing:", isEditing, "selectedMember:", selectedMember);
+    
+    // Function to convert dates from DD-MM-YYYY to YYYY-MM-DD for server
+    const convertDateFormat = (dateString: string): string => {
+      try {
+        // Parse the DD-MM-YYYY format
+        const [day, month, year] = dateString.split('-').map(Number);
+        
+        // Check if valid date parts
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          // Format as YYYY-MM-DD for server
+          return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        }
+      } catch (error) {
+        console.error("Error converting date format:", error);
+      }
+      return dateString; // Return original if conversion failed
+    };
+    
+    // Convert dates from DD-MM-YYYY to YYYY-MM-DD for server
+    if (data.dateOfBirth) {
+      data.dateOfBirth = convertDateFormat(data.dateOfBirth);
+    }
+    
+    if (data.hcpStartDate) {
+      data.hcpStartDate = convertDateFormat(data.hcpStartDate);
+    }
+    
     mutation.mutate(data);
   };
 
@@ -253,9 +293,7 @@ export default function ManageClient() {
   // Filter clients based on search term and active status
   const filteredClients = clients.filter(client => 
     !hideInactiveClients || (client.status !== "Closed" && client.status !== "Paused")
-  );
-
-  // Handle edit client
+  );  // Handle edit client
   const handleEdit = (client: PersonInfo) => {
     setSelectedMember(client);
     setIsEditing(true);
@@ -265,7 +303,25 @@ export default function ManageClient() {
     // Populate form with client data
     Object.entries(client).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'createdBy') {
-        form.setValue(key as any, value || "");
+        // Convert date from YYYY-MM-DD to DD-MM-YYYY format for date fields
+        if ((key === 'dateOfBirth' || key === 'hcpStartDate') && value && typeof value === 'string') {
+          try {
+            // Input is in YYYY-MM-DD format
+            const dateParts = value.split('-');
+            if (dateParts.length === 3) {
+              // Convert to DD-MM-YYYY
+              const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+              form.setValue(key as any, formattedDate);
+            } else {
+              form.setValue(key as any, value || "");
+            }
+          } catch (error) {
+            console.error(`Error formatting date (${key}):`, error);
+            form.setValue(key as any, value || "");
+          }
+        } else {
+          form.setValue(key as any, value || "");
+        }
       }
     });
   };
@@ -497,17 +553,26 @@ export default function ManageClient() {
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
-                    <FormField
+                    />                    <FormField
                       control={form.control}
                       name="dateOfBirth"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Date of Birth</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input 
+                              placeholder="DD-MM-YYYY" 
+                              {...field} 
+                              onChange={(e) => {
+                                // Allow user to type the date manually in DD-MM-YYYY format
+                                field.onChange(e);
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Format: DD-MM-YYYY (e.g., 01-01-2000)
+                          </p>
                         </FormItem>
                       )}
                     />
@@ -827,17 +892,26 @@ export default function ManageClient() {
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
-                    <FormField
+                    />                    <FormField
                       control={form.control}
                       name="hcpStartDate"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>HCP Start Date</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input 
+                              placeholder="DD-MM-YYYY" 
+                              {...field} 
+                              onChange={(e) => {
+                                // Allow user to type the date manually in DD-MM-YYYY format
+                                field.onChange(e);
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Format: DD-MM-YYYY (e.g., 01-01-2023)
+                          </p>
                         </FormItem>
                       )}
                     />

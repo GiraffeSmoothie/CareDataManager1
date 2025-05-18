@@ -183,7 +183,11 @@ function handleDatabaseError(error: any, operation: string): never {
     throw new Error('Duplicate entry found');
   }
   if (error.code === '23503') { // Foreign key violation
-    throw new Error('Referenced record not found');
+    if (operation === 'createClientService') {
+      throw new Error('The selected service combination does not exist in the master data. Please create it in the Master Data section first.');
+    } else {
+      throw new Error('Referenced record not found');
+    }
   }
   throw new Error(`Database error during ${operation}`);
 }
@@ -1197,8 +1201,7 @@ export class Storage {
    * @param {number} [segmentId] - Optional segment ID to filter services
    * @returns {Promise<ClientService[]>} Array of client service records
    * @throws {Error} If database query fails
-   */
-  async getClientServicesByClientId(clientId: number, segmentId?: number): Promise<ClientService[]> {
+   */  async getClientServicesByClientId(clientId: number, segmentId?: number): Promise<ClientService[]> {
     try {
       let queryText = `
         SELECT cs.*, p.first_name, p.last_name 
@@ -1209,11 +1212,14 @@ export class Storage {
       const params = [clientId];
 
       if (segmentId !== undefined) {
+        // Improved segment filtering to be more explicit
         queryText += ' AND (cs.segment_id = $2 OR cs.segment_id IS NULL)';
+        console.log("[Storage] Filtering client services by segmentId:", segmentId);
         params.push(segmentId);
       }
 
       queryText += ' ORDER BY cs.created_at DESC';
+      console.log("[Storage] getClientServicesByClientId query:", queryText, "params:", params);
 
       const result = await this.pool.query(queryText, params);
       return result.rows.map(row => ({
@@ -1286,8 +1292,7 @@ export class Storage {
    * @param {number} [data.segmentId] - Segment ID this service belongs to
    * @returns {Promise<ClientService>} Created client service record
    * @throws {Error} If database insertion fails
-   */
-  async createClientService(data: any): Promise<ClientService> {
+   */  async createClientService(data: any): Promise<ClientService> {
     try {
       const {
         clientId,
@@ -1302,6 +1307,12 @@ export class Storage {
         createdAt,
         segmentId
       } = data;
+
+      console.log("[Storage] Creating client service with segmentId:", segmentId);
+      
+      // Ensure segmentId is explicitly null if undefined or empty string
+      const normalizedSegmentId = segmentId === undefined || segmentId === '' ? null : segmentId;
+      console.log("[Storage] Normalized segmentId value:", normalizedSegmentId);
 
       const result = await this.pool.query(
         `INSERT INTO client_services (
@@ -1319,7 +1330,7 @@ export class Storage {
           status || 'Planned',
           createdBy,
           createdAt || new Date(),
-          segmentId
+          normalizedSegmentId
         ]
       );
 
@@ -1803,6 +1814,46 @@ export class Storage {
     } catch (error) {
       handleDatabaseError(error, 'deleteSegment');
       throw error;
+    }
+  }
+  /**
+   * Check if master data exists
+   * 
+   * Verifies if a service with specified category, type, and provider exists.
+   * Used before creating client services to ensure only valid combinations are used.
+   * 
+   * @param {string} serviceCategory - Service category to check
+   * @param {string} serviceType - Service type to check
+   * @param {string} serviceProvider - Service provider to check
+   * @param {number} [segmentId] - Optional segment ID to filter by
+   * @returns {Promise<boolean>} True if the combination exists, false otherwise
+   * @throws {Error} If database query fails
+   */
+  async checkMasterDataExists(
+    serviceCategory: string, 
+    serviceType: string, 
+    serviceProvider: string,
+    segmentId?: number
+  ): Promise<boolean> {
+    try {
+      let query = `
+        SELECT COUNT(*) FROM master_data 
+        WHERE service_category = $1 
+          AND service_type = $2 
+          AND service_provider = $3
+      `;
+      
+      const params = [serviceCategory, serviceType, serviceProvider];
+        if (segmentId !== undefined) {
+        // Match records with exactly this segment ID or with NULL segment_id
+        query += ` AND (segment_id = $4 OR segment_id IS NULL)`;
+        params.push(segmentId.toString());
+      }
+      
+      const result = await this.pool.query(query, params);
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      handleDatabaseError(error, 'checkMasterDataExists');
     }
   }
 }
