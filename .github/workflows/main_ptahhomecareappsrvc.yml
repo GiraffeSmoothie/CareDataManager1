@@ -51,6 +51,17 @@ jobs:
         with:
           name: node-app
 
+      - name: Clean up existing files
+        shell: bash
+        run: |
+          CREDENTIALS=`echo "${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AFFED23A0AFD4B33BCB18D03F653A21E }}" | base64`
+          SITE_URL="https://ptahhomecareappsrvc.scm.azurewebsites.net/api/command"
+          echo "Cleaning up wwwroot directory..."
+          curl -X POST -H "Authorization: Basic $CREDENTIALS" \
+               -H "Content-Type: application/json" \
+               -d '{"command": "rm -rf /home/site/wwwroot/*"}' \
+               "$SITE_URL"
+
       - name: Unzip artifact for deployment
         run: unzip release.zip
       
