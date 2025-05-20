@@ -61,4 +61,5 @@ jobs:
           app-name: 'Ptahhomecareappsrvc'
           slot-name: 'Production'
           package: .
+          clean: true  # This ensures old files are removed before deployment
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_42F89B5BE2284501B61F6A70F99050FA }}
