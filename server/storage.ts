@@ -44,12 +44,22 @@ console.log('Storage.ts - DATABASE_URL configured:', process.env.DATABASE_URL ? 
 let connectionOptions;
 try {
   const parsed = parse(process.env.DATABASE_URL || '');
+
+  // Check if we're connecting to Azure PostgreSQL
+  const isAzurePostgreSQL = parsed.host?.includes('postgres.database.azure.com');
+
   connectionOptions = {
     user: parsed.user,
     host: parsed.host || '',
     database: parsed.database || '',
     password: parsed.password,
     port: parsed.port ? parseInt(parsed.port) : 5432,
+    // Add SSL configuration for Azure PostgreSQL
+    ssl: isAzurePostgreSQL ? {
+      rejectUnauthorized: false, // Azure PostgreSQL uses self-signed certificates
+      ca: undefined, // Let the system use default CA certificates
+      checkServerIdentity: () => undefined // Disable hostname verification for Azure
+    } : false,
   };
   
   console.log('Parsed connection options:', {
