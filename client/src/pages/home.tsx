@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { useState } from "react";
 import { type PersonInfo } from "@shared/schema";
@@ -24,16 +25,11 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState("dashboard");
-
-  const { data: persons, isLoading: isLoadingPersons, error: personsError } = useQuery<PersonInfo[]>({
+  const [activeTab, setActiveTab] = useState("dashboard");  const { data: persons, isLoading: isLoadingPersons, error: personsError } = useQuery<PersonInfo[]>({
     queryKey: ["persons"],
     queryFn: async () => {
-      const response = await fetch("/api/persons");
-      if (!response.ok) {
-        throw new Error(`Error fetching persons: ${response.status}`);
-      }
-      return response.json();
+      const response = await apiRequest("GET", "/api/persons");
+      return await response.json();
     }
   });
 
@@ -46,16 +42,11 @@ export default function Home() {
     serviceProvider: string;
     documents: any[];
     [key: string]: any;
-  }
-
-  const { data: services, isLoading: isLoadingServices, error: servicesError } = useQuery<MemberService[]>({
+  }  const { data: services, isLoading: isLoadingServices, error: servicesError } = useQuery<MemberService[]>({
     queryKey: ["services"],
     queryFn: async () => {
-      const response = await fetch("/api/services");
-      if (!response.ok) {
-        throw new Error(`Error fetching services: ${response.status}`);
-      }
-      return response.json();
+      const response = await apiRequest("GET", "/api/services");
+      return await response.json();
     }
   });
   // Form removed - not needed for dashboard functionality

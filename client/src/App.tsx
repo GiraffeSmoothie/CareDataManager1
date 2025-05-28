@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
@@ -19,6 +19,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from "./lib/queryClient";
 import { Loader2 } from "lucide-react";
+import { TokenStorage } from "./lib/token-storage";
 
 interface AuthData {
   authenticated: boolean;
@@ -34,19 +35,20 @@ function PrivateRoute({ component: Component, ...rest }: any) {
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    // Check if the user is authenticated
+    // Check if the user is authenticated using JWT tokens
     const checkAuth = async () => {
       try {
-        const response = await fetch("/api/auth/status", {
-          credentials: "include",
-        });
-        if (response.ok) {
-          setIsAuthenticated(true);
-        } else {
+        // First check if we have tokens stored
+        if (!TokenStorage.hasTokens()) {
           setIsAuthenticated(false);
           setLocation("/login");
-        }
+          return;
+        }        // Verify token with server
+        await apiRequest("GET", "/api/auth/status");
+        setIsAuthenticated(true);
       } catch (error) {
+        // On any error, clear tokens and redirect to login
+        TokenStorage.clearTokens();
         setIsAuthenticated(false);
         setLocation("/login");
       }

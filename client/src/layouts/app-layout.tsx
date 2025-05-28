@@ -1,106 +1,148 @@
 import { ReactNode } from "react";
 import { useLocation, Link } from "wouter";
-import { Heart, Database, Users, Link2, FileText } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { 
+  Heart, 
+  Database, 
+  Users, 
+  Link2, 
+  FileText, 
+  Home,
+  Settings,
+  Building2
+} from "lucide-react";
 import UserNav from "@/components/user-nav";
 import SegmentSelector from "@/components/segment-selector";
-import { cn } from "../lib/utils";
+import { 
+  SidebarProvider, 
+  Sidebar, 
+  SidebarContent, 
+  SidebarHeader, 
+  SidebarMenu, 
+  SidebarMenuButton, 
+  SidebarMenuItem, 
+  SidebarTrigger,
+  SidebarInset
+} from "@/components/ui/sidebar";
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
+const navigationItems = [
+  {
+    title: "Homepage",
+    url: "/homepage",
+    icon: Home,
+  },
+  {
+    title: "Client Details",
+    url: "/manage-client",
+    icon: Users,
+  },
+  {
+    title: "Client Services",
+    url: "/client-assignment",
+    icon: Link2,
+  },
+  {
+    title: "Client Documents",
+    url: "/document-upload",
+    icon: FileText,
+  },  {
+    title: "Services Inventory",
+    url: "/master-data",
+    icon: Database,
+  },
+  {
+    title: "Companies",
+    url: "/company",
+    icon: Building2,
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings,
+  },
+];
+
 export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   
+  // Fetch auth data to determine user role
+  const { data: authData } = useQuery({
+    queryKey: ["authStatus"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/auth/status");
+      return res.json();
+    }
+  });
+
+  const userRole = authData?.user?.role;
+  
+  // Filter navigation items based on user role
+  const filteredNavigationItems = navigationItems.filter(item => {
+    // Show Companies menu only for admin users
+    if (item.url === "/company") {
+      return userRole === "admin";
+    }
+    // Show all other items for all users
+    return true;
+  });
+  
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Header */}
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="container mx-auto px-4 md:px-6 lg:px-8 flex h-16 items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Heart className="text-primary h-6 w-6" />
-              <span className="text-xl font-semibold">Care System</span>
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar variant="inset">
+          <SidebarHeader className="border-b border-sidebar-border">
+            <div className="flex items-center gap-2 px-4 py-2">
+              <Heart className="text-primary h-8 w-8" />
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-sidebar-foreground">CareTrackAU</span>
+                <span className="text-xs text-muted-foreground">Care Management</span>
+              </div>
             </div>
-            
-            <div className="ml-4">
+          </SidebarHeader>          <SidebarContent className="px-2">
+            <SidebarMenu>
+              {filteredNavigationItems.map((item) => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarContent>
+        </Sidebar>
+        
+        <SidebarInset>
+          {/* Enhanced Header */}
+          <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex items-center gap-2 px-4">
+              <SidebarTrigger className="-ml-1" />
+              <div className="h-4 w-px bg-sidebar-border" />
               <SegmentSelector />
             </div>
-          </div>
+            <div className="ml-auto px-4">
+              <UserNav />
+            </div>
+          </header>
           
-          <UserNav />
-        </div>
-      </header>
-
-      {/* Navigation */}
-      <nav className="bg-white border-b">
-        <div className="container mx-auto px-4 md:px-6 lg:px-8">
-          <div className="flex space-x-4 overflow-x-auto">
-            <Link href="/homepage">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/homepage"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-gray-600"
-              )}>
-                <Heart className="h-4 w-4" />
-                <span>Homepage</span>
-              </div>
-            </Link>
-                        <Link href="/manage-client">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/manage-client" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Users className="h-4 w-4" />
-                <span>Client Details</span>
-              </div>
-            </Link>
-            <Link href="/client-assignment">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/client-assignment" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Link2 className="h-4 w-4" />
-                <span>Client Services</span>
-              </div>
-            </Link>
-            <Link href="/document-upload">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/document-upload" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <FileText className="h-4 w-4" />
-                <span>Client Documents</span>
-              </div>
-            </Link>
-            <Link href="/master-data">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors cursor-pointer hover:text-primary",
-                location === "/master-data" 
-                  ? "border-primary text-primary" 
-                  : "border-transparent text-gray-600"
-              )}>
-                <Database className="h-4 w-4" />
-                <span>Services Inventory</span>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </nav>
-      
-      {/* Main Content */}
-      <main className="flex-1 bg-gray-50">
-        <div className="container mx-auto px-4 md:px-6 lg:px-8 py-8">
-          {children}
-        </div>
-      </main>
-    </div>
+          {/* Enhanced Main Content */}
+          <main className="flex-1 overflow-auto">
+            <div className="container mx-auto p-6 space-y-6">
+              {children}
+            </div>
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }

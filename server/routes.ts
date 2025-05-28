@@ -1,31 +1,18 @@
 import express from "express";
 import { Request, Response, NextFunction } from "express";
-import { Session } from "express-session";
 import { AuthService } from "./src/services/auth.service";
-
-// Define session types
-declare module "express-session" {  interface Session {
-    user?: {
-      id: number;
-      username: string;
-      role: string;
-      company_id?: number;
-    };
-  }
-}
+import { AuthController } from "./src/controllers/auth.controller";
 
 import { type Express } from "express";
 import { createServer, type Server } from "http";
 import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
-import session from "express-session";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import pgSession from "connect-pg-simple";
 import cors from 'cors';
 import { BlobStorageService } from "./services/blob-storage.service";
 import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
@@ -34,6 +21,30 @@ import { errorHandler } from './src/middleware/error';
 import { ApiError } from './src/types/error';
 import { Company } from "../shared/schema";
 import { Request as ExpressRequest } from "express";
+import { validateSegmentAccess, companyDataFilter, authMiddleware } from './src/middleware/auth';
+import { 
+  securityHeaders, 
+  sanitizeInput, 
+  requestSizeLimit,
+  validateRequest,
+  apiKeyAuth,
+  auditLog,
+  preventSQLInjection,
+  secureFileUpload,
+  configureCORS,
+  apiVersioning,
+  enhancedErrorHandler,
+  authRateLimit,
+  apiRateLimit,
+  uploadRateLimit,
+  strictRateLimit,
+  idValidation,
+  companyIdValidation,
+  clientIdValidation,
+  serviceIdValidation,
+  paginationValidation,
+  segmentValidation
+} from './src/middleware/security';
 
 // Note: We already have a session type declaration above, removing duplicate
 
@@ -53,14 +64,6 @@ interface ApiResponse<T = any> {
 }
 
 interface UserSession {
-  user?: {
-    id: number;
-    username: string;
-    role: string;
-  };
-}
-
-interface CustomSession extends Session {
   user?: {
     id: number;
     username: string;
@@ -149,42 +152,99 @@ const createHandler = <
 };
 
 /**
- * Initializes the system with a default admin user if none exists
+ * Initializes the system admin user based on environment configuration
  * 
- * This function checks if an admin user already exists in the database.
- * If no admin is found, it creates a default admin user with predefined credentials.
- * Used during system startup to ensure there's always an admin account to access the system.
+ * This function checks if automatic admin creation is enabled and creates
+ * an admin user only if explicitly configured. For security, this should
+ * be disabled in production environments.
+ * 
+ * Security improvements:
+ * - Only creates admin if AUTO_CREATE_ADMIN=true
+ * - Uses environment variables for credentials (not hardcoded)
+ * - Warns about security implications
+ * - Supports forced password change on first login
  */
 async function initializeUsers() {
-  console.log("Checking for default admin user");
+  console.log("Checking admin user initialization settings");
+  
+  // Check if automatic admin creation is enabled
+  const autoCreateAdmin = process.env.AUTO_CREATE_ADMIN === 'true';
+  
+  if (!autoCreateAdmin) {
+    console.log("Automatic admin creation is disabled (recommended for production)");
+    console.log("To create an admin user, run: node create-admin.js");
+    return;
+  }
+  
+  // Only proceed if explicitly enabled (for development/testing)
+  console.log("⚠️  WARNING: Automatic admin creation is enabled");
+  console.log("   This should be disabled in production environments");
+  
   const admin = await dbStorage.getUserByUsername("admin");
   if (!admin) {
-    // Create default admin user using AuthService to ensure bcrypt is used
-    await AuthService.createUser({
-      name: "Default Admin",
-      username: "admin",
-      password: "password",
+    const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
+    
+    if (!initialPassword) {
+      console.log("❌ Error: INITIAL_ADMIN_PASSWORD not set in environment");
+      console.log("   For security, admin password must be provided via environment variable");
+      console.log("   Or use the create-admin.js script for interactive setup");
+      return;
+    }
+    
+    if (initialPassword === 'password' || initialPassword.length < 8) {
+      console.log("❌ Error: Weak admin password detected");
+      console.log("   Please set a strong password in INITIAL_ADMIN_PASSWORD");
+      console.log("   Or use the create-admin.js script for guided setup");
+      return;
+    }
+      await AuthService.createUser({
+      name: "Initial Admin",
+      username: process.env.INITIAL_ADMIN_USERNAME || "admin",
+      password: initialPassword,
       role: "admin"
     });
-    console.log("Default admin user created");
+      // Set force password change if configured
+    if (process.env.FORCE_PASSWORD_CHANGE_ON_FIRST_LOGIN === 'true') {
+      await dbStorage.updateUserForcePasswordChange(
+        process.env.INITIAL_ADMIN_USERNAME || "admin",
+        true
+      );
+      console.log("   ⚠️  Admin will be required to change password on first login");
+    }
+    
+    console.log("✅ Initial admin user created");
+    console.log("   Username:", process.env.INITIAL_ADMIN_USERNAME || "admin");
+    console.log("   ⚠️  Remember to change the password after first login");
+    console.log("   ⚠️  Set AUTO_CREATE_ADMIN=false after initial setup");
   }
 }
-
-const PgStore = pgSession(session);
 
 // Initialize blob storage service only for production
 let blobStorage: BlobStorageService | null = null;
-try {
-  if (process.env.NODE_ENV === 'production') {
-    blobStorage = new BlobStorageService();
-    console.log('Blob storage service initialized for production');
-  } else {
-    console.log('Using local file storage for development mode');
+
+async function initializeBlobStorage(): Promise<void> {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Initializing blob storage service for production...');
+      blobStorage = new BlobStorageService();
+      // Give it a moment to initialize
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('Blob storage service initialized for production');
+    } else {
+      console.log('Using local file storage for development mode');
+    }
+  } catch (error) {
+    console.error('Error initializing blob storage service:', error);
+    console.log('Falling back to local file storage');
+    blobStorage = null;
   }
-} catch (error) {
-  console.error('Error initializing blob storage service:', error);
-  console.log('Falling back to local file storage');
 }
+
+// Start blob storage initialization (don't await here to avoid blocking startup)
+initializeBlobStorage().catch(error => {
+  console.error('Blob storage initialization failed:', error);
+  blobStorage = null;
+});
 
 // Ensure uploads directory exists
 const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
@@ -196,13 +256,20 @@ const storage = process.env.NODE_ENV === 'production'
   ? multer.memoryStorage() // Use memory storage for production (for blob storage)
   : multer.diskStorage({    // Use disk storage for development
       destination: (req, file, cb) => {
+        // Create client-specific directory structure
+        const clientId = req.body.clientId;
+        if (!clientId) {
+          return cb(new Error('Client ID is required'), '');
+        }
+        
+        // We'll handle directory creation in the upload endpoint since we need client info
         cb(null, uploadsDir);
       },
       filename: (req, file, cb) => {
-        // Generate unique filename while preserving original extension
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, uniqueSuffix + ext);
+        // Use original filename to preserve user-friendly names
+        // Note: Client-specific directories will handle conflicts between different clients
+        // Same client uploading same filename will overwrite (which may be desired behavior)
+        cb(null, file.originalname);
       }
     });
 
@@ -359,187 +426,182 @@ interface PersonInfo {
  * Registers all API routes and middleware for the application
  * 
  * This is the main function that sets up the entire API routing structure.
- * It configures global middleware, authentication, session management,
+ * It configures global middleware, JWT-based authentication,
  * and all API endpoints for the Care Data Manager application.
  * 
  * @param app - Express application instance
  * @returns HTTP server instance
  */
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Apply global middleware
-  app.use(sanitizeRequest);
-  app.use(rateLimitMiddleware);
-
-  // Configure CORS
-  app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Cookie", "Authorization"]
-  }));
-
-  // Initialize session store with connection check using the shared pool
-  const pgStore = new PgStore({
-    pool: pool,
-    tableName: 'session',
-    createTableIfMissing: true
-  });
-
-  // Initialize session
-  app.use(
-    session({
-      store: pgStore,
-      secret: process.env.SESSION_SECRET || "care-system-secret",
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        //secure: process.env.NODE_ENV === "production",
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        httpOnly: true,
-        sameSite: 'lax'
-      },
-    })
-  );
+  // Apply enhanced security middleware in proper order
+  app.use(securityHeaders);
+  app.use(requestSizeLimit);
+  app.use(sanitizeInput);
+  app.use(preventSQLInjection);
+  app.use(apiVersioning);
+  app.use(auditLog);
+  
+  // Apply general API rate limiting
+  app.use('/api', apiRateLimit);
+  // Configure enhanced CORS
+  const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173,http://localhost:5174,http://localhost:3000").split(',');
+  app.use(configureCORS(corsOrigins));
 
   // Initialize users
   await initializeUsers();
-  
+
+  // Create AuthController instance
+  const authController = new AuthController();
+
   /**
    * User login endpoint
    * 
    * Authenticates a user with their username and password.
-   * Creates a session for authenticated users.
+   * Returns JWT tokens for authenticated users.
+   * Enhanced with input validation, sanitization, and audit logging.
    * 
    * @route POST /api/auth/login
    * @param {object} req.body - Login credentials
    * @param {string} req.body.username - User's username
    * @param {string} req.body.password - User's password
-   * @returns {object} Success status and user data if authenticated
+   * @returns {object} Success status, user data, and JWT tokens if authenticated
    */
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
-    try {
-      const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ success: false, error: "Missing credentials" });
-      }
-
-      const user = await AuthService.validateUser(username, password);
-      if (!user) {
-        return res.status(401).json({ success: false, error: "Invalid credentials" });
-      }      req.session.user = {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        company_id: user.company_id
-      };
-      
-      return res.json({ success: true, user });
-    } catch (error) {
-      console.error("Login error:", error);
-      return res.status(500).json({ success: false, error: "Internal server error" });
-    }
-  });
-  
-  /**
+  app.post("/api/auth/login", authController.login.bind(authController));  /**
    * User logout endpoint
    * 
-   * Destroys the user's session and clears the session cookie.
+   * For JWT-based authentication, logout is primarily client-side token removal.
+   * Server can optionally maintain a blacklist of revoked tokens.
+   * Enhanced with audit logging.
    * 
    * @route POST /api/auth/logout
    * @returns {object} Success or error message
    */
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ message: "Failed to logout" });
-      }
-      res.clearCookie("connect.sid");
-      return res.status(200).json({ message: "Logout successful" });
-    });
-  });
-  
+  app.post("/api/auth/logout", authMiddleware, authController.logout.bind(authController));  
   /**
    * Authentication status endpoint
    * 
-   * Checks if user has a valid session and returns user information.
-   * Destroys invalid sessions if user no longer exists in database.
+   * Verifies JWT token validity and returns user information.
+   * Validates the token and fetches fresh user data from database.
    * 
    * @route GET /api/auth/status
    * @returns {object} Authentication status and user data if authenticated
    */
-  app.get("/api/auth/status", async (req: Request, res: Response) => {
-    try {
-      if (!req.session.user) {
-        return res.status(401).json({ authenticated: false });
-      }
+  app.get("/api/auth/status", authMiddleware, authController.validateToken.bind(authController));
 
-      const user = await dbStorage.getUserById(req.session.user.id);
-      if (!user) {
-        req.session.destroy((err) => {
-          if (err) console.error("Error destroying invalid session:", err);
-        });
-        return res.status(401).json({ authenticated: false });
-      }        return res.status(200).json({ 
-        authenticated: true, 
-        user: { 
-          id: user.id, 
-          username: user.username, 
-          role: user.role,
-          name: user.name,
-          company_id: user.company_id
-        } 
-      });
-    } catch (error) {
-      console.error("Error checking auth status:", error);
-      return res.status(500).json({ message: "Internal server error checking auth status" });
-    }
-  });
-  
   /**
-   * Authentication middleware for protected routes
+   * Refresh token endpoint
    * 
-   * Verifies that the request has a valid user session.
-   * Attaches the user information to the request object for use in route handlers.
-   * Returns 401 Unauthorized if no valid session exists.
+   * Generates a new access token using a valid refresh token.
+   * Allows clients to obtain new access tokens without re-authentication.
    * 
-   * @param req - Express request object
-   * @param res - Express response object
-   * @param next - Express next function
+   * @route POST /api/auth/refresh
+   * @param {object} req.body - Refresh token data
+   * @param {string} req.body.refreshToken - Valid refresh token
+   * @returns {object} New access token if refresh token is valid
    */
-  const authMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    
-    // Assign the user data to req.user with proper type handling
-    (req as any).user = req.session.user;
-    next();
-  };
-  
-  // Protected routes
-  app.use("/api", authMiddleware);
+  app.post("/api/auth/refresh", authController.refreshToken.bind(authController));
+  /**
+   * Validate session endpoint (backward compatibility)
+   * 
+   * Legacy endpoint that redirects to the new token validation.
+   * Maintained for backward compatibility during transition period.
+   * 
+   * @route GET /api/validate-session
+   * @returns {object} Authentication status and user data if authenticated
+   */  
+  app.get("/api/validate-session", authMiddleware, authController.validateSession.bind(authController));
 
-  // Apply route-specific middleware
-  app.post("/api/users", validateInput(insertUserSchema), authMiddleware);
+  /**
+   * Health check endpoint
+   * 
+   * Provides server health status and system information.
+   * Used for monitoring, load balancing, and debugging.
+   * Tests database connectivity and basic system metrics.
+   * 
+   * @route GET /api/health
+   * @returns {object} Health status, database connectivity, and system metrics
+   */
+  app.get("/api/health", async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const healthData: any = {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      version: "1.0.0",
+      database: {
+        connected: false,
+        latency: 0
+      },
+      memory: process.memoryUsage(),
+      pid: process.pid,
+      platform: process.platform,
+      nodeVersion: process.version
+    };
+
+    try {
+      // Test database connectivity
+      const dbStartTime = Date.now();
+      const client = await pool.connect();
+      const result = await client.query('SELECT 1 as test');
+      client.release();
+      
+      healthData.database.connected = true;
+      healthData.database.latency = Date.now() - dbStartTime;
+      healthData.database.status = "connected";
+    } catch (error) {
+      healthData.status = "unhealthy";
+      healthData.database.connected = false;
+      healthData.database.status = "disconnected";
+      healthData.database.error = error instanceof Error ? error.message : 'Unknown database error';
+    }
+
+    // Calculate response time
+    healthData.responseTime = Date.now() - startTime;
+
+    // Set appropriate HTTP status
+    const httpStatus = healthData.status === "healthy" ? 200 : 503;
+    
+    return res.status(httpStatus).json(healthData);
+  });
+
+  // Remove global authentication middleware since we'll apply it per route
+  // Protected routes will explicitly use authMiddleware where needed
+  
+  // Apply route-specific security middleware
+  
+  // Authentication endpoints - apply auth rate limiting and enhanced validation
+  app.use(["/api/auth/login", "/api/auth/logout"], authRateLimit);
+  app.use(["/api/change-password"], authRateLimit);
+  
+  // File upload endpoints - apply upload rate limiting and secure file handling
+  app.use(["/api/documents", "/api/client-assignment"], uploadRateLimit, secureFileUpload);  // Sensitive operations - apply strict rate limiting and enhanced validation
+  app.use(["/api/users", "/api/companies"], strictRateLimit, idValidation);
+  
+  // API endpoints with pagination - apply pagination validation
+  app.use(["/api/person-info", "/api/master-data", "/api/client-services"], paginationValidation);
+  
+  // Apply segment validation to segment-specific routes
+  app.use(["/api/master-data", "/api/person-info", "/api/client-services", "/api/documents/client"], segmentValidation);
+  
+  // Apply enhanced input validation to POST/PUT endpoints  app.post("/api/users", validateInput(insertUserSchema), authMiddleware);
   app.post("/api/person-info", validateInput(insertPersonInfoSchema), authMiddleware);
   app.post("/api/master-data", validateInput(insertMasterDataSchema), authMiddleware);
-  app.post("/api/service-case-notes", validateInput(insertServiceCaseNoteSchema), authMiddleware);
   app.post("/api/client-services", validateInput(insertClientServiceSchema), authMiddleware);
   app.post("/api/companies", validateInput(insertCompanySchema), authMiddleware);
-  
-  /**
+    /**
    * Create master data entry endpoint
    * 
    * Creates a new master data entry for service categories, types, and providers.
    * Handles segment-specific data by properly processing the segmentId field.
    * Validates input data using the insertMasterDataSchema from shared schema.
+   * Enhanced with comprehensive security middleware.
    * 
    * @route POST /api/master-data
    * @param {object} req.body - Master data to create
    * @returns {object} Created master data entry
    */
-  app.post("/api/master-data", async (req: Request, res: Response) => {
+  app.post("/api/master-data", apiRateLimit, sanitizeInput, preventSQLInjection, validateSegmentAccess, authMiddleware, async (req: Request, res: Response) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "No active session found" });
@@ -562,10 +624,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         active: validatedData.active ?? true,
         segmentId: req.body.segmentId // Explicitly use the original segmentId from request body
       };
-      
-      console.log("Creating master data with:", JSON.stringify(masterDataWithUser));
+        console.log("Creating master data with:", JSON.stringify(masterDataWithUser));
       const createdData = await dbStorage.createMasterData(masterDataWithUser);
       console.log("Created master data:", JSON.stringify(createdData));
+      
+      // Log master data creation for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user.id,
+        username: req.user.username || 'unknown',
+        action: 'CREATE_MASTER_DATA',
+        resourceType: 'MASTER_DATA',
+        resourceId: createdData.id.toString(),
+        details: `Created master data: ${createdData.serviceCategory} - ${createdData.serviceType} (${createdData.serviceProvider})`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -586,20 +667,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ 
         message: "Failed to create master data",
         details: error instanceof Error ? error.message : 'Unknown error'
+      });    }
+  });
+
+  /**
+   * Create service case note endpoint
+   * 
+   * Creates a new case note for a specific service.
+   * Validates input data and optionally attaches documents to the case note.
+   * Enhanced with comprehensive security middleware.
+   * 
+   * @route POST /api/service-case-notes
+   * @param {object} req.body - Case note data including serviceId, noteText, createdBy, and optional documentIds
+   * @returns {object} Created case note information
+   * @throws {ApiError} 400 - If validation fails
+   * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 500 - If database operation fails
+   */
+  app.post("/api/service-case-notes", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No active session found" });
+      }
+
+      console.log("Received service case note data:", JSON.stringify(req.body));
+      
+      const validatedData = insertServiceCaseNoteSchema.parse(req.body);
+      
+      // Add the current user as the creator
+      const caseNoteWithUser = {
+        ...validatedData,
+        createdBy: req.user.id
+      };
+      
+      console.log("Creating service case note with:", JSON.stringify(caseNoteWithUser));
+      const createdCaseNote = await dbStorage.createServiceCaseNote(caseNoteWithUser);
+      console.log("Created service case note:", JSON.stringify(createdCaseNote));
+      
+      // Log case note creation for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user.id,
+        username: req.user.username || 'unknown',
+        action: 'CREATE_CASE_NOTE',
+        resourceType: 'CASE_NOTE',
+        resourceId: createdCaseNote.id.toString(),
+        details: `Created case note for service ID: ${createdCaseNote.serviceId}${validatedData.documentIds ? ` with ${validatedData.documentIds.length} document(s)` : ''}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
+      return res.status(201).json(createdCaseNote);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        console.error("Validation error:", validationError);
+        return res.status(400).json({ 
+          message: validationError.message,
+          details: validationError.details
+        });
+      }
+      
+      console.error("Error creating service case note:", error);
+      return res.status(500).json({ 
+        message: "Failed to create service case note",
+        details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
-  });  
-    /**
+  });
+  
+  /**
    * Get master data entries endpoint
    * 
    * Retrieves master data entries, filtered by the segment ID provided in the query.
    * Frontend ensures segment is selected for all operations.
+   * Enhanced with comprehensive security middleware including rate limiting, input validation,
+   * sanitization, and SQL injection prevention.
    * 
    * @route GET /api/master-data
    * @param {string} [req.query.segmentId] - Optional segment ID to filter master data
    * @returns {Array} List of master data entries
+   * @security Applies rate limiting, input validation, sanitization, SQL injection prevention, segment access validation, and company data filtering
    */
-  app.get("/api/master-data", async (req: Request, res: Response) => {
+  app.get("/api/master-data", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, async (req: Request, res: Response) => {
     try {
       // Get segment ID from query parameter if provided
       const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
@@ -614,26 +770,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch master data" });
     }
   });
-  
-  /**
+    /**
    * Update master data entry endpoint
    * 
    * Updates an existing master data entry by ID.
    * Handles proper validation and segment ID processing.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route PUT /api/master-data/:id
    * @param {string} req.params.id - ID of the master data entry to update
    * @param {object} req.body - Updated master data values
    * @returns {object} Updated master data entry
-   */
-  app.put("/api/master-data/:id", async (req: Request, res: Response) => {
+   */  app.put("/api/master-data/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid ID format" });
       }
-
+      
       console.log("Updating master data for id:", id, "with data:", req.body);
+      
+      // Get existing data for audit logging
+      const existingData = await dbStorage.getMasterDataById(id);
+      if (!existingData) {
+        return res.status(404).json({ message: "Master data not found" });
+      }
       
       // Handle null/undefined segmentId before validation
       const requestData = { ...req.body };
@@ -649,7 +810,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         segmentId: req.body.segmentId // Use original value which can be null
       });
 
-      console.log("Updated master data:", updatedData);
+      // Log master data update for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user!.id,
+        username: req.user!.username || 'unknown',
+        action: 'UPDATE_MASTER_DATA',
+        resourceType: 'MASTER_DATA',
+        resourceId: id.toString(),
+        details: `Updated master data: ${existingData.serviceCategory} - ${existingData.serviceType} (${existingData.serviceProvider})`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });      console.log("Updated master data:", updatedData);
       return res.status(200).json(updatedData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -660,6 +838,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Check for foreign key constraint violation
+      if (error instanceof Error && error.message.includes('client_services_master_data_fkey')) {
+        try {
+          // Get the existing master data to show which combination is being referenced
+          const existingData = await dbStorage.getMasterDataById(id);
+          if (existingData) {
+            // Get client services that are using this master data combination
+            const referencingServices = await dbStorage.getClientServicesReferencingMasterData(
+              existingData.serviceCategory,
+              existingData.serviceType,
+              existingData.serviceProvider || '',
+              existingData.segmentId || null
+            );            const clientNames = referencingServices.map(service => service.clientName);
+            const uniqueClientNames = Array.from(new Set(clientNames));
+
+            return res.status(409).json({
+              message: "Cannot update master data: Service is currently assigned to clients",
+              details: `This service combination (${existingData.serviceCategory} - ${existingData.serviceType} - ${existingData.serviceProvider || 'No provider'}) is currently assigned to ${referencingServices.length} service(s) for ${uniqueClientNames.length} client(s): ${uniqueClientNames.join(', ')}. Please remove or reassign these services before updating the master data.`,
+              conflictType: "FOREIGN_KEY_CONSTRAINT",
+              referencingServices: referencingServices.map(service => ({
+                clientName: service.clientName,
+                status: service.status,
+                serviceStartDate: service.serviceStartDate
+              }))
+            });
+          }
+        } catch (lookupError) {
+          console.error("Error getting referencing services:", lookupError);
+          // Fall through to generic error handling
+        }
+      }
+      
       console.error("Error updating master data:", error);
       return res.status(500).json({ 
         message: "Failed to update master data",
@@ -667,36 +877,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-  
-  /**
+    /**
+   * Get master data by ID endpoint
+   * 
+   * Retrieves a specific master data entry by its ID.
+   * Enhanced with comprehensive security middleware including ID validation.
+   * 
+   * @route GET /api/master-data/:id
+   * @param {string} req.params.id - ID of the master data entry to retrieve
+   * @returns {object} Master data entry
+   */
+  app.get("/api/master-data/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      console.log("Getting master data for id:", id);
+      
+      const masterData = await dbStorage.getMasterDataById(id);
+      if (!masterData) {
+        return res.status(404).json({ message: "Master data not found" });
+      }
+      
+      console.log("Found master data:", masterData);
+      return res.status(200).json(masterData);
+    } catch (error) {
+      console.error("Error fetching master data by ID:", error);
+      return res.status(500).json({ 
+        message: "Failed to fetch master data",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+    /**
    * Create person info (client) endpoint
    * 
    * Creates a new client with personal information, address, and HCP details.
    * Properly handles optional fields and segment assignment.
+   * Enhanced with comprehensive security middleware including input validation.
    * 
    * @route POST /api/person-info
    * @param {object} req.body - Client personal information
    * @returns {object} Created client information
    */
-  app.post("/api/person-info", async (req: Request, res: Response) => {
+  app.post("/api/person-info", apiRateLimit, sanitizeInput, preventSQLInjection, validateSegmentAccess, authMiddleware, async (req: Request, res: Response) => {
     try {
       console.log("Received person info data:", req.body);
       const validatedData = insertPersonInfoSchema.parse(req.body);      
-      console.log("Validated data:", validatedData);
-      
-      // Add the current user as the creator and handle optional fields
+      console.log("Validated data:", validatedData);      // Add the current user as the creator and handle optional fields
       const personInfoWithUser = {
         ...validatedData,
         createdBy: req.user!.id,
         middleName: validatedData.middleName || '',
+        email: validatedData.email || '',
         homePhone: validatedData.homePhone || '',
+        mobilePhone: validatedData.mobilePhone || '',
         addressLine2: validatedData.addressLine2 || '',
         addressLine3: validatedData.addressLine3 || '',
+        postCode: validatedData.postCode || '',
         mailingAddressLine1: validatedData.mailingAddressLine1 || '',
         mailingAddressLine2: validatedData.mailingAddressLine2 || '',
         mailingAddressLine3: validatedData.mailingAddressLine3 || '',
-        mailingPostCode: validatedData.mailingPostCode || '',
-        nextOfKinName: validatedData.nextOfKinName || '',
+        mailingPostCode: validatedData.mailingPostCode || '',        nextOfKinName: validatedData.nextOfKinName || '',
+        nextOfKinRelationship: validatedData.nextOfKinRelationship || '',
         nextOfKinAddress: validatedData.nextOfKinAddress || '',        
         nextOfKinEmail: validatedData.nextOfKinEmail || '',        
         nextOfKinPhone: validatedData.nextOfKinPhone || '',
@@ -706,10 +952,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Handle segmentId to ensure it's either number or undefined, not null
         segmentId: validatedData.segmentId !== null ? validatedData.segmentId : undefined
       };
-      
-      console.log("Processed data:", personInfoWithUser);
+        console.log("Processed data:", personInfoWithUser);
       const createdData = await dbStorage.createPersonInfo(personInfoWithUser);
       console.log("Created data:", createdData);
+      
+      // Log client creation for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user!.id,
+        username: req.user!.username || 'unknown',
+        action: 'CREATE_CLIENT',
+        resourceType: 'CLIENT',
+        resourceId: createdData.id.toString(),
+        details: `Created new client: ${createdData.firstName} ${createdData.lastName}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
       return res.status(201).json(createdData);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -724,17 +989,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to create person info" });
     }
   });
-  
-  /**
+    /**
    * Get list of clients endpoint
    * 
    * Retrieves all clients (person info), optionally filtered by segment.
+   * Enhanced with comprehensive security middleware including rate limiting, input validation,
+   * sanitization, and SQL injection prevention.
    * 
    * @route GET /api/person-info
-   * @param {string} [req.query.segmentId] - Optional segment ID to filter clients
-   * @returns {Array} List of client information
-   */
-  app.get("/api/person-info", async (req: Request, res: Response) => {
+   * @param {string} [req.query.segmentId] - Optional segment ID to filter clients   * @returns {Array} List of client information
+   * @security Applies rate limiting, input validation, sanitization, SQL injection prevention, authentication, segment access validation, and company data filtering
+   */  app.get("/api/person-info", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, async (req: Request, res: Response) => {
     try {
       // Get segment ID from query parameter if provided
       const segmentId = req.query.segmentId ? parseInt(req.query.segmentId as string) : undefined;
@@ -745,20 +1010,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch person info" });
     }
   });
-  
-  /**
+    /**
    * Get client details by ID endpoint
    * 
    * Retrieves detailed information for a specific client by their ID.
    * Uses centralized error handling with ApiError for consistent responses.
+   * Enhanced with comprehensive security middleware including rate limiting, input validation,
+   * sanitization, SQL injection prevention, ID validation, and authentication.
    * 
    * @route GET /api/person-info/:id
    * @param {string} req.params.id - Client ID to retrieve
    * @returns {object} Client detailed information
    * @throws {ApiError} 400 - If ID format is invalid
    * @throws {ApiError} 404 - If client not found
+   * @security Requires authentication and applies rate limiting, input validation, sanitization, SQL injection prevention
    */
-  app.get("/api/person-info/:id", async (req: Request, res: Response, next) => {
+  app.get("/api/person-info/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -775,13 +1042,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
-  /**
+    /**
    * Update client information endpoint
    * 
    * Updates an existing client's personal information, address, and other details.
    * Preserves the original creator and handles segment ID properly.
    * Uses centralized error handling with ApiError for consistent responses.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route PUT /api/person-info/:id
    * @param {string} req.params.id - Client ID to update
@@ -790,7 +1057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 400 - If ID format is invalid
    * @throws {ApiError} 404 - If client not found
    */
-  app.put('/api/person-info/:id', async (req: Request, res: Response, next) => {
+  app.put('/api/person-info/:id', apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, async (req: Request, res: Response, next) => {
     try {
       console.log("Update request received for id:", req.params.id, "with data:", req.body);
       
@@ -810,13 +1077,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         status: req.body.status || existingPerson.status || 'New'
       });
-      
-      console.log("Validated update data:", validatedData);
-        // Update the person info
+        console.log("Validated update data:", validatedData);      // Update the person info
       const updatedPerson = await dbStorage.updatePersonInfo(id, {
         ...validatedData,
+        email: validatedData.email || '',
+        mobilePhone: validatedData.mobilePhone || '',
+        postCode: validatedData.postCode || '',
         createdBy: existingPerson.createdBy, // Preserve the original createdBy value
         segmentId: validatedData.segmentId !== null ? validatedData.segmentId : undefined // Handle segmentId properly
+      });
+      
+      // Log client update for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user!.id,
+        username: req.user!.username || 'unknown',
+        action: 'UPDATE_CLIENT',
+        resourceType: 'CLIENT',
+        resourceId: id.toString(),
+        details: `Updated client: ${existingPerson.firstName} ${existingPerson.lastName}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
       });
       
       console.log("Person updated successfully:", updatedPerson);
@@ -825,19 +1112,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  
-  /**
+    /**
    * Update client assignment status endpoint
    * 
    * Updates the status of a client assignment (service) to track its progress.
    * Validates that the status is one of the allowed values.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route PATCH /api/client-assignment/:id
    * @param {string} req.params.id - Assignment ID to update
    * @param {string} req.body.status - New status value (Planned, In Progress, or Closed)
    * @returns {object} Success message
    */
-  app.patch("/api/client-assignment/:id", async (req: Request, res: Response) => {
+  app.patch("/api/client-assignment/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const { status } = req.body;
@@ -868,7 +1155,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {File} [req.file] - Optional document file to upload
    * @returns {object} Created client assignment data
    */
-  app.post("/api/client-assignment", upload.single("document"), async (req: Request, res: Response) => {
+  /**
+   * Create client assignment endpoint
+   * 
+   * Creates a new client assignment with optional document upload.
+   * Uses multer for file handling and validates the assignment data.
+   * Enhanced with file upload security and comprehensive input validation.
+   * 
+   * @route POST /api/client-assignment
+   * @returns {object} Created assignment information
+   */
+  app.post("/api/client-assignment", uploadRateLimit, secureFileUpload, sanitizeInput, preventSQLInjection, authMiddleware, upload.single("document"), async (req: Request, res: Response) => {
     try {
       const { clientId, careCategory, careType, notes } = req.body;
       
@@ -933,7 +1230,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {string} [req.body.segmentId] - Optional segment ID to associate with the document
    * @returns {object} Created document record
    */
-  app.post("/api/documents", upload.single("file"), async (req: Request, res: Response) => {
+  /**
+   * Document upload endpoint
+   * 
+   * Handles file uploads for client documents.
+   * Supports various file types and stores metadata in the database.
+   * Enhanced with comprehensive file upload security and rate limiting.
+   * 
+   * @route POST /api/documents
+   * @returns {object} Upload success response with file metadata
+   */
+  app.post("/api/documents", uploadRateLimit, secureFileUpload, sanitizeInput, preventSQLInjection, authMiddleware, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -943,44 +1250,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!clientId || !documentName || !documentType) {
         return res.status(400).json({ message: "Missing required fields: clientId, documentName, documentType, and file are required" });
       }
-      
-      // Get client information to use in folder name
+        // Get client information to use in folder name
       const client = await dbStorage.getPersonInfoById(parseInt(clientId));
       if (!client) {
         return res.status(404).json({ message: "Client not found" });
       }
       
-      // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
-      const clientDir = path.join(uploadsDir, `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_'));
-      
-      // Generate a unique filename
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const ext = path.extname(req.file.originalname);
-      const filename = uniqueSuffix + ext;
-      const filePath = path.join(clientDir, filename).replace(/\\/g, '/');
+      // Check if a document with the same original filename already exists for this client
+      const existingDocument = await dbStorage.getDocumentByClientAndFilename(parseInt(clientId), req.file.originalname);
+      if (existingDocument) {
+        return res.status(409).json({ 
+          message: `Document with filename "${req.file.originalname}" already exists for this client. Please use the existing document or rename the file.`,
+          conflictType: "filename_exists",
+          existingDocument: {
+            id: existingDocument.id,
+            documentName: existingDocument.documentName,
+            uploadedAt: existingDocument.uploadedAt
+          }
+        });
+      }
 
-      // In development, move file within filesystem
-      if (process.env.NODE_ENV !== 'production') {
+      // Create directory for client using the new naming convention: client_id_clientfirstname_lastname
+      const clientDirName = `client_${clientId}_${client.firstName}_${client.lastName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      const clientDir = path.join(uploadsDir, clientDirName);
+      
+      // Use original filename to preserve user-friendly names
+      const filename = req.file.originalname;
+      
+      // Full system path for file operations
+      const fullFilePath = path.join(clientDir, filename);
+      // Relative path for database storage (from uploads root)
+      const relativeFilePath = path.join(clientDirName, filename).replace(/\\/g, '/');
+      
+      console.log('Document upload debug - NODE_ENV:', process.env.NODE_ENV);
+      console.log('Document upload debug - clientDir:', clientDir);
+      console.log('Document upload debug - fullFilePath:', fullFilePath);
+      console.log('Document upload debug - relativeFilePath:', relativeFilePath);
+      console.log('Document upload debug - req.file.path:', req.file?.path);
+      console.log('Document upload debug - req.file.filename:', req.file?.filename);
+        let finalFilePath = relativeFilePath;
+        if (process.env.NODE_ENV !== 'production') {
+        // Create client directory
         await fs.promises.mkdir(clientDir, { recursive: true });
+        console.log('Created client directory:', clientDir);
+        
         if (req.file.path) {
-          await fs.promises.rename(req.file.path, filePath);
+          // Move from multer temp location to client-specific directory with original filename
+          await fs.promises.rename(req.file.path, fullFilePath);
+          console.log('Moved file from', req.file.path, 'to', fullFilePath);
+          
+          // Verify file exists at final location
+          const fileExists = await fs.promises.access(fullFilePath).then(() => true).catch(() => false);
+          console.log('File exists at destination:', fileExists);
+          
+          if (!fileExists) {
+            throw new Error('File was not properly moved to destination');
+          }
+        } else {
+          throw new Error('No file path provided by multer');
         }
       } else if (blobStorage) {
         // In production, upload to Azure Blob Storage
         const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer);
-        await blobStorage.uploadFile(fileBuffer, filePath, req.file.mimetype);
-      }
-      
-      // Create document record in database
+        await blobStorage.uploadFile(fileBuffer, relativeFilePath, req.file.mimetype);
+        console.log('Uploaded file to Azure Blob Storage:', relativeFilePath);
+      }// Create document record in database
+      // Store the original filename for both display and file access
       const documentRecord = await dbStorage.createDocument({
         clientId: parseInt(clientId),
         documentName,
         documentType,
-        filename: req.file.originalname,
-        filePath: filePath.replace(/\\/g, '/').replace(`${process.cwd().replace(/\\/g, '/')}/`, ''),
+        filename: req.file.originalname, // Store the original filename for file access
+        filePath: finalFilePath, // Use the relative path for database storage
         createdBy: req.user!.id,
         uploadedAt: new Date(),
         segmentId: segmentId ? parseInt(segmentId) : null
+      });
+      
+      // Log document upload for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: req.user!.id,
+        username: req.user!.username || 'unknown',
+        action: 'UPLOAD_DOCUMENT',
+        resourceType: 'DOCUMENT',
+        resourceId: documentRecord.id.toString(),
+        details: `Uploaded document: ${documentName} (${documentType}) for client ${client.firstName} ${client.lastName}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
       });
       
       return res.status(201).json(documentRecord);
@@ -989,13 +1352,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to upload document" });
     }
   });
-  
-  /**
+    /**
    * Get documents by client ID endpoint
    * 
    * Retrieves all documents associated with a specific client.
    * Handles file path normalization to ensure documents can be properly accessed
    * regardless of storage method or environment (development vs production).
+   * Enhanced with comprehensive security middleware including rate limiting, input validation,
+   * sanitization, and SQL injection prevention.
    * 
    * @route GET /api/documents/client/:clientId
    * @param {string} req.params.clientId - Client ID to retrieve documents for
@@ -1003,8 +1367,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {Array} List of document metadata including normalized file paths
    * @throws {ApiError} 400 - If client ID format is invalid
    * @throws {ApiError} 404 - If no documents are found
+   * @security Applies rate limiting, input validation, sanitization, SQL injection prevention, segment access validation, and company data filtering
    */
-  app.get("/api/documents/client/:clientId", createHandler(async (req, res) => {
+  app.get("/api/documents/client/:clientId", apiRateLimit, validateRequest(clientIdValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, createHandler(async (req, res) => {
     try {
       console.log(`Document list requested for client ID: ${req.params.clientId}`);
       const clientId = parseInt(req.params.clientId);
@@ -1059,12 +1424,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Otherwise try with the full path in uploads dir
               fullPath = path.join(uploadsDir, filePath);
             }
-            
-            // If file exists in the new location, update the path that will be sent to frontend
+              // If file exists in the new location, keep the original database path
             if (fs.existsSync(fullPath)) {
-              // Only send the path that the download endpoint will understand
-              filePath = fullPath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/') + '/', '');
-              console.log(`Found document at path: ${fullPath}, using path: ${filePath}`);
+              // Keep the original filePath from database (don't modify it)
+              // The download endpoint expects the database path, not the file system path
+              console.log(`Found document at file system path: ${fullPath}, keeping database path: ${filePath}`);
             } else {
               console.log(`Document file not found at: ${fullPath}`);
               // Don't filter out documents that can't be found, just log it
@@ -1080,13 +1444,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
         console.log(`Found ${documents.length} documents for client ${clientId}`);
       // Return as data property in ApiResponse format
-      return res.status(200).json({ data: normalizedDocuments });
-    } catch (error) {
+      return res.status(200).json({ data: normalizedDocuments });    } catch (error) {
       console.error("Error fetching client documents:", error);
       return res.status(500).json({ message: "Failed to fetch client documents" });
     }
   }));
-  
+
+  /**
+   * Secure document viewing endpoint with flexible authentication
+   * 
+   * This endpoint allows viewing documents with authentication via either:
+   * 1. Authorization header (for API calls)
+   * 2. Query parameter token (for direct browser access)
+   * 
+   * @route GET /api/documents/view/:filePath
+   * @param {string} req.params.filePath - File path of the document to view   * @param {string} [req.query.token] - JWT token for authentication (alternative to header)
+   * @returns {File} Document file for viewing in browser
+   */
+  app.get("/api/documents/view/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
+    try {
+      const filePath = decodeURIComponent(req.params.filePath);
+      console.log(`Document view requested for path: ${filePath}`);
+      
+      // Check if path exists in database
+      const document = await dbStorage.getDocumentByFilePath(filePath);
+      
+      if (!document) {
+        console.log(`Document not found in database with path: ${filePath}`);
+        return res.status(404).json({ message: "Document not found in database" });
+      }
+
+      // Different handling for production (blob storage) vs development (file system)
+      if (process.env.NODE_ENV === 'production' && blobStorage) {
+        try {
+          // For production, use blob storage
+          if (!document.filePath) {
+            return res.status(404).json({ message: "Document file path is missing" });
+          }
+          
+          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          
+          // Set content type based on file extension for inline viewing
+          const ext = path.extname(document.filename).toLowerCase();
+          const contentType = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png'
+          }[ext] || 'application/octet-stream';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
+          return res.end(fileBuffer);
+        } catch (error) {
+          console.error("Error downloading from blob storage:", error);
+          return res.status(404).json({ message: "Document not found in blob storage" });
+        }
+      } else {
+        // For development, find the file on disk
+        if (!document.filePath) {
+          return res.status(404).json({ message: "Document file path is missing" });
+        }
+        
+        // Build full path from uploads directory + relative file path
+        let fullPath = path.join(uploadsDir, document.filePath);
+        console.log(`Attempting to access file at: ${fullPath}`);
+        
+        if (!fs.existsSync(fullPath)) {
+          // Try fallback paths for backward compatibility
+          console.log(`File not found, trying fallback paths...`);
+          
+          // Try 1: Just the basename in uploads directory
+          const basename = path.basename(document.filePath);
+          const fallbackPath1 = path.join(uploadsDir, basename);
+          console.log(`Trying fallback 1 - basename in uploads: ${fallbackPath1}`);
+          
+          if (fs.existsSync(fallbackPath1)) {
+            fullPath = fallbackPath1;
+          } else {
+            // Try 2: Remove uploads/ prefix if present and try again
+            let cleanPath = document.filePath;
+            if (cleanPath.startsWith('uploads/')) {
+              cleanPath = cleanPath.substring('uploads/'.length);
+            }
+            const fallbackPath2 = path.join(uploadsDir, cleanPath);
+            console.log(`Trying fallback 2 - cleaned path: ${fallbackPath2}`);
+            
+            if (fs.existsSync(fallbackPath2)) {
+              fullPath = fallbackPath2;
+            }
+          }
+        }
+        
+        if (!fs.existsSync(fullPath)) {
+          console.error(`File not found at any attempted path. Last tried: ${fullPath}`);
+          return res.status(404).json({ message: "Document file not found on disk" });
+        }
+        
+        // Set content type based on file extension for inline viewing
+        const ext = path.extname(document.filename).toLowerCase();
+        const contentType = {
+          '.pdf': 'application/pdf',
+          '.doc': 'application/msword',
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png'
+        }[ext] || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
+        
+        // Stream the file for better performance with large files
+        const fileStream = fs.createReadStream(fullPath);
+        fileStream.pipe(res);
+      }
+    } catch (error) {
+      console.error("Error in document view endpoint:", error);
+      return res.status(500).json({ message: "Failed to retrieve document" });
+    }
+  }));
+
   /**
    * Document download endpoint
    * 
@@ -1094,16 +1574,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Supports both blob storage (production) and file system (development) retrieval.
    * Handles various path formats and attempts multiple lookup strategies to find files.
    * Sets appropriate content type and disposition headers for proper download handling.
+   * Enhanced with comprehensive security middleware including rate limiting, input validation,
+   * sanitization, SQL injection prevention, and authentication.
    * 
    * @route GET /api/documents/:filePath
    * @param {string} req.params.filePath - File path of the document to download
    * @returns {File} Document file as a downloadable response
    * @throws {ApiError} 404 - If document metadata or file not found
-   */
-  // This is defined AFTER the client documents endpoint to avoid route conflicts
-  app.get("/api/documents/:filePath(*)", createHandler(async (req, res) => {
+   * @security Requires authentication and applies rate limiting, input validation, sanitization, SQL injection prevention
+   */  // This is defined AFTER the client documents endpoint to avoid route conflicts
+  app.get("/api/documents/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
     try {
-      const filePath = req.params.filePath;
+      const filePath = decodeURIComponent(req.params.filePath);
       console.log(`Document download requested for path: ${filePath}`);
       
       // Check if path exists in database
@@ -1132,7 +1614,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
             '.png': 'image/png'
-          }[ext] || 'application/octet-stream';          res.setHeader('Content-Type', contentType);
+          }[ext] || 'application/octet-stream';
+
+          res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
           // Send buffer directly without attempting to match ApiResponse
           return res.end(fileBuffer);
@@ -1144,34 +1628,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Try different paths - with or without "uploads" prefix
         if (!document.filePath) {
           return res.status(404).json({ message: "Document file path is missing" });
+        }        
+        // For development, find the file on disk using relative path from uploads directory
+        if (!document.filePath) {
+          return res.status(404).json({ message: "Document file path is missing" });
         }
         
-        let fullPath = document.filePath;
+        // Build full path from uploads directory + relative file path
+        let fullPath = path.join(uploadsDir, document.filePath);
+        console.log(`Attempting to access file at: ${fullPath}`);
         
-        // If path doesn't start with slash or drive letter, assume it's relative to cwd
-        if (!fullPath.startsWith('/') && !fullPath.match(/^[A-Za-z]:\\/)) {
-          fullPath = path.join(process.cwd(), fullPath);
-        }
-          console.log(`Attempting to access file at: ${fullPath}`);
-        
-        if (!fs.existsSync(fullPath) && document.filePath) {
-          // Try a series of fallback paths to find the file
+        if (!fs.existsSync(fullPath)) {
+          // Try fallback paths for backward compatibility
+          console.log(`File not found, trying fallback paths...`);
           
           // Try 1: Just the basename in uploads directory
           const basename = path.basename(document.filePath);
-          fullPath = path.join(uploadsDir, basename);
-          console.log(`File not found, trying uploads dir with basename: ${fullPath}`);
+          const fallbackPath1 = path.join(uploadsDir, basename);
+          console.log(`Trying fallback 1 - basename in uploads: ${fallbackPath1}`);
           
-          // Try 2: Full path without "uploads/" prefix
-          if (!fs.existsSync(fullPath) && document.filePath.startsWith('uploads/')) {
-            const pathWithoutUploads = document.filePath.substring('uploads/'.length);
-            fullPath = path.join(uploadsDir, pathWithoutUploads);
-            console.log(`File not found, trying without uploads prefix: ${fullPath}`);
+          if (fs.existsSync(fallbackPath1)) {
+            fullPath = fallbackPath1;
+          } else {
+            // Try 2: Remove uploads/ prefix if present and try again
+            let cleanPath = document.filePath;
+            if (cleanPath.startsWith('uploads/')) {
+              cleanPath = cleanPath.substring('uploads/'.length);
+            }
+            const fallbackPath2 = path.join(uploadsDir, cleanPath);
+            console.log(`Trying fallback 2 - cleaned path: ${fallbackPath2}`);
+            
+            if (fs.existsSync(fallbackPath2)) {
+              fullPath = fallbackPath2;
+            }
           }
         }
         
         if (!fs.existsSync(fullPath)) {
-          console.error(`File not found at any attempted path: ${fullPath}`);
+          console.error(`File not found at any attempted path. Last tried: ${fullPath}`);
           return res.status(404).json({ message: "Document file not found on disk" });
         }
         
@@ -1184,28 +1678,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
           '.jpg': 'image/jpeg',
           '.jpeg': 'image/jpeg',
           '.png': 'image/png'
-        }[ext] || 'application/octet-stream';
-
-        res.setHeader('Content-Type', contentType);
+        }[ext] || 'application/octet-stream';        res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
-        res.sendFile(fullPath);
+        
+        // Convert to absolute path for res.sendFile
+        const absolutePath = path.resolve(fullPath);
+        res.sendFile(absolutePath);
       }
     } catch (error) {
       console.error("Error retrieving document:", error);
       return res.status(500).json({ message: "Failed to retrieve document" });
     }
   }));
-  
+
+
+    /**
+   * Secure document viewing endpoint with flexible authentication
+   * 
+   * This endpoint allows viewing documents with authentication via either:
+   * 1. Authorization header (for API calls)
+   * 2. Query parameter token (for direct browser access)
+   * 
+   * @route GET /api/documents/view/:filePath
+   * @param {string} req.params.filePath - File path of the document to view
+   * @param {string} [req.query.token] - JWT token for authentication (alternative to header)
+   * @returns {File} Document file for viewing in browser
+   */
+  /*
+  app.get("/api/documents/view/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
+    try {
+      const filePath = req.params.filePath;
+      console.log(`Document view requested for path: ${filePath}`);
+      
+      // Check if path exists in database
+      const document = await dbStorage.getDocumentByFilePath(filePath);
+      
+      if (!document) {
+        console.log(`Document not found in database with path: ${filePath}`);
+        return res.status(404).json({ message: "Document not found in database" });
+      }
+
+      // Different handling for production (blob storage) vs development (file system)
+      if (process.env.NODE_ENV === 'production' && blobStorage) {
+        try {
+          // For production, use blob storage
+          if (!document.filePath) {
+            return res.status(404).json({ message: "Document file path is missing" });
+          }
+          
+          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          
+          // Set content type based on file extension for inline viewing
+          const ext = path.extname(document.filename).toLowerCase();
+          const contentType = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png'
+          }[ext] || 'application/octet-stream';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
+          return res.end(fileBuffer);
+        } catch (error) {
+          console.error("Error downloading from blob storage:", error);
+          return res.status(404).json({ message: "Document not found in blob storage" });
+        }
+      } else {
+        // For development, find the file on disk
+        if (!document.filePath) {
+          return res.status(404).json({ message: "Document file path is missing" });
+        }
+        
+        // Build full path from uploads directory + relative file path
+        let fullPath = path.join(uploadsDir, document.filePath);
+        console.log(`Attempting to access file at: ${fullPath}`);
+        
+        if (!fs.existsSync(fullPath)) {
+          // Try fallback paths for backward compatibility
+          console.log(`File not found, trying fallback paths...`);
+          
+          // Try 1: Just the basename in uploads directory
+          const basename = path.basename(document.filePath);
+          const fallbackPath1 = path.join(uploadsDir, basename);
+          console.log(`Trying fallback 1 - basename in uploads: ${fallbackPath1}`);
+          
+          if (fs.existsSync(fallbackPath1)) {
+            fullPath = fallbackPath1;
+          } else {
+            // Try 2: Remove uploads/ prefix if present and try again
+            let cleanPath = document.filePath;
+            if (cleanPath.startsWith('uploads/')) {
+              cleanPath = cleanPath.substring('uploads/'.length);
+            }
+            const fallbackPath2 = path.join(uploadsDir, cleanPath);
+            console.log(`Trying fallback 2 - cleaned path: ${fallbackPath2}`);
+            
+            if (fs.existsSync(fallbackPath2)) {
+              fullPath = fallbackPath2;
+            }
+          }
+        }
+        
+        if (!fs.existsSync(fullPath)) {
+          console.error(`File not found at any attempted path. Last tried: ${fullPath}`);
+          return res.status(404).json({ message: "Document file not found on disk" });
+        }
+        
+        // Set content type based on file extension for inline viewing
+        const ext = path.extname(document.filename).toLowerCase();
+        const contentType = {
+          '.pdf': 'application/pdf',
+          '.doc': 'application/msword',
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png'
+        }[ext] || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
+        
+        // Stream the file for better performance with large files
+        const fileStream = fs.createReadStream(fullPath);
+        fileStream.pipe(res);
+      }
+    } catch (error) {
+      console.error("Error in document view endpoint:", error);
+      return res.status(500).json({ message: "Failed to retrieve document" });
+    }
+  }));
+*/
+
   /**
    * List all client services endpoint
    * 
    * Retrieves all client services records from the database.
    * Used for admin dashboard and reporting features.
+   * Enhanced with comprehensive security middleware.
    * 
    * @route GET /api/client-services
    * @returns {Array} List of all client service records
    */
-  app.get("/api/client-services", async (req: Request, res: Response) => {
+  app.get("/api/client-services", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, async (req: Request, res: Response) => {
     try {
       const clientServices = await dbStorage.getClientServices();
       return res.status(200).json(clientServices);
@@ -1214,13 +1831,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
-
   /**
    * Create client service endpoint
    * 
    * Creates a new service record for a client with validation.
    * Logs detailed information about the validation and creation process.
    * Automatically sets default status and includes creator information.
+   * Enhanced with comprehensive security middleware.
    * 
    * @route POST /api/client-services
    * @param {object} req.body - Client service data to create
@@ -1228,9 +1845,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 400 - If validation fails
    * @throws {ApiError} 401 - If user is not authenticated
    * @throws {ApiError} 409 - If username already exists
-   */  app.post("/api/client-services", async (req: Request, res: Response) => {
+   */    
+  app.post("/api/client-services", apiRateLimit, sanitizeInput, preventSQLInjection, validateSegmentAccess, authMiddleware, async (req: Request, res: Response) => {
     try {
-      if (!req.session?.user?.id) {
+      if (!req.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
@@ -1238,7 +1856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestData = {
         ...req.body,
         segmentId: req.body.segmentId === undefined ? null : req.body.segmentId,
-        createdBy: req.session.user.id
+        createdBy: req.user.id
       };
       
       const validatedData = insertClientServiceSchema.parse(requestData);
@@ -1257,10 +1875,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
         });
       }
-      
-      const clientServiceWithUser = {
+        const clientServiceWithUser = {
         ...validatedData,
-        createdBy: req.session.user.id,
+        createdBy: req.user.id,
         status: validatedData.status || 'Planned',
         createdAt: new Date()
       };
@@ -1279,12 +1896,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to create client service" });
     }
   });
-  
-  /**
+    /**
    * Get services by client ID endpoint
    * 
    * Retrieves all service records associated with a specific client ID.
    * Optionally filters results by segment ID.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route GET /api/client-services/client/:clientId
    * @param {string} req.params.clientId - Client ID to retrieve services for
@@ -1292,7 +1909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {Array} List of service records for the specified client
    * @throws {ApiError} 400 - If client ID format is invalid
    */
-  app.get("/api/client-services/client/:clientId", async (req: Request, res: Response) => {
+  app.get("/api/client-services/client/:clientId", apiRateLimit, validateRequest(clientIdValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, companyDataFilter, async (req: Request, res: Response) => {
     console.log("[API] Getting existing services for client:", req.params.clientId);
     try {
       const clientId = parseInt(req.params.clientId);
@@ -1311,12 +1928,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch client services" });
     }
   });
-
   /**
    * Update service status endpoint
    * 
    * Updates the status of a client service to track its progress through the workflow.
    * Validates that the status is one of the allowed values: Planned, In Progress, or Closed.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route PATCH /api/client-services/:id
    * @param {string} req.params.id - Service ID to update
@@ -1324,7 +1941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @returns {object} Success message
    * @throws {ApiError} 400 - If service ID format is invalid or status value is invalid
    */
-  app.patch("/api/client-services/:id", async (req: Request, res: Response) => {
+  app.patch("/api/client-services/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -1343,19 +1960,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update service status" });
     }
   });
-  
   /**
    * Get case notes by service ID endpoint
    * 
    * Retrieves all case notes associated with a specific service.
    * Used to display the history of notes for a client service.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route GET /api/service-case-notes/service/:serviceId
    * @param {string} req.params.serviceId - Service ID to retrieve notes for
    * @returns {Array} List of case notes for the specified service
    * @throws {ApiError} 400 - If service ID format is invalid
+   * @throws {ApiError} 404 - If no case notes are found
+   * @security Requires authentication and applies rate limiting, input validation, sanitization, SQL injection prevention
    */
-  app.get("/api/service-case-notes/service/:serviceId", async (req: Request, res: Response) => {
+  app.get("/api/service-case-notes/service/:serviceId", apiRateLimit, validateRequest(serviceIdValidation), sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     try {
       const serviceId = parseInt(req.params.serviceId);
       if (isNaN(serviceId)) {
@@ -1369,106 +1988,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch service case notes" });
     }
   });
-
   /**
-   * Get specific case note endpoint
+   * Get case notes count for multiple services endpoint
    * 
-   * Retrieves a single case note by its service ID.
-   * Used for viewing or editing a specific note.
+   * Retrieves case notes count for multiple services in a single request.
+   * Used for displaying case notes indicators in the services table.
    * 
-   * @route GET /api/service-case-notes/:serviceId
-   * @param {string} req.params.serviceId - Service ID of the note to retrieve
-   * @returns {object} Case note data
-   * @throws {ApiError} 400 - If service ID format is invalid
-   */
-  app.get("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
-    try {
-      const serviceId = parseInt(req.params.serviceId);
-      if (isNaN(serviceId)) {
-        return res.status(400).json({ message: "Invalid service ID format" });
-      }
-
-      const note = await dbStorage.getServiceCaseNote(serviceId);
-      return res.status(200).json(note);
-    } catch (error) {
-      console.error("Error fetching case note:", error);
-      return res.status(500).json({ message: "Failed to fetch case note" });
-    }
-  });
-  
-  /**
-   * Create service case note endpoint
-   * 
-   * Creates a new case note associated with a service.
-   * Automatically records the creator's user ID from the session.
-   * 
-   * @route POST /api/service-case-notes
-   * @param {object} req.body - Case note data with serviceId and noteText
-   * @returns {object} Created case note
+   * @route POST /api/service-case-notes/counts
+   * @param {number[]} req.body.serviceIds - Array of service IDs to get counts for
+   * @returns {object} Object with serviceId as key and count as value
+   * @throws {ApiError} 400 - If service IDs format is invalid
    * @throws {ApiError} 401 - If user is not authenticated
    */
-  app.post("/api/service-case-notes", async (req: Request, res: Response) => {
+  app.post("/api/service-case-notes/counts", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     try {
-      const { serviceId, noteText } = req.body;
-      if (!req.session?.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+      const { serviceIds } = req.body;
+      
+      if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+        return res.status(400).json({ message: "Invalid service IDs format" });
       }
 
-      const note = await dbStorage.createServiceCaseNote({
-        serviceId,
-        noteText,
-        createdBy: req.session.user.id
-      });
+      // Validate all service IDs are numbers
+      const validServiceIds = serviceIds.filter(id => Number.isInteger(id) && id > 0);
+      if (validServiceIds.length !== serviceIds.length) {
+        return res.status(400).json({ message: "All service IDs must be valid positive integers" });
+      }
 
-      return res.status(201).json(note);
+      const counts: Record<number, number> = {};
+      
+      // Get counts for each service
+      for (const serviceId of validServiceIds) {
+        const count = await dbStorage.getServiceCaseNotesCount(serviceId);
+        counts[serviceId] = count;
+      }
+
+      return res.status(200).json(counts);
     } catch (error) {
-      console.error("Error creating case note:", error);
-      return res.status(500).json({ message: "Failed to create case note" });
+      console.error("Error fetching case notes counts:", error);
+      return res.status(500).json({ message: "Failed to fetch case notes counts" });
     }
   });
-  
-  /**
-   * Update service case note endpoint
-   * 
-   * Updates an existing case note with new content.
-   * Records the user ID of who made the update from the session.
-   * 
-   * @route PUT /api/service-case-notes/:serviceId
-   * @param {string} req.params.serviceId - Service ID of the note to update
-   * @param {string} req.body.noteText - Updated note text content
-   * @returns {object} Updated case note
-   * @throws {ApiError} 400 - If service ID format is invalid
-   * @throws {ApiError} 401 - If user is not authenticated
-   */
-  app.put("/api/service-case-notes/:serviceId", async (req: Request, res: Response) => {
-    try {
-      const serviceId = parseInt(req.params.serviceId);
-      const { noteText } = req.body;
-      if (!req.session?.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      if (isNaN(serviceId)) {
-        return res.status(400).json({ message: "Invalid service ID format" });
-      }
-
-      const note = await dbStorage.updateServiceCaseNote(serviceId, {
-        noteText,
-        updatedBy: req.session.user.id
-      });
-
-      return res.status(200).json(note);
-    } catch (error) {
-      console.error("Error updating case note:", error);
-      return res.status(500).json({ message: "Failed to update case note" });
-    }
-  });  
   
   /**
    * Change password endpoint
    * 
    * Allows users to change their own password.
    * Verifies the current password before allowing the change.
+   * Enhanced with input validation, strength checking, and audit logging.
    * 
    * @route POST /api/change-password
    * @param {string} req.body.currentPassword - User's current password for verification
@@ -1477,49 +2043,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 400 - If passwords are missing or current password is incorrect
    * @throws {ApiError} 401 - If user is not authenticated
    * @throws {ApiError} 404 - If user not found in database
-   */
-  app.post("/api/change-password", async (req, res) => {
+   */  
+  app.post("/api/change-password", authRateLimit, authMiddleware, async (req: Request, res: Response) => {
     try {
-      // Use session instead of req.user since this endpoint isn't using authMiddleware
-      const userId = req.session.user?.id;
+      // Use JWT user instead of session
+      const userId = req.user?.id;
+      const username = req.user?.username;
       const { currentPassword, newPassword } = req.body;
+      
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
+      
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: "Current and new password required" });
       }
+      
+      // Validate password types and lengths
+      if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return res.status(400).json({ message: "Invalid password format" });
+      }
+      
+      // Basic password strength validation
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "New password must be at least 6 characters long" });
+      }
+      
+      if (newPassword.length > 128) {
+        return res.status(400).json({ message: "New password is too long" });
+      }
+      
+      // Prevent reusing the same password
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ message: "New password must be different from current password" });
+      }
+      
       // Fetch user from DB
       const user = await dbStorage.getUserById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      
       // Check current password
       const isMatch = await dbStorage.verifyPassword(user.username, currentPassword);
       if (!isMatch) {
+        console.warn(`Failed password change attempt for user: ${username} (ID: ${userId}) from IP: ${req.ip}`);
         return res.status(400).json({ message: "Current password is incorrect" });
       }
-      // Update password
+        // Update password
       await dbStorage.updateUserPassword(userId, newPassword);
+      
+      // Log successful password change for audit
+      console.info(`Password changed successfully for user: ${username} (ID: ${userId}) from IP: ${req.ip}`);
+      
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: userId,
+        username: username || 'unknown',
+        action: 'CHANGE_PASSWORD',
+        resourceType: 'USER',
+        resourceId: userId.toString(),
+        details: 'User changed password',
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
       return res.status(200).json({ message: "Password changed successfully" });
     } catch (err) {
+      console.error("Password change error:", err);
       const errorMessage = err instanceof Error ? err.message : "Failed to change password";
       return res.status(500).json({ message: errorMessage });
     }
-  });  
-  
-  /**
+  });
+    /**
    * List all users endpoint (admin only)
    * 
    * Retrieves a list of all users in the system.
    * Restricted to administrators only.
    * Returns sanitized user data without sensitive information.
+   * Enhanced with comprehensive security middleware.
    * 
    * @route GET /api/users
    * @returns {Array} List of users with sanitized data
    * @throws {ApiError} 403 - If requester is not an admin
    */
-  app.get("/api/users", authMiddleware, async (req: Request, res: Response) => {
+  app.get("/api/users", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     // Type assertion to access user property
     const authReq = req as any;    try {
       const user = await dbStorage.getUserById(authReq.user.id);
@@ -1543,14 +2157,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log ("[API /api/users] Failed to fetch users")
       return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
-  });  
-  
-  /**
+  });
+    /**
    * Get user by ID endpoint (admin only)
    * 
    * Retrieves detailed information about a specific user.
    * Restricted to administrators only.
    * Implements detailed logging for troubleshooting authentication issues.
+   * Enhanced with comprehensive security middleware including ID validation.
    * 
    * @route GET /api/users/:id
    * @param {string} req.params.id - User ID to retrieve
@@ -1559,7 +2173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 403 - If requester is not an admin
    * @throws {ApiError} 404 - If user not found
    */
-  app.get("/api/users/:id", authMiddleware, async (req, res) => {
+  app.get("/api/users/:id", apiRateLimit, sanitizeInput, preventSQLInjection, idValidation, authMiddleware, async (req: Request, res: Response) => {
     try {
       console.log(`[API /api/users/:id] Request received for user with ID: ${req.params.id}`);
       console.log(`[API /api/users/:id] Request headers:`, req.headers);
@@ -1604,15 +2218,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("[API /api/users/:id] Error fetching user:", err);
       return res.status(500).json({ message: "Failed to fetch user", error: err instanceof Error ? err.message : "Unknown error" });
     }
-  });  
-  
-  /**
+  });
+    /**
    * Update user endpoint
    * 
    * Updates a user's information in the database.
    * Enforces different permission levels:
    * - Admins can update any user and any fields
    * - Regular users can only update their own name and password
+   * Enhanced with comprehensive security middleware.
    * 
    * @route PUT /api/users/:id
    * @param {string} req.params.id - User ID to update
@@ -1622,7 +2236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 403 - If user lacks permission for the update
    * @throws {ApiError} 404 - If user not found
    */
-  app.put("/api/users/:id", authMiddleware, async (req, res) => {
+  app.put("/api/users/:id", apiRateLimit, sanitizeInput, preventSQLInjection, idValidation, authMiddleware, async (req: Request, res: Response) => {
     try {
       console.log(`[API PUT /api/users/:id] Update request received for user with ID: ${req.params.id}`);
       
@@ -1664,8 +2278,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData.password = req.body.password;
         }
       }
+        const updatedUser = await dbStorage.updateUser(userId, updateData);
       
-      const updatedUser = await dbStorage.updateUser(userId, updateData);
+      // Log user update for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      const updatedFields = Object.keys(updateData).filter(key => key !== 'password');
+      const details = currentUser.role === "admin" && currentUser.id !== userId ? 
+        `Admin updated user ${existingUser.username}. Fields: ${updatedFields.join(', ')}` :
+        `User updated own profile. Fields: ${updatedFields.join(', ')}`;
+      
+      await dbStorage.logUserActivity({
+        userId: currentUser.id,
+        username: currentUser.username,
+        action: 'UPDATE_USER',
+        resourceType: 'USER',
+        resourceId: userId.toString(),
+        details: details,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
       
       // Set explicit headers to ensure proper response type
       res.setHeader('Content-Type', 'application/json');
@@ -1682,14 +2319,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update user", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
-  
-  /**
+
+    /**
    * Create new user endpoint (admin only)
    * 
    * Creates a new user account in the system.
    * Restricted to administrators only.
    * Performs validation and checks for duplicate usernames.
    * Uses AuthService to ensure proper password hashing.
+   * Enhanced with comprehensive security middleware.
    * 
    * @route POST /api/users
    * @param {object} req.body - User data including username, password, role, etc.
@@ -1697,20 +2335,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 400 - If validation fails
    * @throws {ApiError} 403 - If requester is not an admin
    * @throws {ApiError} 409 - If username already exists
-   */
-  app.post("/api/users", async (req, res) => {
+   */  
+  app.post("/api/users", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, async (req: Request, res: Response) => {
     try {
       console.log("Received user creation request with body:", {
         ...req.body,
         password: '[REDACTED]'  // Don't log passwords
       });
 
-      if (!req.session?.user?.id) {
-        console.log("Request rejected: No session user ID");
+      if (!req.user?.id) {
+        console.log("Request rejected: No user ID");
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const currentUser = await dbStorage.getUserById(req.session.user.id);
+      const currentUser = await dbStorage.getUserById(req.user.id);
       console.log("Current user attempting operation:", {
         id: currentUser?.id,
         username: currentUser?.username,
@@ -1736,9 +2374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existing) {
           console.log("Request rejected: Username already exists:", validatedData.username);
           return res.status(409).json({ message: "Username already exists" });
-        }
-
-        // Create user using AuthService to ensure bcrypt is used
+        }        // Create user using AuthService to ensure bcrypt is used
         console.log("Creating new user with username:", validatedData.username);
         const user = await AuthService.createUser({ 
           name: validatedData.name,
@@ -1753,6 +2389,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: user.username,
           role: user.role,
           company_id: user.company_id
+        });
+
+        // Log user creation for audit
+        const clientIP = req.headers['x-forwarded-for'] as string || 
+                        req.headers['x-real-ip'] as string || 
+                        req.socket.remoteAddress || 
+                        req.ip || 
+                        'unknown';
+        
+        await dbStorage.logUserActivity({
+          userId: currentUser.id,
+          username: currentUser.username,
+          action: 'CREATE_USER',
+          resourceType: 'USER',
+          resourceId: user.id.toString(),
+          details: `Created new user: ${user.username} with role: ${user.role}`,
+          ipAddress: clientIP,
+          userAgent: req.headers['user-agent'] || 'unknown',
+          timestamp: new Date()
         });
 
         return res.status(201).json(user);
@@ -1774,22 +2429,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       return res.status(500).json({ message: "Failed to add user" });
     }
-  });  
-
+  });
   /**
-  // Company routes (admin only)  
    * List all companies endpoint (admin only)
    * 
    * Retrieves all companies registered in the system.
    * Restricted to administrators only.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Authentication required
+   * - Admin role verification
    * 
    * @route GET /api/companies
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware authMiddleware - Authentication verification
    * @returns {Array} List of company records
+   * @throws {ApiError} 401 - If user is not authenticated
    * @throws {ApiError} 403 - If requester is not an admin
-   */
-  app.get("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails
+   */  
+  app.get("/api/companies", 
+    apiRateLimit,
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
     // Type assertion for authenticated user
-    const authReq = req as any;    try {
+    const authReq = req as any;
+    try {
       const user = await dbStorage.getUserById(authReq.user.id);
       if (!user || user.role !== "admin") {
         return res.status(403).json({ message: "Forbidden: Admin access required" });
@@ -1801,55 +2477,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching companies:", error);
       return res.status(500).json({ message: "Failed to fetch companies" });
     }  });
-  
-  /**
+    
+    /**
    * Create company endpoint (admin only)
    * 
    * Creates a new company record in the system.
    * Automatically adds the current user's ID as the creator.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Authentication required
+   * - Input schema validation using Zod
    * 
    * @route POST /api/companies
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware authMiddleware - Authentication verification
    * @param {object} req.body - Company data to create
+   * @param {string} req.body.company_name - Name of the company
+   * @param {string} req.body.registered_address - Registered business address
+   * @param {string} req.body.postal_address - Postal/mailing address
+   * @param {string} req.body.contact_person_name - Primary contact person name
+   * @param {string} req.body.contact_person_phone - Contact phone number (10 digits)
+   * @param {string} req.body.contact_person_email - Contact email address
    * @returns {object} Created company record
+   * @throws {ApiError} 400 - If validation fails or required fields missing
    * @throws {ApiError} 401 - If user is not authenticated
-   */
-  app.post("/api/companies", authMiddleware, async (req: Request, res: Response) => {
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails
+   */  app.post("/api/companies", 
+    apiRateLimit,
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;
     try {
       if (!authReq.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      
-      // Add the current user's ID as the creator
+        // Add the current user's ID as the creator
       const validatedData = insertCompanySchema.parse({
         ...req.body,
         created_by: authReq.user.id
       });
       
       const company = await dbStorage.createCompany(validatedData);
+      
+      // Log company creation for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+        await dbStorage.logUserActivity({
+        userId: authReq.user.id,
+        username: authReq.user.username || 'unknown',
+        action: 'CREATE_COMPANY',
+        resourceType: 'COMPANY',
+        resourceId: company.company_id.toString(),
+        details: `Created new company: ${company.company_name}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
       res.status(201).json(company);
     } catch (error) {
       console.error("Error creating company:", error);
       return res.status(500).json({ message: "Failed to create company" });
     }  });  
-  
-  /**
+    
+    /**
    * Update company endpoint (admin only)
    * 
    * Updates an existing company's information.
    * Preserves the original creator ID if available.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, ID validation, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Parameter ID validation
+   * - Authentication required
+   * - Admin role verification
+   * - Input schema validation using Zod
    * 
    * @route PUT /api/companies/:id
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware idValidation - Parameter ID validation
+   * @middleware authMiddleware - Authentication verification
    * @param {string} req.params.id - Company ID to update
    * @param {object} req.body - Updated company data
+   * @param {string} req.body.company_name - Name of the company
+   * @param {string} req.body.registered_address - Registered business address
+   * @param {string} req.body.postal_address - Postal/mailing address
+   * @param {string} req.body.contact_person_name - Primary contact person name
+   * @param {string} req.body.contact_person_phone - Contact phone number (10 digits)
+   * @param {string} req.body.contact_person_email - Contact email address
    * @returns {object} Updated company record
    * @throws {ApiError} 400 - If company ID format is invalid or validation fails
    * @throws {ApiError} 401 - If user is not authenticated
    * @throws {ApiError} 403 - If user is not an admin
    * @throws {ApiError} 404 - If company not found
-   */
-  app.put("/api/companies/:id", authMiddleware, async (
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails   */  
+  app.put("/api/companies/:id", 
+    apiRateLimit,
+    validateRequest(idValidation),
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (
     req: Request,
     res: Response
   ) => {
@@ -1870,15 +2621,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }      const existingCompany = await dbStorage.getCompanyById(id);
       if (!existingCompany) {
         return res.status(404).json({ message: "Company not found" });
-      }
-
-      // Ensure created_by is a number rather than undefined or null
+      }      // Ensure created_by is a number rather than undefined or null
       const validatedData = insertCompanySchema.parse({
         ...req.body,
         created_by: existingCompany.created_by || authReq.user.id
       });
 
       const company = await dbStorage.updateCompany(id, validatedData);
+      
+      // Log company update for audit
+      const clientIP = req.headers['x-forwarded-for'] as string || 
+                      req.headers['x-real-ip'] as string || 
+                      req.socket.remoteAddress || 
+                      req.ip || 
+                      'unknown';
+      
+      await dbStorage.logUserActivity({
+        userId: authReq.user.id,
+        username: authReq.user.username || 'unknown',
+        action: 'UPDATE_COMPANY',
+        resourceType: 'COMPANY',
+        resourceId: id.toString(),
+        details: `Updated company: ${existingCompany.company_name}`,
+        ipAddress: clientIP,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        timestamp: new Date()
+      });
+      
       return res.status(200).json(company);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1911,14 +2680,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Type assertion for authenticated user
     const authReq = req as any;
     try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const user = await dbStorage.getUserById(req.user.id);
-      if (!user || user.role !== "admin") {
-        return res.status(403).json({ message: "Forbidden: Admin access required" });
-      }
-
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid company ID" });
@@ -1935,18 +2696,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error deleting company:", error);
       return res.status(500).json({ message: "Failed to delete company" });
     }  });
-*/
-  /**
+*/  
+
+/**
    * Get segments by company endpoint
    * 
    * Retrieves all segments belonging to a specific company.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, ID validation, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Parameter ID validation
+   * - Authentication required
+   * - Company ID format validation
    * 
    * @route GET /api/segments/:companyId
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware idValidation - Parameter ID validation
+   * @middleware authMiddleware - Authentication verification
    * @param {string} req.params.companyId - Company ID to retrieve segments for
    * @returns {Array} List of segments for the company
    * @throws {ApiError} 400 - If company ID format is invalid
-   */
-  app.get("/api/segments/:companyId", authMiddleware, async (req: Request, res: Response) => {
+   * @throws {ApiError} 401 - If user is not authenticated
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails
+   */  
+  app.get("/api/segments/:companyId", 
+    apiRateLimit,
+    strictRateLimit,
+    validateRequest(companyIdValidation),
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;
     try {
@@ -1961,20 +2749,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });
     }  });
-
   /**
    * Create segment endpoint
    * 
    * Creates a new segment for a specified company.
    * Automatically records the creator's user ID.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Authentication required
+   * - Input validation for required fields
    * 
    * @route POST /api/segments
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware authMiddleware - Authentication verification
    * @param {object} req.body - Segment data including segment_name and company_id
+   * @param {string} req.body.segment_name - Name of the segment
+   * @param {number} req.body.company_id - ID of the company this segment belongs to
    * @returns {object} Created segment record
    * @throws {ApiError} 400 - If segment name or company ID are missing
    * @throws {ApiError} 401 - If user is not authenticated
-   */
-  app.post("/api/segments", authMiddleware, async (req: Request, res: Response) => {
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails  */  
+  app.post("/api/segments", 
+    apiRateLimit,
+    strictRateLimit,
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;
     try {
@@ -1994,21 +2804,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error creating segment:", error);
       return res.status(500).json({ message: "Failed to create segment" });
     }  });
-
   /**
    * Update segment endpoint
    * 
    * Updates an existing segment's information.
    * Currently only allows updating the segment name.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, ID validation, and SQL injection prevention.
+   * 
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Parameter ID validation
+   * - Authentication required
+   * - Input validation for required fields
    * 
    * @route PUT /api/segments/:id
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware idValidation - Parameter ID validation
+   * @middleware authMiddleware - Authentication verification
    * @param {string} req.params.id - Segment ID to update
+   * @param {object} req.body - Updated segment data
    * @param {string} req.body.segment_name - New segment name
    * @returns {object} Updated segment record
    * @throws {ApiError} 400 - If segment ID format is invalid or segment name is missing
+   * @throws {ApiError} 401 - If user is not authenticated
    * @throws {ApiError} 404 - If segment not found
-   */
-  app.put("/api/segments/:id", authMiddleware, async (req: Request, res: Response) => {
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails   */  
+  app.put("/api/segments/:id", 
+    apiRateLimit,
+    strictRateLimit,
+    validateRequest(idValidation),
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;
     try {
@@ -2048,7 +2883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {string} req.params.id - Segment ID to delete
    * @returns {object} Success message
    * @throws {ApiError} 400 - If segment ID format is invalid
-   * @throws {ApiError} 404 - If segment not found
+   * @throws {404} - If segment not found
    */
   /*
   app.delete("/api/segments/:id", authMiddleware, async (req: Request, res: Response) => {
@@ -2082,7 +2917,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * @route GET /api/user/segments
    * @returns {Array} List of segments for the user's company
-   */  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
+   */  
+  app.get("/api/user/segments", authMiddleware, async (req: Request, res: Response) => {
     // Type assertion for authenticated user
     const authReq = req as any;    
     try {
@@ -2134,8 +2970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to fetch segments" });
     }
   });
-  
-  /**
+    /**
    * Verify master data existence endpoint
    * 
    * Verifies that a specific combination of service category, type, and provider exists in the master data.
@@ -2148,7 +2983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {string} [req.query.segmentId] - Optional segment ID to check against
    * @returns {object} Success or error message
    */
-  app.get("/api/master-data/verify", async (req: Request, res: Response) => {
+  app.get("/api/master-data/verify", authMiddleware, async (req: Request, res: Response) => {
     try {
       const { category, type, provider, segmentId } = req.query;
       

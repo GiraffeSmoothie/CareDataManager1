@@ -7,9 +7,9 @@ import { insertPersonInfoSchema, type PersonInfo } from "@shared/schema";
 import { apiRequest } from "../lib/queryClient";
 import AppLayout from "../layouts/app-layout";
 import { useToast } from "../hooks/use-toast";
-import { Loader2, Plus, CalendarIcon } from "lucide-react";
+import { Loader2, Plus, CalendarIcon, Users, Activity, Clock, Heart } from "lucide-react";
 import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
-import { STATUS_CONFIGS, getStatusBadgeColors } from '@/lib/constants';
+import { getStatusBadgeColors } from '@/lib/constants';
 import { ErrorDisplay } from "@/components/ui/error-display";
 import { useSegment } from "@/contexts/segment-context";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,21 +41,25 @@ const personInfoSchema = insertPersonInfoSchema.extend({
     .refine(val => !val || /^\d{10}$/.test(val), {
       message: "Home phone must be 10 digits (no spaces or symbols)"
     }),
-  mobilePhone: z.string()
-    .refine(val => /^\d{10}$/.test(val), {
+  mobilePhone: z.string().optional().or(z.literal(""))
+    .refine(val => !val || /^\d{10}$/.test(val), {
       message: "Mobile phone must be 10 digits (no spaces or symbols)"
-    }),
-  postCode: z.string().min(1, "Post Code is required")
-    .refine(val => /^\d{4}$/.test(val), {
+    }),  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  postCode: z.string().optional().or(z.literal(""))
+    .refine(val => !val || /^\d{4}$/.test(val), {
       message: "Post code must be a 4-digit number"
     }),
   addressLine2: z.string().optional().or(z.literal("")),
   addressLine3: z.string().optional().or(z.literal("")),
-  nextOfKinEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
-  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),  
-  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
-  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required")
-    .refine(val => /^\d{10}$/.test(val), {
+  mailingAddressLine1: z.string().optional().or(z.literal("")),
+  mailingAddressLine2: z.string().optional().or(z.literal("")),
+  mailingAddressLine3: z.string().optional().or(z.literal("")),
+  mailingPostCode: z.string().optional().or(z.literal("")),  nextOfKinEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  nextOfKinName: z.string().optional().or(z.literal("")),  
+  nextOfKinRelationship: z.string().optional().or(z.literal("")),
+  nextOfKinAddress: z.string().optional().or(z.literal("")),
+  nextOfKinPhone: z.string().optional().or(z.literal(""))
+    .refine(val => !val || /^\d{10}$/.test(val), {
       message: "Next of kin phone must be 10 digits (no spaces or symbols)"
     }),
   hcpLevel: z.string().min(1, "HCP Level is required"),
@@ -107,8 +111,8 @@ export default function ManageClient() {
       mailingAddressLine2: "",
       mailingAddressLine3: "",
       mailingPostCode: "",
-      useHomeAddress: true,
-      nextOfKinName: "",
+      useHomeAddress: true,      nextOfKinName: "",
+      nextOfKinRelationship: "",
       nextOfKinAddress: "",
       nextOfKinEmail: "",
       nextOfKinPhone: "",
@@ -118,7 +122,6 @@ export default function ManageClient() {
       segmentId: selectedSegment?.id || null,
     },
   });
-
   // Fetch all clients with segment filtering - using a better query approach
   const { data: clients = [], isLoading, error, refetch } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info", selectedSegment?.id],
@@ -129,14 +132,7 @@ export default function ManageClient() {
       
       const url = `/api/person-info?segmentId=${selectedSegment.id}`;
       console.log("Fetching clients from:", url);
-      const response = await fetch(url, { 
-        credentials: "include",
-        // Add cache busting params
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await apiRequest("GET", url);
       
       if (!response.ok) {
         throw new Error("Failed to fetch clients");
@@ -293,17 +289,16 @@ export default function ManageClient() {
       // Remove any non-digit characters and ensure it's just 4 digits
       return postcode.replace(/\D/g, '').substring(0, 4).padStart(4, '0');
     };
-    
-    // Format data before submission
+      // Format data before submission
     const formattedData = {
       ...data,
       // Format phone numbers
-      mobilePhone: formatPhoneNumber(data.mobilePhone),
+      mobilePhone: data.mobilePhone ? formatPhoneNumber(data.mobilePhone) : data.mobilePhone,
       homePhone: data.homePhone ? formatPhoneNumber(data.homePhone) : data.homePhone,
-      nextOfKinPhone: formatPhoneNumber(data.nextOfKinPhone),
+      nextOfKinPhone: data.nextOfKinPhone ? formatPhoneNumber(data.nextOfKinPhone) : data.nextOfKinPhone,
       
       // Format postcodes
-      postCode: formatPostcode(data.postCode),
+      postCode: data.postCode ? formatPostcode(data.postCode) : data.postCode,
       mailingPostCode: data.mailingPostCode ? formatPostcode(data.mailingPostCode) : data.mailingPostCode,
       
       // Format dates
@@ -472,31 +467,117 @@ export default function ManageClient() {
       </AppLayout>
     );
   }
-
   return (
     <AppLayout>
-      <div className="container py-6">
-        <Card className="mb-6">
+      <div className="p-6 space-y-6">
+        {/* Enhanced Header with Welcome Message */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Client Management</h1>
+            <p className="text-muted-foreground">
+              {selectedSegment ? `Managing clients for ${selectedSegment.segment_name} segment` : "Please select a segment to view and manage clients"}
+            </p>
+          </div>
+          {selectedSegment && (
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleAddNew}
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add New Client
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Statistics Cards */}
+        {selectedSegment && clients && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="border-l-4 border-l-blue-500">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Total Clients
+                </CardTitle>
+                <Users className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{clients?.length || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  All registered clients
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-green-500">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Active Clients
+                </CardTitle>
+                <Activity className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{clients?.filter(c => c.status === "Active").length || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  Currently active
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-orange-500">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Paused Clients
+                </CardTitle>
+                <Clock className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{clients?.filter(c => c.status === "Paused").length || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  Temporarily paused
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-purple-500">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  HCP Enrolled
+                </CardTitle>
+                <Heart className="h-4 w-4 text-purple-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{clients?.filter(c => c.hcpLevel && c.hcpLevel !== "-").length || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  Health care programs
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <div className="flex flex-col">
-                <CardTitle>Clients</CardTitle>
-                {selectedSegment && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Showing clients for segment: {selectedSegment.segment_name}
-                  </p>
-                )}
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Client Directory
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  View and manage all client information
+                </p>
               </div>
-              <div className="flex gap-2">
+              {selectedSegment && (
                 <Button 
                   onClick={handleAddNew}
-                  disabled={!selectedSegment}
-                  title={!selectedSegment ? "Please select a segment first" : "Add new client"}
+                  variant="outline"
+                  className="flex items-center gap-2"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New
+                  <Plus className="h-4 w-4" />
+                  Add Client
                 </Button>
-              </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -548,7 +629,7 @@ export default function ManageClient() {
                       name="title"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Title</FormLabel>
+                          <FormLabel>Title <span className="text-red-500">*</span></FormLabel>
                           <Select 
                             onValueChange={field.onChange} 
                             defaultValue={field.value}
@@ -575,7 +656,7 @@ export default function ManageClient() {
                       name="firstName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First Name</FormLabel>
+                          <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
                           <FormControl>
                             <Input placeholder="First name" {...field} />
                           </FormControl>
@@ -588,7 +669,7 @@ export default function ManageClient() {
                       name="lastName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last Name</FormLabel>
+                          <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
                           <FormControl>
                             <Input placeholder="Last name" {...field} />
                           </FormControl>
@@ -617,7 +698,7 @@ export default function ManageClient() {
                       name="dateOfBirth"
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
-                          <FormLabel>Date of Birth</FormLabel>
+                          <FormLabel>Date of Birth <span className="text-red-500">*</span></FormLabel>
                           <Popover>
                             <PopoverTrigger asChild>
                               <FormControl>
@@ -665,7 +746,7 @@ export default function ManageClient() {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email</FormLabel>
+                          <FormLabel>Email (Optional)</FormLabel>
                           <FormControl>
                             <Input type="email" placeholder="Email address" {...field} />
                           </FormControl>
@@ -696,7 +777,7 @@ export default function ManageClient() {
                       name="mobilePhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Mobile Phone</FormLabel>
+                          <FormLabel>Mobile Phone (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="Mobile phone number (10 digits)" {...field} />
                           </FormControl>
@@ -722,7 +803,7 @@ export default function ManageClient() {
                       name="addressLine1"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Address Line 1</FormLabel>
+                          <FormLabel>Address Line 1 <span className="text-red-500">*</span></FormLabel>
                           <FormControl>
                             <Input placeholder="Street address" {...field} />
                           </FormControl>
@@ -766,7 +847,7 @@ export default function ManageClient() {
                       name="postCode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Postcode</FormLabel>
+                          <FormLabel>Postcode (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="4-digit postcode" {...field} />
                           </FormControl>
@@ -889,15 +970,13 @@ export default function ManageClient() {
                 <div className="space-y-6">
                   <div className="border-b pb-2">
                     <h3 className="text-lg font-medium">Next of Kin Details</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4">
+                  </div>                  <div className="grid grid-cols-1 gap-4">
                     <FormField
                       control={form.control}
                       name="nextOfKinName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Name</FormLabel>
+                          <FormLabel>Next of Kin Name (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="Full name" {...field} />
                           </FormControl>
@@ -910,10 +989,39 @@ export default function ManageClient() {
                   <div className="grid grid-cols-1 gap-4">
                     <FormField
                       control={form.control}
-                      name="nextOfKinAddress"
+                      name="nextOfKinRelationship"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Address</FormLabel>
+                          <FormLabel>Relationship (Optional)</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select relationship" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="spouse">Spouse</SelectItem>
+                              <SelectItem value="partner">Partner</SelectItem>
+                              <SelectItem value="parent">Parent</SelectItem>
+                              <SelectItem value="child">Child</SelectItem>
+                              <SelectItem value="sibling">Sibling</SelectItem>
+                              <SelectItem value="friend">Friend</SelectItem>
+                              <SelectItem value="guardian">Guardian</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}                      name="nextOfKinAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Next of Kin Address (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="Full address" {...field} />
                           </FormControl>
@@ -925,11 +1033,10 @@ export default function ManageClient() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
-                      control={form.control}
-                      name="nextOfKinPhone"
+                      control={form.control}                      name="nextOfKinPhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Next of Kin Phone</FormLabel>
+                          <FormLabel>Next of Kin Phone (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="Phone number (10 digits)" {...field} />
                           </FormControl>
@@ -968,7 +1075,7 @@ export default function ManageClient() {
                       name="hcpLevel"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>HCP Level</FormLabel>
+                          <FormLabel>HCP Level <span className="text-red-500">*</span></FormLabel>
                           <Select 
                             onValueChange={field.onChange} 
                             defaultValue={field.value}
@@ -995,7 +1102,7 @@ export default function ManageClient() {
                       name="hcpStartDate"
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
-                          <FormLabel>HCP Start Date</FormLabel>
+                          <FormLabel>HCP Start Date <span className="text-red-500">*</span></FormLabel>
                           <Popover>
                             <PopoverTrigger asChild>
                               <FormControl>

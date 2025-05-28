@@ -1,10 +1,14 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { TokenStorage, TokenRefreshService } from "./token-storage";
 
 // Session timeout handling
 let isRedirectingToLogin = false;
 const handleSessionTimeout = () => {
   if (!isRedirectingToLogin && typeof window !== 'undefined') {
     isRedirectingToLogin = true;
+    
+    // Clear stored tokens
+    TokenStorage.clearTokens();
     
     // Store the current URL to redirect back after login
     const currentPath = window.location.pathname;
@@ -65,6 +69,12 @@ export async function apiRequest(
   const headers: Record<string, string> = {};
   let body: any = undefined;
   
+  // Add JWT token to headers
+  const accessToken = await TokenRefreshService.getValidAccessToken();
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+  
   if (data) {
     if (isFormData) {
       body = data;
@@ -73,19 +83,22 @@ export async function apiRequest(
       body = JSON.stringify(data);
     }
   }
+  
   const response = await fetch(url, {
     method,
     headers,
     body,
-    credentials: "include",
+    // Remove credentials: "include" as we're using JWT tokens instead of cookies
   });
 
   // Clone the response before checking status and reading body
   const responseClone = response.clone();
   
   if (!response.ok) {
-    // Check for unauthorized error (session timeout)
+    // Check for unauthorized error (token expired/invalid)
     if (response.status === 401) {
+      // Clear tokens and handle session timeout
+      TokenStorage.clearTokens();
       handleSessionTimeout();
       throw new Error('Your session has expired. Please log in again.');
     }
@@ -114,16 +127,24 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const url = queryKey[0] as string;
     
+    // Prepare headers with JWT token
+    const headers: Record<string, string> = {};
+    const accessToken = await TokenRefreshService.getValidAccessToken();
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+    
     const res = await fetch(url, {
-      credentials: "include",
+      headers,
+      // Remove credentials: "include" as we're using JWT tokens
     });
 
     if (res.status === 401) {
       if (unauthorizedBehavior === "returnNull") {
         return null;
       } else {
-        // This will only trigger for endpoints that aren't auth related
-        // For auth status checks, we use "returnNull" behavior
+        // Clear tokens and handle session timeout for non-auth endpoints
+        TokenStorage.clearTokens();
         handleSessionTimeout();
       }
     }

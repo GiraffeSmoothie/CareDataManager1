@@ -5,7 +5,8 @@ import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, Loader2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { Plus, Loader2, Database, Activity } from "lucide-react";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,17 +36,11 @@ export default function MasterData() {
   const [error, setError] = useState<Error | null>(null);
   const { selectedSegment } = useSegment(); // Get the selected segment from context
   const [isAdmin, setIsAdmin] = useState(false);
-
   // Check if user is admin
   const { data: authData } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
-      const response = await fetch('/api/auth/status', { 
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        return { authenticated: false };
-      }
+      const response = await apiRequest('GET', '/api/auth/status');
       return response.json();
     },
   });
@@ -85,17 +80,12 @@ export default function MasterData() {
   }, [editingData]);
   // Fetch all master data for the View tab
   const { data: masterDataList = [], isLoading, refetch, error: queryError } = useQuery<MasterDataType[]>({
-    queryKey: ["/api/master-data", selectedSegment?.id],
-    queryFn: async () => {
+    queryKey: ["/api/master-data", selectedSegment?.id],    queryFn: async () => {
       const url = selectedSegment 
         ? `/api/master-data?segmentId=${selectedSegment.id}` 
         : "/api/master-data";
-      const response = await fetch(url);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch master data");
-      }
-      return response.json();
+      const response = await apiRequest("GET", url);
+      return await response.json();
     },
     enabled: shouldFetchData,
   });
@@ -118,7 +108,6 @@ export default function MasterData() {
       active: true,
     },
   });
-
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: MasterDataFormValues) => {
@@ -128,20 +117,8 @@ export default function MasterData() {
         segmentId: selectedSegment?.id || null
       };
       
-      const response = await fetch("/api/master-data", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to create master data");
-      }
-
-      return response.json();
+      const response = await apiRequest("POST", "/api/master-data", requestBody);
+      return await response.json();
     },
     onSuccess: () => {
       toast({
@@ -156,29 +133,15 @@ export default function MasterData() {
     onError: (error) => {
       setError(error instanceof Error ? error : new Error("Failed to save data"));
     },
-  });
-
-  const onSubmit = async (data: MasterDataFormValues) => {
-    try {
-      if (editingData) {
-        const response = await fetch(`/api/master-data/${editingData.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            serviceCategory: data.serviceCategory,
-            serviceType: data.serviceType,
-            serviceProvider: data.serviceProvider,
-            active: data.active,
-            segmentId: selectedSegment?.id || null // Include segment ID in updates too
-          }),
+  });  const onSubmit = async (data: MasterDataFormValues) => {
+    try {      if (editingData) {
+        await apiRequest("PUT", `/api/master-data/${editingData.id}`, {
+          serviceCategory: data.serviceCategory,
+          serviceType: data.serviceType,
+          serviceProvider: data.serviceProvider,
+          active: data.active,
+          segmentId: selectedSegment?.id || null // Include segment ID in updates too
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to update service");
-        }
 
         toast({
           title: "Success",
@@ -241,9 +204,38 @@ export default function MasterData() {
       )
     }
   ];
-
   return (
-    <AppLayout>      <div className="container py-6">
+    <AppLayout>
+      <div className="p-6 space-y-6">
+        {/* Enhanced Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Master Data Management</h1>
+            <p className="text-muted-foreground">
+              {selectedSegment ? `Configure services and providers for ${selectedSegment.segment_name} segment` : "Please select a segment to manage master data"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={() => {
+                setEditingData(null);
+                form.reset({
+                  serviceCategory: "",
+                  serviceType: "",
+                  serviceProvider: "",
+                  active: true,
+                });
+                setShowDialog(true);
+              }}
+              disabled={isAdmin && !selectedSegment}
+              title={isAdmin && !selectedSegment ? "Please select a segment first" : "Add new service"}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add New Service
+            </Button>
+          </div>
+        </div>
         {error && (
           <ErrorDisplay 
             variant="alert"
@@ -259,19 +251,27 @@ export default function MasterData() {
             message={queryError instanceof Error ? queryError.message : "Failed to load master data"}
             className="mb-4"
           />
-        )}
-        <Card className="mb-6">
+        )}        <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Services Inventory</CardTitle>
-              <div className="flex gap-2 items-center">
-                <div className="flex items-center space-x-2 mr-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  Services Inventory
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage service categories, types, and providers
+                </p>
+              </div>
+              <div className="flex gap-3 items-center">
+                <div className="flex items-center space-x-2">
                   <Switch
                     id="active-only"
                     checked={showActiveOnly}
                     onCheckedChange={setShowActiveOnly}
                   />
-                  <label htmlFor="active-only" className="text-sm cursor-pointer">
+                  <label htmlFor="active-only" className="text-sm cursor-pointer flex items-center gap-1">
+                    <Activity className="h-4 w-4" />
                     Show Active Only
                     {showActiveOnly && masterDataList.length > 0 && (
                       <span className="text-xs text-gray-500 ml-1">
@@ -279,26 +279,10 @@ export default function MasterData() {
                       </span>
                     )}
                   </label>
-                </div>                <Button 
-                  onClick={() => {
-                    setEditingData(null);
-                    form.reset({
-                      serviceCategory: "",
-                      serviceType: "",
-                      serviceProvider: "",
-                      active: true,
-                    });
-                    setShowDialog(true);
-                  }}
-                  disabled={isAdmin && !selectedSegment}
-                  title={isAdmin && !selectedSegment ? "Please select a segment first" : "Add new service"}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New
-                </Button>
+                </div>
               </div>
             </div>
-          </CardHeader>          <CardContent>
+          </CardHeader><CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

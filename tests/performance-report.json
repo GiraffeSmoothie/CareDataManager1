@@ -1,0 +1,121 @@
+{
+  "summary": {
+    "testCount": 5,
+    "timestamp": "2025-05-27T07:15:21.797Z",
+    "nodeVersion": "v20.19.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "results": [
+    {
+      "test": "Response Times",
+      "timestamp": "2025-05-27T07:15:07.651Z",
+      "results": {
+        "Auth Status": {
+          "average": "17.75",
+          "min": "7.17",
+          "max": "25.39",
+          "samples": 10
+        },
+        "Get Users": {
+          "average": "14.61",
+          "min": "11.38",
+          "max": "20.70",
+          "samples": 10
+        },
+        "Get Companies": {
+          "average": "20.28",
+          "min": "17.97",
+          "max": "25.53",
+          "samples": 9
+        },
+        "Get Master Data": {
+          "average": "16.84",
+          "min": "5.75",
+          "max": "27.62",
+          "samples": 10
+        },
+        "Get Person Info": {
+          "average": "5.89",
+          "min": "4.93",
+          "max": "8.46",
+          "samples": 10
+        }
+      }
+    },
+    {
+      "test": "Concurrent Requests",
+      "timestamp": "2025-05-27T07:15:12.188Z",
+      "results": {
+        "5_concurrent": {
+          "totalTime": "119.72",
+          "successful": 5,
+          "failed": 0,
+          "successRate": "100.00",
+          "avgResponseTime": "74.04",
+          "throughput": "41.76"
+        },
+        "10_concurrent": {
+          "totalTime": "201.18",
+          "successful": 10,
+          "failed": 0,
+          "successRate": "100.00",
+          "avgResponseTime": "123.10",
+          "throughput": "49.71"
+        },
+        "20_concurrent": {
+          "totalTime": "48.04",
+          "successful": 0,
+          "failed": 20,
+          "successRate": "0.00",
+          "avgResponseTime": "NaN",
+          "throughput": "0.00"
+        },
+        "50_concurrent": {
+          "totalTime": "128.87",
+          "successful": 0,
+          "failed": 50,
+          "successRate": "0.00",
+          "avgResponseTime": "NaN",
+          "throughput": "0.00"
+        }
+      }
+    },
+    {
+      "test": "Database Operations",
+      "timestamp": "2025-05-27T07:15:15.449Z",
+      "results": {}
+    },
+    {
+      "test": "Large Data Retrieval",
+      "timestamp": "2025-05-27T07:15:17.502Z",
+      "results": {}
+    },
+    {
+      "test": "Memory Usage",
+      "timestamp": "2025-05-27T07:15:21.797Z",
+      "results": {
+        "Rapid Sequential Requests": {
+          "duration": 229,
+          "successful": 0,
+          "total": 100,
+          "memoryDelta": {
+            "heapUsed": "-1.79",
+            "heapTotal": "8.50",
+            "external": "-0.01"
+          }
+        },
+        "Large Payload Handling": {
+          "duration": 52,
+          "successful": 0,
+          "total": 10,
+          "memoryDelta": {
+            "heapUsed": "1.50",
+            "heapTotal": "0.00",
+            "external": "0.11"
+          }
+        }
+      }
+    }
+  ]
+}

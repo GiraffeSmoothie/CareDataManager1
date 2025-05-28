@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "testDate": "2025-05-27T07:15:48.480Z",
+    "configuration": {
+      "baseUrl": "http://localhost:5001",
+      "maxUsers": 50,
+      "loadTestDuration": 60000,
+      "rampUpTime": 10000,
+      "requestInterval": 1000
+    },
+    "scenarios": 0
+  },
+  "results": [],
+  "systemInfo": {
+    "nodeVersion": "v20.19.0",
+    "platform": "win32",
+    "arch": "x64",
+    "memory": {
+      "rss": 50319360,
+      "heapTotal": 12902400,
+      "heapUsed": 9250696,
+      "external": 3359323,
+      "arrayBuffers": 66886
+    }
+  }
+}

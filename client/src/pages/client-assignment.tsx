@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CaseNotesModal } from "@/components/ui/case-notes-modal";
-import { Loader2, Search, Plus } from "lucide-react";
+import { Loader2, Search, Plus, Users } from "lucide-react";
 import { PersonInfo } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +20,9 @@ import { DataTable, type DataTableColumnDef } from "@/components/ui/data-table";
 import { STATUS_CONFIGS } from "@/lib/constants";
 import { useSegment } from "@/contexts/segment-context";
 import { cn } from "@/lib/utils"; // Add this import for the cn utility function
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { analyzeServiceFrequency, formatServiceHours, getAbbreviatedDays, getCaseNotesActivity } from "@/lib/service-frequency-utils";
 
 const clientAssignmentSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
@@ -59,16 +62,16 @@ interface ClientService {
 }
 
 export default function ClientAssignment() {
-  const { toast } = useToast();
   const { selectedSegment } = useSegment();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedClient, setSelectedClient] = useState<PersonInfo | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedType, setSelectedType] = useState<string>("");
-  const [selectedService, setSelectedService] = useState<ClientService | null>(null);
+  const [selectedType, setSelectedType] = useState<string>("");  const [selectedService, setSelectedService] = useState<ClientService | null>(null);
   const [showCaseNotesDialog, setShowCaseNotesDialog] = useState(false);
+  const [caseNotesCounts, setCaseNotesCounts] = useState<Record<number, number>>({});
 
   const days = [
     { label: "Monday", value: "Monday" },
@@ -79,7 +82,6 @@ export default function ClientAssignment() {
     { label: "Saturday", value: "Saturday" },
     { label: "Sunday", value: "Sunday" }
   ];
-
   // Fetch master data with segment filtering
   const { data: masterData = [] } = useQuery<MasterDataType[]>({
     queryKey: ["/api/master-data", selectedSegment?.id],
@@ -87,13 +89,7 @@ export default function ClientAssignment() {
       const url = selectedSegment 
         ? `/api/master-data?segmentId=${selectedSegment.id}` 
         : "/api/master-data";
-      const response = await fetch(url, { 
-        credentials: "include",
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await apiRequest("GET", url);
       if (!response.ok) {
         throw new Error("Failed to fetch master data");
       }
@@ -124,7 +120,6 @@ export default function ClientAssignment() {
     )
     .map(item => item.serviceProvider)
   ));
-
   // Fetch all clients with segment filtering
   const { data: clients = [] } = useQuery<PersonInfo[]>({
     queryKey: ["/api/person-info", selectedSegment?.id],
@@ -135,13 +130,7 @@ export default function ClientAssignment() {
       const url = `/api/person-info?segmentId=${selectedSegment.id}`;
       console.log("Fetching clients from:", url);
       
-      const response = await fetch(url, { 
-        credentials: "include",
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await apiRequest("GET", url);
       
       if (!response.ok) {
         throw new Error("Failed to fetch clients");
@@ -167,7 +156,6 @@ export default function ClientAssignment() {
       }
     }
   }, [clients]);
-
   // Fetch client services with segment filtering
   const { data: clientServices = [], isLoading: isServicesLoading, error: servicesError } = useQuery<ClientService[]>({
     queryKey: ["/api/client-services/client", selectedClient?.id, selectedSegment?.id],
@@ -182,13 +170,7 @@ export default function ClientAssignment() {
         
       console.log("Fetching client services from:", url);
       
-      const response = await fetch(url, {
-        credentials: "include",
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await apiRequest("GET", url);
       
       if (!response.ok) {
         throw new Error("Failed to fetch client services");
@@ -197,8 +179,39 @@ export default function ClientAssignment() {
       return response.json();
     },
     enabled: !!selectedClient && !!selectedSegment,
-    staleTime: 5000,
-  });
+    staleTime: 5000,  });
+
+  // Fetch case notes counts for all services
+  const fetchCaseNotesCounts = async (services: ClientService[]) => {
+    if (!services.length) {
+      setCaseNotesCounts({});
+      return;
+    }
+
+    try {
+      const serviceIds = services.map(service => service.id);
+      const response = await apiRequest("POST", "/api/service-case-notes/counts", {
+        serviceIds
+      });
+
+      if (response.ok) {
+        const counts = await response.json();
+        setCaseNotesCounts(counts);
+      }
+    } catch (error) {
+      console.error("Failed to fetch case notes counts:", error);
+      setCaseNotesCounts({});
+    }
+  };
+
+  // Fetch case notes counts when client services change
+  useEffect(() => {
+    if (clientServices.length > 0) {
+      fetchCaseNotesCounts(clientServices);
+    } else {
+      setCaseNotesCounts({});
+    }
+  }, [clientServices]);
 
   // Form setup
   const form = useForm<ClientAssignmentFormValues>({
@@ -364,17 +377,82 @@ export default function ClientAssignment() {
       accessorKey: "serviceStartDate",
       header: "Start Date",
       cell: ({ row }) => new Date(row.original.serviceStartDate).toLocaleDateString()
-    },
-    {
+    },    {
       accessorKey: "serviceDays",
       header: "Days",
-      cell: ({ row }) => row.original.serviceDays.join(", ")
-    },    {      accessorKey: "serviceHours",
+      cell: ({ row }) => {
+        const serviceDays = row.original.serviceDays;
+        const frequencyPattern = analyzeServiceFrequency(serviceDays);
+        const abbreviatedDays = getAbbreviatedDays(serviceDays);
+        
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant={frequencyPattern.badgeVariant}
+                    className={cn("text-xs", frequencyPattern.color)}
+                  >
+                    {frequencyPattern.label}
+                  </Badge>
+                  <span className="text-sm text-gray-600">
+                    {abbreviatedDays}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="max-w-xs">
+                  <p className="font-medium">{frequencyPattern.label} Schedule</p>
+                  <p className="text-sm">{serviceDays.join(", ")}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      }
+    },
+    {
+      accessorKey: "serviceHours",
       header: "Hours",
       cell: ({ row }) => {
-        // Format the hours to always show 1 decimal place
         const hours = parseFloat(row.original.serviceHours.toString());
-        return isNaN(hours) ? "" : hours.toFixed(1);
+        const formattedHours = formatServiceHours(hours);
+        
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2">
+                  <span className={cn("font-medium", formattedHours.color)}>
+                    {formattedHours.formatted}
+                  </span>
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-xs",
+                      formattedHours.intensity === 'low' && "text-green-600 border-green-200",
+                      formattedHours.intensity === 'medium' && "text-blue-600 border-blue-200",
+                      formattedHours.intensity === 'high' && "text-orange-600 border-orange-200"
+                    )}
+                  >
+                    {formattedHours.intensity}
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="max-w-xs">
+                  <p className="font-medium">Service Hours</p>
+                  <p className="text-sm">
+                    {formattedHours.formatted} hours per day
+                    <br />
+                    Intensity: {formattedHours.intensity}
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
       }
     },
     {
@@ -418,38 +496,102 @@ export default function ClientAssignment() {
           </Select>
         );
       }
-    },
-    {
+    },    {
       id: "caseNotes",
       header: "Case Notes",
-      cell: ({ row }) => (
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => {
-            setSelectedService(row.original);
-            setShowCaseNotesDialog(true);
-          }}
-        >
-          View/Edit Notes
-        </Button>
-      )
+      cell: ({ row }) => {
+        const count = caseNotesCounts[row.original.id] || 0;
+        const activity = getCaseNotesActivity(count);
+        
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setSelectedService(row.original);
+                      setShowCaseNotesDialog(true);
+                    }}
+                    className="relative"
+                  >
+                    View/Edit Notes
+                  </Button>
+                  {count > 0 && (
+                    <Badge 
+                      variant="secondary"
+                      className={cn("text-xs", activity.color)}
+                    >
+                      {activity.label}
+                    </Badge>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="max-w-xs">
+                  <p className="font-medium">Case Notes Status</p>
+                  <p className="text-sm">
+                    {count === 0 ? "No case notes yet" : `${count} case note${count > 1 ? 's' : ''} available`}
+                    <br />
+                    Activity Level: {activity.level}
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      }
     }
   ];
-
   return (
     <AppLayout>
-      <div className="container mx-auto p-4">
-        <Card className="mb-6">
+      <div className="p-6 space-y-6">
+        {/* Enhanced Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Client Service Assignment</h1>
+            <p className="text-muted-foreground">
+              {selectedSegment ? `Assign and manage services for ${selectedSegment.segment_name} segment` : "Please select a segment to manage client services"}
+            </p>
+          </div>
+          {selectedClient && (
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => setShowDialog(true)} 
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Assign Service
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Client Search Card */}
+        <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle>Client Services</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Find Client
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Search for a client to view and assign services
+                </p>
               </div>
-              <Button onClick={() => setShowDialog(true)} disabled={!selectedClient}>
-                <Plus className="h-4 w-4 mr-2" />
-                Assign Service
-              </Button>
+              {selectedClient && (
+                <Button 
+                  onClick={() => setShowDialog(true)} 
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Service
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -480,12 +622,23 @@ export default function ClientAssignment() {
               )}
             </div>
           </CardContent>
-        </Card>
-
-        {selectedClient && (
+        </Card>        {selectedClient && (
           <Card>
             <CardHeader>
-              <CardTitle>Client Services</CardTitle>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Services for {selectedClient.firstName} {selectedClient.lastName}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    View and manage all assigned services
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Client ID: {selectedClient.id}</span>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {isServicesLoading ? (
@@ -729,9 +882,7 @@ export default function ClientAssignment() {
               </form>
             </Form>
           </DialogContent>
-        </Dialog>
-
-        <CaseNotesModal
+        </Dialog>        <CaseNotesModal
           isOpen={showCaseNotesDialog}
           onClose={() => setShowCaseNotesDialog(false)}
           service={selectedService}
@@ -739,6 +890,10 @@ export default function ClientAssignment() {
             queryClient.invalidateQueries({ 
               queryKey: ["/api/client-services", selectedClient?.id, selectedSegment?.id] 
             });
+            // Refresh case notes counts
+            if (clientServices.length > 0) {
+              fetchCaseNotesCounts(clientServices);
+            }
           }}
         />
       </div>

@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { BlobServiceClient, ContainerClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } from '@azure/storage-blob';
+import { DefaultAzureCredential } from '@azure/identity';
 
 export interface IStorageService {
     uploadFile(fileBuffer: Buffer, filePath: string, contentType: string): Promise<string>;
@@ -52,18 +53,34 @@ export class AzureBlobStorageService implements IStorageService {
     private containerClient: ContainerClient;
     private blobServiceClient: BlobServiceClient;
     private accountName: string;
-    private accountKey: string;
+    private accountKey?: string;
     private containerName: string;
+    private usingManagedIdentity: boolean = false;
 
     constructor() {
+        const storageAccountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
         const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-        if (!connectionString) {
-            throw new Error('Azure Storage connection string not found in environment variables');
+
+        if (storageAccountName) {
+            // Use DefaultAzureCredential with managed identity
+            console.log('Initializing Azure Blob Storage with DefaultAzureCredential (managed identity)');
+            this.accountName = storageAccountName;
+            this.usingManagedIdentity = true;
+            const credential = new DefaultAzureCredential();
+            this.blobServiceClient = new BlobServiceClient(
+                `https://${storageAccountName}.blob.core.windows.net`,
+                credential
+            );
+        } else if (connectionString) {
+            // Fallback to connection string authentication
+            console.log('Initializing Azure Blob Storage with connection string authentication');
+            this.accountName = this.extractAccountName(connectionString);
+            this.accountKey = this.extractAccountKey(connectionString);
+            this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
+        } else {
+            throw new Error('Either AZURE_STORAGE_ACCOUNT_NAME or AZURE_STORAGE_CONNECTION_STRING must be provided');
         }
 
-        this.accountName = this.extractAccountName(connectionString);
-        this.accountKey = this.extractAccountKey(connectionString);
-        this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
         this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documents';
         this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
         this.initializeContainer();
@@ -143,9 +160,14 @@ export class AzureBlobStorageService implements IStorageService {
             console.error('Error checking file existence in blob storage:', error);
             throw error;
         }
-    }
+    }    private generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
+        if (this.usingManagedIdentity || !this.accountKey) {
+            // When using managed identity, we can't generate SAS tokens with account keys
+            // Return the direct blob URL instead
+            console.log('Using direct blob URL (managed identity - no SAS token generation)');
+            return `https://${this.accountName}.blob.core.windows.net/${this.containerName}/${blobName}`;
+        }
 
-    private generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
         const sharedKeyCredential = new StorageSharedKeyCredential(
             this.accountName,
             this.accountKey

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, MoreVertical, Edit2 } from "lucide-react";
+import { Loader2, MoreVertical, Edit2, Users, UserPlus } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -305,18 +305,35 @@ export default function ManageUsers() {
       )
     }
   ];
-
   return (
     <AppLayout>
-      <div className="container py-6">
+      <div className="p-6 space-y-6">
+        {/* Enhanced Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+            <p className="text-muted-foreground">
+              Manage user accounts, roles, and permissions
+            </p>
+          </div>
+          <Button onClick={handleAddNew} className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4" />
+            Add New User
+          </Button>
+        </div>
+
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Users</CardTitle>
-              <Button onClick={handleAddNew}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add New
-              </Button>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  System Users
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  View and manage all user accounts
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

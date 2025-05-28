@@ -21,6 +21,7 @@ import {
   AlertDialogFooter,
   AlertDialogCancel
 } from "@/components/ui/alert-dialog";
+import { TokenStorage } from "@/lib/token-storage";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -42,8 +43,7 @@ export default function Login() {
       username: "",
       password: "",
     },
-  });
-  async function onSubmit(data: LoginFormValues) {
+  });  async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     try {
       const response = await fetch("/api/auth/login", {
@@ -52,30 +52,45 @@ export default function Login() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
-        credentials: "include"
-      });      if (!response.ok) {
+        // Remove credentials: "include" as we're using JWT tokens
+      });
+
+      if (!response.ok) {
         throw new Error("Invalid username or password");
       }
 
-      // Process response if needed
-      await response.json();
+      // Process response and store JWT tokens
+      const responseData = await response.json();
       
-      // Invalidate auth status query to trigger refetch
-      queryClient.invalidateQueries({ queryKey: ["authStatus"] });
-      
-      toast({
-        title: "Success",
-        description: "Successfully logged in",
-        variant: "default",
-      });
-      
-      // Check if there's a redirect path stored from a session timeout
-      const redirectPath = sessionStorage.getItem('redirectAfterLogin');
-      if (redirectPath) {
-        sessionStorage.removeItem('redirectAfterLogin');
-        setLocation(redirectPath);
+      if (responseData.success && responseData.tokens) {        // Store JWT tokens
+        TokenStorage.storeTokens({
+          accessToken: responseData.tokens.accessToken,
+          refreshToken: responseData.tokens.refreshToken
+        });
+        
+        // Invalidate queries to trigger refetch - this ensures segments are loaded immediately
+        await queryClient.invalidateQueries({ queryKey: ["authStatus"] });
+        await queryClient.invalidateQueries({ queryKey: ["segments"] });
+        
+        // Also refetch auth status to get the latest user data including company_id
+        await queryClient.refetchQueries({ queryKey: ["authStatus"] });
+        
+        toast({
+          title: "Success",
+          description: "Successfully logged in",
+          variant: "default",
+        });
+        
+        // Check if there's a redirect path stored from a session timeout
+        const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+        if (redirectPath) {
+          sessionStorage.removeItem('redirectAfterLogin');
+          setLocation(redirectPath);
+        } else {
+          setLocation("/homepage");
+        }
       } else {
-        setLocation("/homepage");
+        throw new Error("Login failed: Invalid response from server");
       }
     } catch (error) {
       toast({

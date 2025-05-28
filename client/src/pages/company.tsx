@@ -98,13 +98,17 @@ export default function CompanyPage() {
       return response.json();
     },
   });
-  
-  // Fetch segments for a company
-  const { data: segments, isLoading: isLoadingSegments } = useQuery<Segment[]>({
+    // Fetch segments for a company
+  const { data: segments, isLoading: isLoadingSegments, error: segmentsError } = useQuery<Segment[]>({
     queryKey: ["segments", expandedCompany],
     queryFn: async () => {
       if (!expandedCompany) return [];
+      console.log("Fetching segments for company:", expandedCompany);
       const response = await apiRequest("GET", `/api/segments/${expandedCompany}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch segments");
+      }
       return response.json();
     },
     enabled: !!expandedCompany,
@@ -340,10 +344,13 @@ export default function CompanyPage() {
                             <Plus className="h-4 w-4 mr-2" />
                             Add Segment
                           </Button>
-                        </div>
-                        {isLoadingSegments ? (
+                        </div>                        {isLoadingSegments ? (
                           <div className="flex justify-center py-4">
                             <Loader2 className="h-6 w-6 animate-spin" />
+                          </div>
+                        ) : segmentsError ? (
+                          <div className="text-center py-4 text-red-600">
+                            Error loading segments: {segmentsError instanceof Error ? segmentsError.message : "Unknown error"}
                           </div>
                         ) : segments && segments.length > 0 ? (
                           <DataTable

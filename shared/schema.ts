@@ -8,6 +8,9 @@ export type User = {
   role: string;
   name: string;
   company_id?: number;
+  created_at?: Date;
+  password_changed_at?: Date;
+  force_password_change?: boolean;
 };
 
 export type PersonInfo = {
@@ -30,8 +33,8 @@ export type PersonInfo = {
   mailingAddressLine2?: string;
   mailingAddressLine3?: string;
   mailingPostCode?: string;
-  useHomeAddress?: boolean;
-  nextOfKinName?: string;
+  useHomeAddress?: boolean;  nextOfKinName?: string;
+  nextOfKinRelationship?: string;
   nextOfKinAddress?: string;
   nextOfKinEmail?: string;
   nextOfKinPhoneCountryCode?: string;  nextOfKinPhone?: string;
@@ -79,6 +82,15 @@ export type ServiceCaseNote = {
   updatedAt?: Date;
   createdBy: number;
   updatedBy: number;
+  documents?: Document[]; // Optional array of attached documents
+};
+
+export type CaseNoteDocument = {
+  id: number;
+  caseNoteId: number;
+  documentId: number;
+  createdAt?: Date;
+  createdBy: number;
 };
 
 export type MasterData = {
@@ -122,7 +134,8 @@ export const insertUserSchema = z.object({
 });
 
 export const insertPersonInfoSchema = z.object({
-  title: z.string().min(1, "Title is required"),  firstName: z.string().min(1, "First name is required"),
+  title: z.string().min(1, "Title is required"),  
+  firstName: z.string().min(1, "First name is required"),
   middleName: z.string().optional().default(""),
   lastName: z.string().min(1, "Last name is required"),
   dateOfBirth: z.string()
@@ -136,21 +149,22 @@ export const insertPersonInfoSchema = z.object({
         parsedDate.getMonth() === month - 1 &&
         parsedDate.getFullYear() === year;
     }, "Invalid date format"),
-  email: z.string().email("Invalid email address"),
-  homePhone: z.string().optional(),
-  mobilePhone: z.string(),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  homePhone: z.string().optional().or(z.literal("")),
+  mobilePhone: z.string().optional().or(z.literal("")),
   addressLine1: z.string().min(1, "Address Line 1 is required"),
-  addressLine2: z.string().optional(),
-  addressLine3: z.string().optional(),
-  postCode: z.string().min(1, "Post Code is required"),
-  mailingAddressLine1: z.string().optional(),
-  mailingAddressLine2: z.string().optional(),
-  mailingAddressLine3: z.string().optional(),
-  mailingPostCode: z.string().optional(),
-  useHomeAddress: z.boolean().optional(),
-  nextOfKinName: z.string().min(1, "Next of Kin Name is required"),
-  nextOfKinAddress: z.string().min(1, "Next of Kin Address is required"),
-  nextOfKinEmail: z.string().email().optional().or(z.literal("")),  nextOfKinPhone: z.string().min(1, "Next of Kin Phone is required"),
+  addressLine2: z.string().optional().or(z.literal("")),
+  addressLine3: z.string().optional().or(z.literal("")),
+  postCode: z.string().optional().or(z.literal("")),
+  mailingAddressLine1: z.string().optional().or(z.literal("")),
+  mailingAddressLine2: z.string().optional().or(z.literal("")),
+  mailingAddressLine3: z.string().optional().or(z.literal("")),
+  mailingPostCode: z.string().optional().or(z.literal("")),
+  useHomeAddress: z.boolean().optional(),  nextOfKinName: z.string().optional().or(z.literal("")),
+  nextOfKinRelationship: z.string().optional().or(z.literal("")),
+  nextOfKinAddress: z.string().optional().or(z.literal("")),
+  nextOfKinEmail: z.string().email().optional().or(z.literal("")),  
+  nextOfKinPhone: z.string().optional().or(z.literal("")),
   hcpLevel: z.string().min(1, "HCP Level is required"),
   hcpStartDate: z.string().min(1, "HCP Start Date is required"),
   status: z.string().optional(),
@@ -199,6 +213,7 @@ export const insertServiceCaseNoteSchema = z.object({
   serviceId: z.number(),
   noteText: z.string(),
   createdBy: z.number(),
+  documentIds: z.array(z.number()).optional(), // Optional array of document IDs to attach
 });
 
 export const insertMasterDataSchema = z.object({

@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
+import { TokenStorage } from "@/lib/token-storage";
 import { insertDocumentSchema, type PersonInfo, type Document } from "@shared/schema";
 import { ErrorDisplay } from "@/components/ui/error-display";
 import { useSegment } from "@/contexts/segment-context";
@@ -29,6 +30,68 @@ const documentFormSchema = insertDocumentSchema.extend({
   )
 });
 
+/**
+ * Helper function to view documents securely using the new viewing endpoint
+ * @param filePath - The file path of the document to view
+ */
+const viewDocumentSecurely = async (filePath: string) => {
+  try {
+    // Use the new secure viewing endpoint that handles authentication
+    const viewUrl = `/api/documents/view/${encodeURIComponent(filePath)}`;
+    
+    // Make the request through apiRequest to include authentication headers
+    const response = await apiRequest('GET', viewUrl);
+    
+    // Create a blob URL for viewing
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // Open in a new window
+    window.open(blobUrl, '_blank');
+    
+    // Clean up the blob URL after a short delay
+    setTimeout(() => {
+      URL.revokeObjectURL(blobUrl);
+    }, 100);
+  } catch (error) {
+    console.error('Error viewing document:', error);
+    // You could add a toast notification here if available
+  }
+};
+
+/**
+ * Helper function to download documents securely
+ * @param filePath - The file path of the document to download
+ * @param fileName - The suggested filename for download
+ */
+const downloadDocumentSecurely = async (filePath: string, fileName: string) => {
+  try {
+    // Use the existing download endpoint but with proper authentication
+    const downloadUrl = `/api/documents/${encodeURIComponent(filePath)}`;
+    
+    // Make the request through apiRequest to include authentication headers
+    const response = await apiRequest('GET', downloadUrl);
+    
+    // Create a blob URL for download
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // Create a temporary anchor element to trigger download
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up the blob URL
+    URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    // You could add a toast notification here if available
+  }
+};
+
 // Define the type based on the schema
 type DocumentFormData = z.infer<typeof documentFormSchema>;
 
@@ -36,10 +99,10 @@ type DocumentFormData = z.infer<typeof documentFormSchema>;
 const documentTypes = [
   "Identity Document",
   "Medical Record",
-  "Financial Document",
   "Legal Document",
   "Care Plan",
   "Assessment",
+  "Sign Up Docs",
   "Other"
 ];
 
@@ -55,16 +118,12 @@ export default function DocumentUpload() {
 
   // Fetch all members filtered by the selected segment
   const { data: members = [], refetch: refetchMembers } = useQuery<PersonInfo[]>({
-    queryKey: ["/api/person-info", selectedSegment?.id],
-    queryFn: async () => {
+    queryKey: ["/api/person-info", selectedSegment?.id],    queryFn: async () => {
       const url = selectedSegment 
         ? `/api/person-info?segmentId=${selectedSegment.id}` 
         : "/api/person-info";
-      const response = await fetch(url, { credentials: "include" });
-      if (!response.ok) {
-        throw new Error("Failed to fetch members");
-      }
-      return response.json();
+      const response = await apiRequest("GET", url);
+      return await response.json();
     },
     staleTime: 10000,
     enabled: !!selectedSegment
@@ -144,18 +203,7 @@ export default function DocumentUpload() {
       // Add segment ID if available
       if (selectedSegment) {
         formData.append("segmentId", selectedSegment.id.toString());
-      }
-
-      const response = await fetch("/api/documents", {
-        method: "POST",
-        body: formData,
-        credentials: "include"
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to upload document");
-      }
+      }      const response = await apiRequest("POST", "/api/documents", formData, true);
       return await response.json();
     },
     onSuccess: () => {
@@ -326,22 +374,22 @@ export default function DocumentUpload() {
                         <TableCell>{doc.documentType}</TableCell>
                         <TableCell>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : '-'}</TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button
+                          <div className="flex gap-2">                            <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/api/documents/${encodeURIComponent(doc.filePath || '')}`, '_blank')}
+                              onClick={() => viewDocumentSecurely(doc.filePath || '')}
                               title="View Document"
                             >
                               <Eye className="h-4 w-4 text-blue-600" />
-                            </Button>
-                            <a
-                              href={`/api/documents/${encodeURIComponent(doc.filePath || '')}`}
-                              download={doc.documentName}
+                            </Button>                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => downloadDocumentSecurely(doc.filePath || '', doc.documentName || 'download')}
+                              title="Download Document"
                               className="inline-flex items-center justify-center text-sm font-medium text-primary hover:text-primary/80"
                             >
                               <ArrowDown className="h-4 w-4" />
-                            </a>
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

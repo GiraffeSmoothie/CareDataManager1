@@ -1,0 +1,39 @@
+{
+  "name": "care-data-manager-tests",
+  "version": "1.0.0",
+  "description": "Test suite for CareDataManager API endpoints",
+  "main": "api-test-suite.js",
+  "scripts": {
+    "test": "node api-test-suite.js",
+    "test:auth": "node -e \"require('./api-test-suite').testAuthentication()\"",
+    "test:users": "node -e \"require('./api-test-suite').testUserManagement()\"",
+    "test:companies": "node -e \"require('./api-test-suite').testCompanyManagement()\"",
+    "test:segments": "node -e \"require('./api-test-suite').testSegmentManagement()\"",
+    "test:master-data": "node -e \"require('./api-test-suite').testMasterData()\"",
+    "test:clients": "node -e \"require('./api-test-suite').testPersonInfo()\"",
+    "test:services": "node -e \"require('./api-test-suite').testClientServices()\"",
+    "test:documents": "node -e \"require('./api-test-suite').testDocumentManagement()\"",
+    "test:security": "node -e \"require('./api-test-suite').testSecurity()\"",
+    "test:errors": "node -e \"require('./api-test-suite').testErrorHandling()\"",
+    "test:performance": "node performance-tests.js",
+    "test:load": "node load-tests.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^6.3.0"
+  },
+  "keywords": [
+    "api",
+    "testing",
+    "care-data-manager",
+    "healthcare",
+    "rest-api"
+  ],
+  "author": "CareDataManager Team",
+  "license": "MIT"
+}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import AppLayout from "@/layouts/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock, Shield } from "lucide-react";
 import { ErrorDisplay } from "@/components/ui/error-display";
 
 const changePasswordSchema = z.object({
@@ -38,33 +39,47 @@ export default function Settings() {
 
   const handleChangePassword = async (values: ChangePasswordFormValues) => {
     setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: values.currentPassword, newPassword: values.newPassword }),
+    setError(null);    try {
+      const response = await apiRequest("POST", "/api/change-password", {
+        currentPassword: values.currentPassword, 
+        newPassword: values.newPassword
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to change password");
+      
+      if (response.ok) {
+        toast({ title: "Success", description: "Password changed successfully" });
+        form.reset();
       }
-      toast({ title: "Success", description: "Password changed successfully" });
-      form.reset();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <AppLayout>
-      <div className="container py-6">
-        <Card className="max-w-md mx-auto">
-          <CardHeader>
-            <CardTitle>Change Password</CardTitle>
-          </CardHeader>
+      <div className="p-6 space-y-6">
+        {/* Enhanced Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+            <p className="text-muted-foreground">
+              Manage your account preferences and security settings
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Password Change Card */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5" />
+                Change Password
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Update your password to keep your account secure
+              </p>
+            </CardHeader>
           <CardContent>
             {error && (
               <ErrorDisplay
@@ -113,8 +128,7 @@ export default function Settings() {
                       <FormMessage />
                     </FormItem>
                   )}
-                />
-                <Button type="submit" className="w-full" disabled={loading}>
+                />                <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -128,7 +142,28 @@ export default function Settings() {
             </Form>
           </CardContent>
         </Card>
+
+        {/* Security Information Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Security Info
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="mb-2">Password Requirements:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Minimum 6 characters</li>
+                <li>Use a unique password</li>
+                <li>Consider using a password manager</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    </div>
     </AppLayout>
   );
 }

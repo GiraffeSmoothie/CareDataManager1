@@ -1,0 +1,18 @@
+{
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "successRate": "0.00%"
+  },
+  "timestamp": "2025-05-27T23:59:54.794Z",
+  "details": [
+    {
+      "test": "Auth - Valid Login",
+      "status": "FAIL",
+      "details": "Login failed: \"\"",
+      "timestamp": "2025-05-27T23:59:54.793Z"
+    }
+  ]
+}

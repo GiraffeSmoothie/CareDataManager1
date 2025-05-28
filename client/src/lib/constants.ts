@@ -8,7 +8,6 @@ export const APP_CONFIG = {
 // Route constants
 export const ROUTES = {
     HOME: '/',
-    DASHBOARD: '/dashboard',
     LOGIN: '/login',
     SETTINGS: '/settings',
     MANAGE_USERS: '/manage-users',

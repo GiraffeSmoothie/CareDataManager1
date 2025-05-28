@@ -13,28 +13,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChevronDown, User, Settings, LogOut, Building2 } from "lucide-react";
+import { TokenStorage } from "@/lib/token-storage";
 
 export default function UserNav() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   // Use React Query to manage auth status
   const { data: authData } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/status");
-      if (!res.ok) throw new Error("Failed to fetch auth status");
+      const res = await apiRequest("GET", "/api/auth/status");
       return res.json();
     }
   });
 
   const userRole = authData?.user?.role;
-
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await apiRequest("POST", "/api/auth/logout", {});
+      // Clear tokens first
+      TokenStorage.clearTokens();
+      
+      // Call logout endpoint (this is optional with JWT, mainly for server-side logging)
+      try {
+        await apiRequest("POST", "/api/auth/logout", {});
+      } catch (error) {
+        // Ignore errors from logout endpoint since tokens are already cleared
+        console.log("Logout endpoint error (ignored):", error);
+      }
+      
       toast({
         title: "Success",
         description: "Successfully logged out",
@@ -42,11 +50,14 @@ export default function UserNav() {
       });
       setLocation("/login");
     } catch (error) {
+      // Even if logout API fails, we still clear tokens and redirect
+      TokenStorage.clearTokens();
       toast({
-        title: "Error",
-        description: "Failed to log out",
-        variant: "destructive",
+        title: "Success", // Still show success since tokens are cleared
+        description: "Successfully logged out",
+        variant: "default",
       });
+      setLocation("/login");
     } finally {
       setIsLoggingOut(false);
     }

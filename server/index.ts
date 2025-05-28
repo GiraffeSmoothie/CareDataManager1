@@ -10,6 +10,9 @@ const __dirname = path.dirname(__filename);
 console.log('Current directory:', __dirname);
 console.log('Node Environment:', process.env.NODE_ENV);
 
+// Initialize global error handlers first (before anything else)
+import './src/middleware/global-error-handler';
+
 // Load environment variables
 const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
 dotenv.config({ path: envFile });
@@ -28,12 +31,17 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from './storage';
+import { performanceMiddleware } from './src/middleware/performance';
+import { errorHandler } from './src/middleware/error';
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.enable('trust proxy');
+
+// Add performance monitoring middleware early in the stack
+app.use(performanceMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -69,8 +77,10 @@ app.use((req, res, next) => {
 export async function initializeDatabase() {
   let client;
   try {
+    console.log('Attempting to connect to database...');
     // Connect to the database
     client = await pool.connect();
+    console.log('Database connection established');
     
     // Run each migration file in sequence from the migrations folder
     const migrationsPath = path.resolve(__dirname, 'migrations'); // Fixed the path to avoid appending 'server' twice
@@ -107,18 +117,15 @@ export async function initializeDatabase() {
 
 (async () => {
   try {
+    console.log('Starting server initialization...');
     // Initialize database first
     await initializeDatabase();
-    console.log('Database initialized successfully');
-
+    console.log('Database initialized successfully');    console.log('Registering routes...');
     const server = await registerRoutes(app);
+    console.log('Routes registered successfully');
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      console.error('Error:', err);
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      res.status(status).json({ message });
-    });
+    // Add error handling middleware at the end
+    app.use(errorHandler);
 
     if (app.get("env") === "development") {
       await setupVite(app, server);

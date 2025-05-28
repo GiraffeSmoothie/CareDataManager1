@@ -3,6 +3,18 @@ import { storage as dbStorage } from '../../storage';
 import { ApiError } from '../types/error';
 import { z } from 'zod';
 
+// Extend Request type to include user property
+declare module 'express' {
+  interface Request {
+    user?: {
+      id: number;
+      username: string;
+      role: string;
+      company_id?: number;
+    };
+  }
+}
+
 const userUpdateSchema = z.object({
   name: z.string().optional(),
   password: z.string().optional(),
@@ -55,10 +67,8 @@ export class UserController {
       const existingUser = await dbStorage.getUserById(id);
       if (!existingUser) {
         throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
-      }
-
-      // Check permissions
-      if (req.session?.user?.role !== 'admin' && req.session?.user?.id !== id) {
+      }      // Check permissions
+      if (req.user?.role !== 'admin' && req.user?.id !== id) {
         throw new ApiError(403, "Insufficient permissions", null, "FORBIDDEN");
       }
 
@@ -84,10 +94,8 @@ export class UserController {
       const existingUser = await dbStorage.getUserById(id);
       if (!existingUser) {
         throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
-      }
-
-      // Check permissions
-      if (req.session?.user?.role !== 'admin') {
+      }      // Check permissions
+      if (req.user?.role !== 'admin') {
         throw new ApiError(403, "Admin access required", null, "FORBIDDEN");
       }
 

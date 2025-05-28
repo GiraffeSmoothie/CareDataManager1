@@ -11,27 +11,29 @@ export class AuthService {
   static async validateUser(username: string, password: string) {
     try {
       const user = await storage.getUserByUsername(username);
+      
       if (!user) {
-        console.log('User not found:', username);
         return null;
       }
 
       const isValid = await bcrypt.compare(password, user.password);
-      console.log('Password validation:', isValid ? 'successful' : 'failed');
 
       if (!isValid) {
         return null;
       }
 
-      // Don't return the password in the response
+      // Don't return the password in the response, but include password change requirements
       const { password: _, ...userWithoutPassword } = user;
-      return userWithoutPassword;
+
+      return {
+        ...userWithoutPassword,
+        requiresPasswordChange: user.force_password_change || false
+      };
     } catch (error) {
       console.error('Error in validateUser:', error);
       throw error;
     }
   }
-
   static async getUserById(id: number) {
     try {
       const user = await storage.getUserById(id);
@@ -41,7 +43,22 @@ export class AuthService {
 
       // Don't return the password in the response
       const { password: _, ...userWithoutPassword } = user;
-      return userWithoutPassword;
+      
+      // If user has a company_id, fetch the company details
+      let company = null;
+      if (user.company_id) {
+        try {
+          company = await storage.getCompanyById(user.company_id);
+        } catch (error) {
+          console.warn('Failed to fetch company details for user:', error);
+          // Don't fail the whole request if company fetch fails
+        }
+      }
+
+      return {
+        ...userWithoutPassword,
+        company
+      };
     } catch (error) {
       console.error('Error in getUserById:', error);
       throw error;
