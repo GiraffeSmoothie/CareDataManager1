@@ -576,7 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // File upload endpoints - apply upload rate limiting and secure file handling
   app.use(["/api/documents", "/api/client-assignment"], uploadRateLimit, secureFileUpload);  // Sensitive operations - apply strict rate limiting and enhanced validation
-  app.use(["/api/users", "/api/companies"], strictRateLimit, idValidation);
+  app.use(["/api/users", "/api/companies"], strictRateLimit);
   
   // API endpoints with pagination - apply pagination validation
   app.use(["/api/person-info", "/api/master-data", "/api/client-services"], paginationValidation);
@@ -2693,8 +2693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent: req.headers['user-agent'] || 'unknown',
         timestamp: new Date()
       });
-      
-      return res.status(200).json(company);
+        return res.status(200).json(company);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationError = fromZodError(error);
@@ -2705,20 +2704,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }  });
   
   /**
-   * Delete company endpoint (admin only)
+   * Get company by ID endpoint (admin only)
    * 
-   * Permanently removes a company from the system.
+   * Retrieves a specific company by its ID.
    * Restricted to administrators only.
+   * Enhanced with comprehensive security middleware including rate limiting,
+   * input validation, sanitization, ID validation, and SQL injection prevention.
    * 
-   * @route DELETE /api/companies/:id
-   * @param {string} req.params.id - Company ID to delete
-   * @returns {object} Success message
+   * Security Features:
+   * - Rate limiting to prevent API abuse
+   * - Request validation and sanitization
+   * - SQL injection prevention
+   * - Parameter ID validation
+   * - Authentication required
+   * - Admin role verification
+   * 
+   * @route GET /api/companies/:id
+   * @middleware apiRateLimit - Rate limiting protection
+   * @middleware strictRateLimit - Additional rate limiting for sensitive operations
+   * @middleware validateRequest - Request structure validation
+   * @middleware sanitizeInput - Input sanitization
+   * @middleware preventSQLInjection - SQL injection protection
+   * @middleware idValidation - Parameter ID validation
+   * @middleware authMiddleware - Authentication verification
+   * @param {string} req.params.id - Company ID to retrieve
+   * @returns {object} Company record
    * @throws {ApiError} 400 - If company ID format is invalid
    * @throws {ApiError} 401 - If user is not authenticated
-   * @throws {ApiError} 403 - If user is not an admin
+   * @throws {ApiError} 403 - If requester is not an admin
    * @throws {ApiError} 404 - If company not found
-   */
-  
+   * @throws {ApiError} 429 - If rate limit exceeded
+   * @throws {ApiError} 500 - If database operation fails
+   */  app.get("/api/companies/:id", 
+    apiRateLimit,
+    strictRateLimit,
+    validateRequest(idValidation),
+    sanitizeInput,
+    preventSQLInjection,
+    authMiddleware,
+    async (req: Request, res: Response) => {
+    // Type assertion for authenticated user
+    const authReq = req as any;
+    try {
+      const user = await dbStorage.getUserById(authReq.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      if (isNaN(companyId)) {
+        return res.status(400).json({ message: "Invalid company ID format" });
+      }
+
+      const company = await dbStorage.getCompanyById(companyId);
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      return res.status(200).json(company);
+    } catch (error) {
+      console.error("Error fetching company:", error);
+      return res.status(500).json({ message: "Failed to fetch company" });
+    }
+  });
+ 
 
 /**
    * Get segments by company endpoint

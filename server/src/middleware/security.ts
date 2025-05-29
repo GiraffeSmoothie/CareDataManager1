@@ -173,19 +173,45 @@ export const validateRequest = (validations: any[]) => {
  * Common validation chains
  */
 export const idValidation = [
-  param('id').isInt({ min: 1 }).withMessage('ID must be a positive integer')
+  param('id').custom((value) => {
+    console.log(`[DEBUG] idValidation received value: "${value}", type: ${typeof value}`);
+    const id = parseInt(value, 10);
+    console.log(`[DEBUG] idValidation parsed value: ${id}, isNaN: ${isNaN(id)}`);
+    if (isNaN(id) || id <= 0) {
+      throw new Error('ID must be a positive integer');
+    }
+    return true;
+  })
 ];
 
 export const companyIdValidation = [
-  param('companyId').isInt({ min: 1 }).withMessage('Company ID must be a positive integer')
+  param('companyId').custom((value) => {
+    const id = parseInt(value, 10);
+    if (isNaN(id) || id <= 0) {
+      throw new Error('Company ID must be a positive integer');
+    }
+    return true;
+  })
 ];
 
 export const clientIdValidation = [
-  param('clientId').isInt({ min: 1 }).withMessage('Client ID must be a positive integer')
+  param('clientId').custom((value) => {
+    const id = parseInt(value, 10);
+    if (isNaN(id) || id <= 0) {
+      throw new Error('Client ID must be a positive integer');
+    }
+    return true;
+  })
 ];
 
 export const serviceIdValidation = [
-  param('serviceId').isInt({ min: 1 }).withMessage('Service ID must be a positive integer')
+  param('serviceId').custom((value) => {
+    const id = parseInt(value, 10);
+    if (isNaN(id) || id <= 0) {
+      throw new Error('Service ID must be a positive integer');
+    }
+    return true;
+  })
 ];
 
 export const paginationValidation = [

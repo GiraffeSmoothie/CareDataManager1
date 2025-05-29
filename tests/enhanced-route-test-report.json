@@ -1,189 +1,193 @@
 {
-  "timestamp": "2025-05-29T01:12:55.724Z",
+  "timestamp": "2025-05-29T01:58:51.577Z",
   "summary": {
-    "total": 28,
-    "passed": 21,
-    "failed": 7,
+    "total": 29,
+    "passed": 24,
+    "failed": 5,
     "skipped": 0,
-    "successRate": "75.00%"
+    "successRate": "82.76%"
   },
   "details": [
     {
       "test": "Admin Login",
       "status": "PASS",
       "details": "Successfully logged in as admin",
-      "timestamp": "2025-05-29T01:12:55.319Z"
+      "timestamp": "2025-05-29T01:58:50.476Z"
     },
     {
       "test": "User Login",
       "status": "PASS",
       "details": "Successfully logged in as normal user",
-      "timestamp": "2025-05-29T01:12:55.402Z"
+      "timestamp": "2025-05-29T01:58:50.559Z"
     },
     {
       "test": "Get Companies",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.410Z"
+      "timestamp": "2025-05-29T01:58:50.571Z"
     },
     {
       "test": "Create Company",
       "status": "PASS",
-      "details": "Created company ID: 4",
-      "timestamp": "2025-05-29T01:12:55.422Z"
+      "details": "Created company ID: 10",
+      "timestamp": "2025-05-29T01:58:50.586Z"
     },
     {
       "test": "Update Company",
-      "status": "FAIL",
-      "details": "Could not retrieve company data for update",
-      "timestamp": "2025-05-29T01:12:55.428Z"
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:58:50.612Z"
     },
     {
       "test": "Get Segments by Company",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.437Z"
+      "timestamp": "2025-05-29T01:58:50.623Z"
     },
     {
       "test": "Create Segment",
       "status": "PASS",
-      "details": "Created segment ID: 6",
-      "timestamp": "2025-05-29T01:12:55.445Z"
+      "details": "Created segment ID: 12",
+      "timestamp": "2025-05-29T01:58:50.631Z"
     },
     {
       "test": "Update Segment",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.453Z"
+      "timestamp": "2025-05-29T01:58:50.641Z"
     },
     {
       "test": "Get User Segments",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.461Z"
+      "timestamp": "2025-05-29T01:58:50.652Z"
     },
     {
       "test": "Get Users (Admin)",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.469Z"
+      "timestamp": "2025-05-29T01:58:50.660Z"
     },
     {
       "test": "Get Users (User - Should Fail)",
       "status": "PASS",
       "details": "Status: 403 (Expected 403)",
-      "timestamp": "2025-05-29T01:12:55.476Z"
+      "timestamp": "2025-05-29T01:58:50.667Z"
     },
     {
       "test": "Change Password",
-      "status": "FAIL",
-      "details": "Status: 429",
-      "timestamp": "2025-05-29T01:12:55.480Z"
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:58:50.818Z"
+    },
+    {
+      "test": "Revert Password",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:58:50.951Z"
     },
     {
       "test": "Get Master Data",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.490Z"
+      "timestamp": "2025-05-29T01:58:50.961Z"
     },
     {
       "test": "Create Master Data",
       "status": "PASS",
-      "details": "Created master data ID: 4",
-      "timestamp": "2025-05-29T01:12:55.509Z"
+      "details": "Created master data ID: 12",
+      "timestamp": "2025-05-29T01:58:50.981Z"
     },
     {
       "test": "Update Master Data",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.521Z"
+      "timestamp": "2025-05-29T01:58:50.997Z"
     },
     {
       "test": "Check Master Data Exists",
       "status": "FAIL",
       "details": "Status: 404",
-      "timestamp": "2025-05-29T01:12:55.525Z"
+      "timestamp": "2025-05-29T01:58:51.008Z"
     },
     {
       "test": "Get Person Info",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.534Z"
+      "timestamp": "2025-05-29T01:58:51.019Z"
     },
     {
       "test": "Create Person Info",
       "status": "PASS",
-      "details": "Created person ID: 6",
-      "timestamp": "2025-05-29T01:12:55.643Z"
+      "details": "Created person ID: 14",
+      "timestamp": "2025-05-29T01:58:51.121Z"
     },
     {
       "test": "Get Person by ID",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.649Z"
+      "timestamp": "2025-05-29T01:58:51.134Z"
     },
     {
       "test": "Update Person Info",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.663Z"
+      "timestamp": "2025-05-29T01:58:51.196Z"
     },
     {
       "test": "Get Client Services",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.680Z"
+      "timestamp": "2025-05-29T01:58:51.497Z"
     },
     {
       "test": "Create Client Service",
       "status": "FAIL",
       "details": "Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
-      "timestamp": "2025-05-29T01:12:55.693Z"
+      "timestamp": "2025-05-29T01:58:51.523Z"
     },
     {
       "test": "Get Services by Client",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.701Z"
+      "timestamp": "2025-05-29T01:58:51.535Z"
     },
     {
       "test": "Service Case Notes Tests",
       "status": "FAIL",
       "details": "Missing client service ID for case notes tests",
-      "timestamp": "2025-05-29T01:12:55.701Z"
+      "timestamp": "2025-05-29T01:58:51.536Z"
     },
     {
       "test": "Get Documents by Client",
       "status": "FAIL",
       "details": "Status: 404",
-      "timestamp": "2025-05-29T01:12:55.710Z"
+      "timestamp": "2025-05-29T01:58:51.548Z"
     },
     {
       "test": "Upload Document",
       "status": "FAIL",
-      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/6</pre>\\n</body>\\n</html>\\n\"",
-      "timestamp": "2025-05-29T01:12:55.715Z"
+      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/14</pre>\\n</body>\\n</html>\\n\"",
+      "timestamp": "2025-05-29T01:58:51.557Z"
     },
     {
       "test": "Health Check",
       "status": "PASS",
       "details": "Status: 200",
-      "timestamp": "2025-05-29T01:12:55.720Z"
+      "timestamp": "2025-05-29T01:58:51.562Z"
     },
     {
       "test": "API Status",
       "status": "PASS",
       "details": "Status: 404 (Endpoint not implemented - this is OK)",
-      "timestamp": "2025-05-29T01:12:55.724Z"
+      "timestamp": "2025-05-29T01:58:51.576Z"
     }
   ],
   "errors": [
-    "Update Company: Could not retrieve company data for update",
-    "Change Password: Status: 429",
     "Check Master Data Exists: Status: 404",
     "Create Client Service: Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
     "Service Case Notes Tests: Missing client service ID for case notes tests",
     "Get Documents by Client: Status: 404",
-    "Upload Document: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/6</pre>\\n</body>\\n</html>\\n\""
+    "Upload Document: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/14</pre>\\n</body>\\n</html>\\n\""
   ]
 }

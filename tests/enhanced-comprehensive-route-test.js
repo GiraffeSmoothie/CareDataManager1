@@ -322,23 +322,24 @@ async function testMasterData() {
     } else {
       logTest('Create Master Data', false, `Status: ${createMasterData.status}, Data: ${JSON.stringify(createMasterData.data)}`);
     }
-    
-    // Test update master data
+      // Test update master data
     if (testMasterDataId) {
-      const updateMasterData = await makeRequest(`/api/master-data/${testMasterDataId}`, 'PUT', {
+      const updatedMasterDataItem = {
         ...masterDataItem,
         serviceProvider: `Updated ${masterDataItem.serviceProvider}`
-      }, userToken);
+      };
+      const updateMasterData = await makeRequest(`/api/master-data/${testMasterDataId}`, 'PUT', updatedMasterDataItem, userToken);
       logTest('Update Master Data', updateMasterData.status === 200, `Status: ${updateMasterData.status}`);
+      
+      // Update the masterDataItem to reflect the changes for verification
+      if (updateMasterData.status === 200) {
+        masterDataItem.serviceProvider = updatedMasterDataItem.serviceProvider;
+      }
     }
     
-    // Test check master data exists
-    const checkExists = await makeRequest('/api/master-data/check-exists', 'POST', {
-      serviceCategory: masterDataItem.serviceCategory,
-      serviceType: masterDataItem.serviceType,
-      serviceProvider: masterDataItem.serviceProvider,
-      segmentId: userSegmentId
-    }, userToken);
+    // Test check master data exists using the existing verify endpoint
+    const checkExistsUrl = `/api/master-data/verify?category=${encodeURIComponent(masterDataItem.serviceCategory)}&type=${encodeURIComponent(masterDataItem.serviceType)}&provider=${encodeURIComponent(masterDataItem.serviceProvider)}&segmentId=${userSegmentId}`;
+    const checkExists = await makeRequest(checkExistsUrl, 'GET', null, userToken);
     logTest('Check Master Data Exists', checkExists.status === 200, `Status: ${checkExists.status}`);
   } else {
     logTest('Master Data Tests', false, 'No accessible segment found for master data tests');
