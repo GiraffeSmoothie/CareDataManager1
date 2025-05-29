@@ -782,11 +782,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {object} req.body - Updated master data values
    * @returns {object} Updated master data entry
    */  app.put("/api/master-data/:id", apiRateLimit, validateRequest(idValidation), sanitizeInput, preventSQLInjection, authMiddleware, validateSegmentAccess, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
+    
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid ID format" });
-      }
       
       console.log("Updating master data for id:", id, "with data:", req.body);
       
@@ -869,14 +870,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fall through to generic error handling
         }
       }
-      
-      console.error("Error updating master data:", error);
+        console.error("Error updating master data:", error);
       return res.status(500).json({ 
         message: "Failed to update master data",
         details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
+
+  /**
+   * Verify master data existence endpoint
+   * 
+   * Verifies that a specific combination of service category, type, and provider exists in the master data.
+   * Used to validate service assignments before creating a client service record.
+   * 
+   * @route GET /api/master-data/verify
+   * @param {string} req.query.category - Service category to verify
+   * @param {string} req.query.type - Service type to verify
+   * @param {string} req.query.provider - Service provider to verify
+   * @param {string} [req.query.segmentId] - Optional segment ID to check against
+   * @returns {object} Success or error message
+   */
+  app.get("/api/master-data/verify", authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { category, type, provider, segmentId } = req.query;
+      
+      if (!category || !type || !provider) {
+        return res.status(400).json({ message: "Missing required parameters: category, type, and provider are required" });
+      }
+      
+      // Check if the master data combination exists
+      const exists = await dbStorage.checkMasterDataExists(
+        category as string, 
+        type as string, 
+        provider as string,
+        segmentId ? parseInt(segmentId as string) : undefined
+      );
+      
+      if (!exists) {
+        return res.status(404).json({ 
+          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
+        });
+      }
+      
+      return res.status(200).json({ 
+        success: true, 
+        message: "Service combination exists in master data" 
+      });
+    } catch (error) {
+      console.error("Error verifying master data:", error);
+      return res.status(500).json({ message: "Failed to verify master data" });
+    }
+  });
+
     /**
    * Get master data by ID endpoint
    * 
@@ -1874,9 +1920,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ 
           message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
         });
-      }
-        const clientServiceWithUser = {
+      }        const clientServiceWithUser = {
         ...validatedData,
+        segmentId: validatedData.segmentId === null ? undefined : validatedData.segmentId,
         createdBy: req.user.id,
         status: validatedData.status || 'Planned',
         createdAt: new Date()
@@ -2672,31 +2718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @throws {ApiError} 403 - If user is not an admin
    * @throws {ApiError} 404 - If company not found
    */
-  /*
-  app.delete("/api/companies/:id", authMiddleware, async (
-    req: Request,
-    res: Response
-  ) => {
-    // Type assertion for authenticated user
-    const authReq = req as any;
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid company ID" });
-      }
-
-      const existingCompany = await dbStorage.getCompanyById(id);
-      if (!existingCompany) {
-        return res.status(404).json({ message: "Company not found" });
-      }
-
-      await dbStorage.deleteCompany(id);
-      return res.status(200).json({ message: "Company deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting company:", error);
-      return res.status(500).json({ message: "Failed to delete company" });
-    }  });
-*/  
+  
 
 /**
    * Get segments by company endpoint
@@ -2874,39 +2896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: "Failed to update segment" });
     }  });
 
-  /**
-   * Delete segment endpoint
-   * 
-   * Permanently removes a segment from the system.
-   * 
-   * @route DELETE /api/segments/:id
-   * @param {string} req.params.id - Segment ID to delete
-   * @returns {object} Success message
-   * @throws {ApiError} 400 - If segment ID format is invalid
-   * @throws {404} - If segment not found
-   */
-  /*
-  app.delete("/api/segments/:id", authMiddleware, async (req: Request, res: Response) => {
-    // Type assertion for authenticated user
-    const authReq = req as any;
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid segment ID" });
-      }
-
-      const result = await dbStorage.deleteSegment(id);
-      
-      if (!result) {
-        return res.status(404).json({ message: "Segment not found" });
-      }
-
-      return res.status(200).json({ message: "Segment deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting segment:", error);
-      return res.status(500).json({ message: "Failed to delete segment" });
-    }  });
-      */
+  
 
   /**
    * Get current user's segments endpoint
@@ -2968,52 +2958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user segments:", error);
       return res.status(500).json({ message: "Failed to fetch segments" });
-    }
-  });
-    /**
-   * Verify master data existence endpoint
-   * 
-   * Verifies that a specific combination of service category, type, and provider exists in the master data.
-   * Used to validate service assignments before creating a client service record.
-   * 
-   * @route GET /api/master-data/verify
-   * @param {string} req.query.category - Service category to verify
-   * @param {string} req.query.type - Service type to verify
-   * @param {string} req.query.provider - Service provider to verify
-   * @param {string} [req.query.segmentId] - Optional segment ID to check against
-   * @returns {object} Success or error message
-   */
-  app.get("/api/master-data/verify", authMiddleware, async (req: Request, res: Response) => {
-    try {
-      const { category, type, provider, segmentId } = req.query;
-      
-      if (!category || !type || !provider) {
-        return res.status(400).json({ message: "Missing required parameters: category, type, and provider are required" });
-      }
-      
-      // Check if the master data combination exists
-      const exists = await dbStorage.checkMasterDataExists(
-        category as string, 
-        type as string, 
-        provider as string,
-        segmentId ? parseInt(segmentId as string) : undefined
-      );
-      
-      if (!exists) {
-        return res.status(404).json({ 
-          message: "The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first." 
-        });
-      }
-      
-      return res.status(200).json({ 
-        success: true, 
-        message: "Service combination exists in master data" 
-      });
-    } catch (error) {
-      console.error("Error verifying master data:", error);
-      return res.status(500).json({ message: "Failed to verify master data" });
-    }
-  });
+    }  });
 
   // Add error handling middleware
   app.use(errorHandler);

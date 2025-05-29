@@ -263,10 +263,7 @@ export function CaseNotesModal({
       formData.append("documentName", uploadDocumentName);
       formData.append("documentType", uploadDocumentType);
       formData.append("file", uploadFile);
-      // Add segmentId to associate the document with this service
-      if (service.id) {
-        formData.append("segmentId", service.id.toString());
-      }
+      
 
       const response = await apiRequest("POST", "/api/documents", formData, true);
       

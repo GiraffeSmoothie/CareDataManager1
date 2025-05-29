@@ -10,9 +10,11 @@ const fs = require('fs');
 const FormData = require('form-data');
 
 // Configuration
-const BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-const TEST_USERNAME = process.env.TEST_USERNAME || 'admin';
-const TEST_PASSWORD = process.env.TEST_PASSWORD || 'password';
+const BASE_URL = process.env.API_BASE_URL || 'http://localhost:5001';
+const ADMIN_USERNAME = 'admin1';
+const ADMIN_PASSWORD = 'Admin@123';
+const USER_USERNAME = 'btbt';
+const USER_PASSWORD = 'password';
 
 // Test Results Storage
 let testResults = {

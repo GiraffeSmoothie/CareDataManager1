@@ -1,0 +1,155 @@
+{
+  "timestamp": "2025-05-29T01:06:02.790Z",
+  "summary": {
+    "total": 22,
+    "passed": 13,
+    "failed": 9,
+    "skipped": 0,
+    "successRate": "59.09%"
+  },
+  "details": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Successfully logged in as admin",
+      "timestamp": "2025-05-29T01:06:02.310Z"
+    },
+    {
+      "test": "User Login",
+      "status": "PASS",
+      "details": "Successfully logged in as normal user",
+      "timestamp": "2025-05-29T01:06:02.381Z"
+    },
+    {
+      "test": "Get Companies",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.395Z"
+    },
+    {
+      "test": "Create Company",
+      "status": "PASS",
+      "details": "Created company ID: 3",
+      "timestamp": "2025-05-29T01:06:02.413Z"
+    },
+    {
+      "test": "Update Company",
+      "status": "FAIL",
+      "details": "Status: 400",
+      "timestamp": "2025-05-29T01:06:02.420Z"
+    },
+    {
+      "test": "Get Segments by Company",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.428Z"
+    },
+    {
+      "test": "Create Segment",
+      "status": "PASS",
+      "details": "Created segment ID: 5",
+      "timestamp": "2025-05-29T01:06:02.439Z"
+    },
+    {
+      "test": "Update Segment",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.446Z"
+    },
+    {
+      "test": "Get User Segments",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.456Z"
+    },
+    {
+      "test": "Get Users",
+      "status": "FAIL",
+      "details": "Status: 403",
+      "timestamp": "2025-05-29T01:06:02.463Z"
+    },
+    {
+      "test": "Change Password",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.601Z"
+    },
+    {
+      "test": "Revert Password",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.728Z"
+    },
+    {
+      "test": "Get Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.740Z"
+    },
+    {
+      "test": "Create Master Data",
+      "status": "FAIL",
+      "details": "Status: 403, Data: {\"message\":\"Access denied: Segment does not belong to your company\"}",
+      "timestamp": "2025-05-29T01:06:02.747Z"
+    },
+    {
+      "test": "Check Master Data Exists",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:06:02.753Z"
+    },
+    {
+      "test": "Get Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.762Z"
+    },
+    {
+      "test": "Create Person Info",
+      "status": "FAIL",
+      "details": "Status: 400, Data: {\"message\":\"Validation error: Date must be in DD-MM-YYYY format at \\\"dateOfBirth\\\"; Required at \\\"hcpLevel\\\"; Required at \\\"hcpStartDate\\\"; Invalid date format at \\\"dateOfBirth\\\"\",\"details\":[{\"validation\":\"regex\",\"code\":\"invalid_string\",\"message\":\"Date must be in DD-MM-YYYY format\",\"path\":[\"dateOfBirth\"]},{\"code\":\"invalid_type\",\"expected\":\"string\",\"received\":\"undefined\",\"path\":[\"hcpLevel\"],\"message\":\"Required\"},{\"code\":\"invalid_type\",\"expected\":\"string\",\"received\":\"undefined\",\"path\":[\"hcpStartDate\"],\"message\":\"Required\"},{\"code\":\"custom\",\"message\":\"Invalid date format\",\"path\":[\"dateOfBirth\"]}]}",
+      "timestamp": "2025-05-29T01:06:02.772Z"
+    },
+    {
+      "test": "Client Services Tests",
+      "status": "FAIL",
+      "details": "Missing person ID for client services tests",
+      "timestamp": "2025-05-29T01:06:02.772Z"
+    },
+    {
+      "test": "Service Case Notes Tests",
+      "status": "FAIL",
+      "details": "Missing client service ID for case notes tests",
+      "timestamp": "2025-05-29T01:06:02.773Z"
+    },
+    {
+      "test": "Document Management Tests",
+      "status": "FAIL",
+      "details": "Missing person ID for document tests",
+      "timestamp": "2025-05-29T01:06:02.773Z"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:06:02.778Z"
+    },
+    {
+      "test": "API Status",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:06:02.790Z"
+    }
+  ],
+  "errors": [
+    "Update Company: Status: 400",
+    "Get Users: Status: 403",
+    "Create Master Data: Status: 403, Data: {\"message\":\"Access denied: Segment does not belong to your company\"}",
+    "Check Master Data Exists: Status: 404",
+    "Create Person Info: Status: 400, Data: {\"message\":\"Validation error: Date must be in DD-MM-YYYY format at \\\"dateOfBirth\\\"; Required at \\\"hcpLevel\\\"; Required at \\\"hcpStartDate\\\"; Invalid date format at \\\"dateOfBirth\\\"\",\"details\":[{\"validation\":\"regex\",\"code\":\"invalid_string\",\"message\":\"Date must be in DD-MM-YYYY format\",\"path\":[\"dateOfBirth\"]},{\"code\":\"invalid_type\",\"expected\":\"string\",\"received\":\"undefined\",\"path\":[\"hcpLevel\"],\"message\":\"Required\"},{\"code\":\"invalid_type\",\"expected\":\"string\",\"received\":\"undefined\",\"path\":[\"hcpStartDate\"],\"message\":\"Required\"},{\"code\":\"custom\",\"message\":\"Invalid date format\",\"path\":[\"dateOfBirth\"]}]}",
+    "Client Services Tests: Missing person ID for client services tests",
+    "Service Case Notes Tests: Missing client service ID for case notes tests",
+    "Document Management Tests: Missing person ID for document tests",
+    "API Status: Status: 404"
+  ]
+}

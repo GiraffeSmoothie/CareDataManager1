@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { parse } from 'pg-connection-string';
-import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, Company, insertCompanySchema } from '@shared/schema';
+import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, Company, insertCompanySchema, Segment, NewCompany, NewSegment, NewClientService } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -1035,14 +1035,62 @@ export class Storage {
   async updateMasterDataStatus(id: number, status: string): Promise<void> {
     if (!validateInput(id, 'id') || !validateInput(status, 'string')) {
       throw new Error('Invalid ID or status format');
-    }
-
-    try {
+    }    try {
       await this.pool.query('UPDATE master_data SET status = $1 WHERE id = $2', [status, id]);
     } catch (error) {
       handleDatabaseError(error, 'updateMasterDataStatus');
     }
   }
+
+  /**
+   * Check if master data exists
+   * 
+   * Verifies if a specific combination of service category, type, and provider exists
+   * in the master data table. Used to validate service assignments before creating
+   * client service records.
+   * 
+   * @param {string} serviceCategory - Service category to check
+   * @param {string} serviceType - Service type to check
+   * @param {string} serviceProvider - Service provider to check
+   * @param {number} [segmentId] - Optional segment ID to filter by
+   * @returns {Promise<boolean>} True if the combination exists, false otherwise
+   * @throws {Error} If input validation fails or database query fails
+   */
+  async checkMasterDataExists(
+    serviceCategory: string, 
+    serviceType: string, 
+    serviceProvider: string,
+    segmentId?: number
+  ): Promise<boolean> {
+    if (!validateInput(serviceCategory, 'string') || 
+        !validateInput(serviceType, 'string') || 
+        !validateInput(serviceProvider, 'string')) {
+      throw new Error('Invalid service data format');
+    }
+
+    try {      let queryText = `
+        SELECT COUNT(*) 
+        FROM master_data 
+        WHERE service_category = $1 
+        AND service_type = $2 
+        AND service_provider = $3
+        AND active = true
+      `;
+      const params: any[] = [serviceCategory, serviceType, serviceProvider || ''];
+      
+      if (segmentId !== undefined) {
+        queryText += ' AND (segment_id = $4 OR segment_id IS NULL)';
+        params.push(segmentId);
+      }
+      
+      const result = await this.pool.query(queryText, params);
+      return parseInt(result.rows[0].count) > 0;
+    } catch (error) {
+      handleDatabaseError(error, 'checkMasterDataExists');
+      throw error;
+    }
+  }
+
   /**
    * Update master data record
    * 
@@ -1766,7 +1814,717 @@ export class Storage {
     
     return filtered;
   }
-}
 
-// Create and export a storage instance
+  /**
+   * Get all segments by company
+   * 
+   * Retrieves all segments belonging to a specific company.
+   * Returns segments sorted alphabetically by name.
+   * 
+   * @param {number} companyId - ID of the company whose segments to retrieve
+   * @returns {Promise<Segment[]>} Array of segment records for the company
+   * @throws {Error} If database query fails
+   */
+  async getAllSegmentsByCompany(companyId: number): Promise<Segment[]> {
+    if (!validateInput(companyId, 'id')) {
+      throw new Error('Invalid company ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM segments WHERE company_id = $1 ORDER BY segment_name',
+        [companyId]
+      );
+      
+      return result.rows.map(row => ({
+        id: row.id,
+        segment_name: row.segment_name,
+        company_id: row.company_id,
+        created_at: row.created_at,
+        created_by: row.created_by
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getAllSegmentsByCompany');
+      throw error;
+    }
+  }
+
+  /**
+   * Get segment by ID
+   * 
+   * Retrieves a specific segment record by its unique ID.
+   * Used for segment access validation and segment management.
+   * 
+   * @param {number} id - ID of the segment to retrieve
+   * @returns {Promise<Segment | null>} Segment record if found, null otherwise
+   * @throws {Error} If database query fails
+   */
+  async getSegmentById(id: number): Promise<Segment | null> {
+    if (!validateInput(id, 'id')) {
+      throw new Error('Invalid segment ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM segments WHERE id = $1',
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        segment_name: row.segment_name,
+        company_id: row.company_id,
+        created_at: row.created_at,
+        created_by: row.created_by      };
+    } catch (error) {
+      handleDatabaseError(error, 'getSegmentById');
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new case note for a service with optional document attachments.
+   * Uses a transaction to ensure data consistency when linking documents.
+   * 
+   * @param {NewServiceCaseNote} caseNoteData - Case note data
+   * @returns {Promise<ServiceCaseNote>} Created case note with linked documents
+   * @throws {Error} If validation fails or database query fails
+   */
+  async createServiceCaseNote(caseNoteData: NewServiceCaseNote): Promise<ServiceCaseNote> {
+    if (!validateInput(caseNoteData.serviceId, 'id') || 
+        !validateInput(caseNoteData.noteText, 'string') || 
+        !validateInput(caseNoteData.createdBy, 'id')) {
+      throw new Error('Invalid case note data format');
+    }
+
+    try {
+      return await this.withTransaction(async (client) => {
+        // Create the case note
+        const caseNoteResult = await client.query(
+          `INSERT INTO service_case_notes (service_id, note_text, created_by, updated_by, created_at, updated_at) 
+           VALUES ($1, $2, $3, $3, NOW(), NOW()) 
+           RETURNING id, service_id, note_text, created_at, updated_at, created_by, updated_by`,
+          [caseNoteData.serviceId, caseNoteData.noteText, caseNoteData.createdBy]
+        );
+
+        const caseNote = caseNoteResult.rows[0];
+        const documents: Document[] = [];
+
+        // Link documents if provided
+        if (caseNoteData.documentIds && caseNoteData.documentIds.length > 0) {
+          for (const documentId of caseNoteData.documentIds) {
+            // Verify document exists and user has access
+            const docCheck = await client.query(
+              'SELECT id FROM documents WHERE id = $1',
+              [documentId]
+            );
+            
+            if (docCheck.rows.length === 0) {
+              throw new Error(`Document with ID ${documentId} not found`);
+            }
+
+            // Link document to case note
+            await client.query(
+              `INSERT INTO case_note_documents (case_note_id, document_id, created_by) 
+               VALUES ($1, $2, $3)`,
+              [caseNote.id, documentId, caseNoteData.createdBy]
+            );
+
+            // Get document details for response
+            const docResult = await client.query(
+              `SELECT id, client_id, document_name, document_type, filename, file_path, uploaded_at, created_by, segment_id 
+               FROM documents WHERE id = $1`,
+              [documentId]
+            );
+
+            if (docResult.rows.length > 0) {
+              const docRow = docResult.rows[0];
+              documents.push({
+                id: docRow.id,
+                clientId: docRow.client_id,
+                documentName: docRow.document_name,
+                documentType: docRow.document_type,
+                filename: docRow.filename,
+                filePath: docRow.file_path,
+                uploadedAt: docRow.uploaded_at,
+                createdBy: docRow.created_by,
+                segmentId: docRow.segment_id
+              });
+            }
+          }
+        }
+
+        return {
+          id: caseNote.id,
+          serviceId: caseNote.service_id,
+          noteText: caseNote.note_text,
+          createdAt: caseNote.created_at,
+          updatedAt: caseNote.updated_at,
+          createdBy: caseNote.created_by,
+          updatedBy: caseNote.updated_by,
+          documents: documents.length > 0 ? documents : undefined
+        };
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'createServiceCaseNote');
+      throw error;
+    }
+  }
+
+  /**
+   * Get service case notes by service ID
+   * 
+   * Retrieves all case notes for a specific service, including linked documents.
+   * Orders notes by creation date (newest first).
+   * 
+   * @param {number} serviceId - ID of the service
+   * @returns {Promise<ServiceCaseNote[]>} Array of case notes with documents
+   * @throws {Error} If validation fails or database query fails
+   */
+  async getServiceCaseNotesByServiceId(serviceId: number): Promise<ServiceCaseNote[]> {
+    if (!validateInput(serviceId, 'id')) {
+      throw new Error('Invalid service ID format');
+    }
+
+    try {
+      // Get case notes
+      const notesResult = await this.pool.query(
+        `SELECT id, service_id, note_text, created_at, updated_at, created_by, updated_by 
+         FROM service_case_notes 
+         WHERE service_id = $1 
+         ORDER BY created_at DESC`,
+        [serviceId]
+      );
+
+      const notes: ServiceCaseNote[] = [];
+
+      for (const noteRow of notesResult.rows) {
+        // Get linked documents for each note
+        const documentsResult = await this.pool.query(
+          `SELECT d.id, d.client_id, d.document_name, d.document_type, d.filename, d.file_path, d.uploaded_at, d.created_by, d.segment_id
+           FROM documents d
+           INNER JOIN case_note_documents cnd ON d.id = cnd.document_id
+           WHERE cnd.case_note_id = $1
+           ORDER BY cnd.created_at ASC`,
+          [noteRow.id]
+        );
+
+        const documents: Document[] = documentsResult.rows.map(docRow => ({
+          id: docRow.id,
+          clientId: docRow.client_id,
+          documentName: docRow.document_name,
+          documentType: docRow.document_type,
+          filename: docRow.filename,
+          filePath: docRow.file_path,
+          uploadedAt: docRow.uploaded_at,
+          createdBy: docRow.created_by,
+          segmentId: docRow.segment_id
+        }));
+
+        notes.push({
+          id: noteRow.id,
+          serviceId: noteRow.service_id,
+          noteText: noteRow.note_text,
+          createdAt: noteRow.created_at,
+          updatedAt: noteRow.updated_at,
+          createdBy: noteRow.created_by,
+          updatedBy: noteRow.updated_by,
+          documents: documents.length > 0 ? documents : undefined
+        });
+      }
+
+      return notes;
+    } catch (error) {
+      handleDatabaseError(error, 'getServiceCaseNotesByServiceId');
+      throw error;
+    }
+  }  // COMPANY MANAGEMENT METHODS
+  
+  /**
+   * Gets all companies from the database.
+   * 
+   * @returns {Promise<Company[]>} Array of all companies
+   * @throws {Error} Database operation error
+   */
+  async getAllCompanies(): Promise<Company[]> {
+    try {
+      const result = await this.pool.query(
+        `SELECT company_id, company_name, registered_address, postal_address, 
+                contact_person_name, contact_person_phone, contact_person_email, 
+                created_at, created_by 
+         FROM companies ORDER BY company_name`
+      );
+
+      return result.rows.map(row => ({
+        company_id: row.company_id,
+        company_name: row.company_name,
+        registered_address: row.registered_address,
+        postal_address: row.postal_address,
+        contact_person_name: row.contact_person_name,
+        contact_person_phone: row.contact_person_phone,
+        contact_person_email: row.contact_person_email,
+        created_at: row.created_at,
+        created_by: row.created_by
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getAllCompanies');
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new company.
+   * 
+   * @param {NewCompany} companyData - Company data to create
+   * @returns {Promise<Company>} Created company
+   * @throws {Error} Database operation error
+   */
+  async createCompany(companyData: NewCompany): Promise<Company> {
+    validateInput(companyData, 'Company data is required');
+
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO companies (company_name, registered_address, postal_address, 
+                               contact_person_name, contact_person_phone, contact_person_email, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING company_id, company_name, registered_address, postal_address, 
+                   contact_person_name, contact_person_phone, contact_person_email, 
+                   created_at, created_by`,
+        [
+          companyData.company_name,
+          companyData.registered_address,
+          companyData.postal_address,
+          companyData.contact_person_name,
+          companyData.contact_person_phone,
+          companyData.contact_person_email,
+          companyData.created_by || null
+        ]
+      );
+
+      const row = result.rows[0];
+      return {
+        company_id: row.company_id,
+        company_name: row.company_name,
+        registered_address: row.registered_address,
+        postal_address: row.postal_address,
+        contact_person_name: row.contact_person_name,
+        contact_person_phone: row.contact_person_phone,
+        contact_person_email: row.contact_person_email,
+        created_at: row.created_at,
+        created_by: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'createCompany');
+      throw error;
+    }
+  }
+
+  /**
+   * Gets a company by ID.
+   * 
+   * @param {number} companyId - Company ID
+   * @returns {Promise<Company | null>} Company data or null if not found
+   * @throws {Error} Database operation error
+   */
+  async getCompanyById(companyId: number): Promise<Company | null> {
+    validateInput(companyId, 'Company ID is required');
+
+    try {
+      const result = await this.pool.query(
+        `SELECT company_id, company_name, registered_address, postal_address, 
+                contact_person_name, contact_person_phone, contact_person_email, 
+                created_at, created_by 
+         FROM companies WHERE company_id = $1`,
+        [companyId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        company_id: row.company_id,
+        company_name: row.company_name,
+        registered_address: row.registered_address,
+        postal_address: row.postal_address,
+        contact_person_name: row.contact_person_name,
+        contact_person_phone: row.contact_person_phone,
+        contact_person_email: row.contact_person_email,
+        created_at: row.created_at,
+        created_by: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'getCompanyById');
+      throw error;
+    }
+  }
+
+  /**
+   * Updates a company.
+   * 
+   * @param {number} companyId - Company ID to update
+   * @param {Partial<NewCompany>} updates - Company data to update
+   * @returns {Promise<Company>} Updated company
+   * @throws {Error} Database operation error
+   */
+  async updateCompany(companyId: number, updates: Partial<NewCompany>): Promise<Company> {
+    validateInput(companyId, 'Company ID is required');
+    validateInput(updates, 'Update data is required');
+
+    const updateFields: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (updates.company_name !== undefined) {
+      updateFields.push(`company_name = $${paramCount}`);
+      values.push(updates.company_name);
+      paramCount++;
+    }
+    if (updates.registered_address !== undefined) {
+      updateFields.push(`registered_address = $${paramCount}`);
+      values.push(updates.registered_address);
+      paramCount++;
+    }
+    if (updates.postal_address !== undefined) {
+      updateFields.push(`postal_address = $${paramCount}`);
+      values.push(updates.postal_address);
+      paramCount++;
+    }
+    if (updates.contact_person_name !== undefined) {
+      updateFields.push(`contact_person_name = $${paramCount}`);
+      values.push(updates.contact_person_name);
+      paramCount++;
+    }
+    if (updates.contact_person_phone !== undefined) {
+      updateFields.push(`contact_person_phone = $${paramCount}`);
+      values.push(updates.contact_person_phone);
+      paramCount++;
+    }
+    if (updates.contact_person_email !== undefined) {
+      updateFields.push(`contact_person_email = $${paramCount}`);
+      values.push(updates.contact_person_email);
+      paramCount++;
+    }
+
+    if (updateFields.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
+    values.push(companyId);
+
+    try {
+      const result = await this.pool.query(
+        `UPDATE companies SET ${updateFields.join(', ')} WHERE company_id = $${paramCount}
+         RETURNING company_id, company_name, registered_address, postal_address, 
+                   contact_person_name, contact_person_phone, contact_person_email, 
+                   created_at, created_by`,
+        values
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Company not found');
+      }
+
+      const row = result.rows[0];
+      return {
+        company_id: row.company_id,
+        company_name: row.company_name,
+        registered_address: row.registered_address,
+        postal_address: row.postal_address,
+        contact_person_name: row.contact_person_name,
+        contact_person_phone: row.contact_person_phone,
+        contact_person_email: row.contact_person_email,
+        created_at: row.created_at,
+        created_by: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'updateCompany');
+      throw error;
+    }
+  }
+
+  // SEGMENT MANAGEMENT METHODS
+
+  /**
+   * Creates a new segment.
+   * 
+   * @param {NewSegment} segmentData - Segment data to create
+   * @returns {Promise<Segment>} Created segment
+   * @throws {Error} Database operation error
+   */
+  async createSegment(segmentData: NewSegment): Promise<Segment> {
+    validateInput(segmentData, 'Segment data is required');
+
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO segments (segment_name, company_id, created_by)
+         VALUES ($1, $2, $3)
+         RETURNING id, segment_name, company_id, created_at, created_by`,
+        [segmentData.segment_name, segmentData.company_id, segmentData.created_by || null]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        segment_name: row.segment_name,
+        company_id: row.company_id,
+        created_at: row.created_at,
+        created_by: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'createSegment');
+      throw error;
+    }
+  }
+
+  /**
+   * Updates a segment.
+   * 
+   * @param {number} segmentId - Segment ID to update
+   * @param {Partial<NewSegment>} updates - Segment data to update
+   * @returns {Promise<Segment>} Updated segment
+   * @throws {Error} Database operation error
+   */
+  async updateSegment(segmentId: number, updates: Partial<NewSegment>): Promise<Segment> {
+    validateInput(segmentId, 'Segment ID is required');
+    validateInput(updates, 'Update data is required');
+
+    const updateFields: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (updates.segment_name !== undefined) {
+      updateFields.push(`segment_name = $${paramCount}`);
+      values.push(updates.segment_name);
+      paramCount++;
+    }
+    if (updates.company_id !== undefined) {
+      updateFields.push(`company_id = $${paramCount}`);
+      values.push(updates.company_id);
+      paramCount++;
+    }
+
+    if (updateFields.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
+    values.push(segmentId);
+
+    try {
+      const result = await this.pool.query(
+        `UPDATE segments SET ${updateFields.join(', ')} WHERE id = $${paramCount}
+         RETURNING id, segment_name, company_id, created_at, created_by`,
+        values
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Segment not found');
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        segment_name: row.segment_name,
+        company_id: row.company_id,
+        created_at: row.created_at,
+        created_by: row.created_by
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'updateSegment');
+      throw error;
+    }
+  }
+
+  // CLIENT SERVICE MANAGEMENT METHODS
+
+  /**
+   * Updates a client service status.
+   * 
+   * @param {number} clientServiceId - Client service ID to update
+   * @param {string} status - New status
+   * @returns {Promise<ClientService>} Updated client service
+   * @throws {Error} Database operation error
+   */
+  async updateClientServiceStatus(clientServiceId: number, status: string): Promise<ClientService> {
+    validateInput(clientServiceId, 'Client service ID is required');
+    validateInput(status, 'Status is required');
+
+    try {
+      const result = await this.pool.query(
+        `UPDATE client_services 
+         SET status = $1 
+         WHERE id = $2
+         RETURNING id, client_id, service_category, service_type, service_provider, 
+                   service_start_date, service_days, service_hours, status, 
+                   created_at, created_by, segment_id`,
+        [status, clientServiceId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Client service not found');
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: Array.isArray(row.service_days) ? row.service_days : [],
+        serviceHours: row.service_hours,
+        status: row.status,
+        createdAt: row.created_at,
+        createdBy: row.created_by,
+        segmentId: row.segment_id
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'updateClientServiceStatus');
+      throw error;
+    }
+  }
+
+  /**
+   * Gets client services with optional filtering.
+   * 
+   * @param {number} [clientId] - Optional client ID to filter by
+   * @param {number} [serviceId] - Optional service ID to filter by (unused in current schema)
+   * @param {string} [status] - Optional status to filter by
+   * @returns {Promise<ClientService[]>} Array of client services
+   * @throws {Error} Database operation error
+   */
+  async getClientServices(clientId?: number, serviceId?: number, status?: string): Promise<ClientService[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    if (clientId !== undefined) {
+      conditions.push(`client_id = $${paramCount}`);
+      values.push(clientId);
+      paramCount++;
+    }
+    if (status !== undefined) {
+      conditions.push(`status = $${paramCount}`);
+      values.push(status);
+      paramCount++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    try {
+      const result = await this.pool.query(
+        `SELECT id, client_id, service_category, service_type, service_provider, 
+                service_start_date, service_days, service_hours, status, 
+                created_at, created_by, segment_id
+         FROM client_services ${whereClause} ORDER BY created_at DESC`,
+        values
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: Array.isArray(row.service_days) ? row.service_days : [],
+        serviceHours: row.service_hours,
+        status: row.status,
+        createdAt: row.created_at,
+        createdBy: row.created_by,
+        segmentId: row.segment_id
+      }));
+    } catch (error) {
+      handleDatabaseError(error, 'getClientServices');
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new client service.
+   * 
+   * @param {NewClientService} clientServiceData - Client service data to create
+   * @returns {Promise<ClientService>} Created client service
+   * @throws {Error} Database operation error
+   */
+  async createClientService(clientServiceData: NewClientService): Promise<ClientService> {
+    validateInput(clientServiceData, 'Client service data is required');
+
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO client_services (client_id, service_category, service_type, service_provider, 
+                                     service_start_date, service_days, service_hours, status, 
+                                     created_by, segment_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id, client_id, service_category, service_type, service_provider, 
+                   service_start_date, service_days, service_hours, status, 
+                   created_at, created_by, segment_id`,
+        [
+          clientServiceData.clientId,
+          clientServiceData.serviceCategory,
+          clientServiceData.serviceType,
+          clientServiceData.serviceProvider,
+          clientServiceData.serviceStartDate,
+          clientServiceData.serviceDays,
+          clientServiceData.serviceHours,
+          clientServiceData.status || 'active',
+          clientServiceData.createdBy || null,
+          clientServiceData.segmentId || null
+        ]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        serviceCategory: row.service_category,
+        serviceType: row.service_type,
+        serviceProvider: row.service_provider,
+        serviceStartDate: row.service_start_date,
+        serviceDays: Array.isArray(row.service_days) ? row.service_days : [],
+        serviceHours: row.service_hours,
+        status: row.status,
+        createdAt: row.created_at,
+        createdBy: row.created_by,      segmentId: row.segment_id
+      };
+    } catch (error) {
+      handleDatabaseError(error, 'createClientService');
+      throw error;
+    }
+  }
+
+  /**
+   * Gets the count of case notes for a specific service
+   * 
+   * @param {number} serviceId - The ID of the service to count notes for
+   * @returns {Promise<number>} Number of case notes for the service
+   * @throws {Error} If serviceId is invalid or database error occurs
+   */
+  async getServiceCaseNotesCount(serviceId: number): Promise<number> {
+    if (!validateInput(serviceId, 'id')) {
+      throw new Error('Invalid service ID format');
+    }
+
+    try {
+      const result = await this.pool.query(
+        `SELECT COUNT(*) as count 
+         FROM service_case_notes 
+         WHERE service_id = $1`,
+        [serviceId]
+      );
+
+      return parseInt(result.rows[0].count) || 0;
+    } catch (error) {
+      console.error(`Error getting case notes count for service ${serviceId}:`, error);
+      throw handleDatabaseError(error, `Failed to get case notes count for service ${serviceId}`);
+    }
+  }
+}
 export const storage = new Storage(pool);

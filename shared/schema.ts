@@ -124,6 +124,36 @@ export type Segment = {
   created_by?: number;
 };
 
+// New types for creating records (without auto-generated fields)
+export type NewCompany = {
+  company_name: string;
+  registered_address: string;
+  postal_address: string;
+  contact_person_name: string;
+  contact_person_phone: string;
+  contact_person_email: string;
+  created_by?: number;
+};
+
+export type NewSegment = {
+  segment_name: string;
+  company_id: number;
+  created_by?: number;
+};
+
+export type NewClientService = {
+  clientId: number;
+  serviceCategory: string;
+  serviceType: string;
+  serviceProvider: string;
+  serviceStartDate: string;
+  serviceDays: string[];
+  serviceHours: number;
+  status?: string;
+  createdBy?: number;
+  segmentId?: number;
+};
+
 // Export zod schemas if needed for validation on client
 export const insertUserSchema = z.object({
   username: z.string().min(1, "Username is required"),

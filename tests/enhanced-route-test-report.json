@@ -1,0 +1,189 @@
+{
+  "timestamp": "2025-05-29T01:12:55.724Z",
+  "summary": {
+    "total": 28,
+    "passed": 21,
+    "failed": 7,
+    "skipped": 0,
+    "successRate": "75.00%"
+  },
+  "details": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Successfully logged in as admin",
+      "timestamp": "2025-05-29T01:12:55.319Z"
+    },
+    {
+      "test": "User Login",
+      "status": "PASS",
+      "details": "Successfully logged in as normal user",
+      "timestamp": "2025-05-29T01:12:55.402Z"
+    },
+    {
+      "test": "Get Companies",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.410Z"
+    },
+    {
+      "test": "Create Company",
+      "status": "PASS",
+      "details": "Created company ID: 4",
+      "timestamp": "2025-05-29T01:12:55.422Z"
+    },
+    {
+      "test": "Update Company",
+      "status": "FAIL",
+      "details": "Could not retrieve company data for update",
+      "timestamp": "2025-05-29T01:12:55.428Z"
+    },
+    {
+      "test": "Get Segments by Company",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.437Z"
+    },
+    {
+      "test": "Create Segment",
+      "status": "PASS",
+      "details": "Created segment ID: 6",
+      "timestamp": "2025-05-29T01:12:55.445Z"
+    },
+    {
+      "test": "Update Segment",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.453Z"
+    },
+    {
+      "test": "Get User Segments",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.461Z"
+    },
+    {
+      "test": "Get Users (Admin)",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.469Z"
+    },
+    {
+      "test": "Get Users (User - Should Fail)",
+      "status": "PASS",
+      "details": "Status: 403 (Expected 403)",
+      "timestamp": "2025-05-29T01:12:55.476Z"
+    },
+    {
+      "test": "Change Password",
+      "status": "FAIL",
+      "details": "Status: 429",
+      "timestamp": "2025-05-29T01:12:55.480Z"
+    },
+    {
+      "test": "Get Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.490Z"
+    },
+    {
+      "test": "Create Master Data",
+      "status": "PASS",
+      "details": "Created master data ID: 4",
+      "timestamp": "2025-05-29T01:12:55.509Z"
+    },
+    {
+      "test": "Update Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.521Z"
+    },
+    {
+      "test": "Check Master Data Exists",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:12:55.525Z"
+    },
+    {
+      "test": "Get Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.534Z"
+    },
+    {
+      "test": "Create Person Info",
+      "status": "PASS",
+      "details": "Created person ID: 6",
+      "timestamp": "2025-05-29T01:12:55.643Z"
+    },
+    {
+      "test": "Get Person by ID",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.649Z"
+    },
+    {
+      "test": "Update Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.663Z"
+    },
+    {
+      "test": "Get Client Services",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.680Z"
+    },
+    {
+      "test": "Create Client Service",
+      "status": "FAIL",
+      "details": "Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
+      "timestamp": "2025-05-29T01:12:55.693Z"
+    },
+    {
+      "test": "Get Services by Client",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.701Z"
+    },
+    {
+      "test": "Service Case Notes Tests",
+      "status": "FAIL",
+      "details": "Missing client service ID for case notes tests",
+      "timestamp": "2025-05-29T01:12:55.701Z"
+    },
+    {
+      "test": "Get Documents by Client",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:12:55.710Z"
+    },
+    {
+      "test": "Upload Document",
+      "status": "FAIL",
+      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/6</pre>\\n</body>\\n</html>\\n\"",
+      "timestamp": "2025-05-29T01:12:55.715Z"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:12:55.720Z"
+    },
+    {
+      "test": "API Status",
+      "status": "PASS",
+      "details": "Status: 404 (Endpoint not implemented - this is OK)",
+      "timestamp": "2025-05-29T01:12:55.724Z"
+    }
+  ],
+  "errors": [
+    "Update Company: Could not retrieve company data for update",
+    "Change Password: Status: 429",
+    "Check Master Data Exists: Status: 404",
+    "Create Client Service: Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
+    "Service Case Notes Tests: Missing client service ID for case notes tests",
+    "Get Documents by Client: Status: 404",
+    "Upload Document: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/6</pre>\\n</body>\\n</html>\\n\""
+  ]
+}

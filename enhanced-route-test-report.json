@@ -1,0 +1,171 @@
+{
+  "timestamp": "2025-05-29T01:23:09.041Z",
+  "summary": {
+    "total": 24,
+    "passed": 11,
+    "failed": 13,
+    "skipped": 0,
+    "successRate": "45.83%"
+  },
+  "details": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Successfully logged in as admin",
+      "timestamp": "2025-05-29T01:23:08.779Z"
+    },
+    {
+      "test": "User Login",
+      "status": "PASS",
+      "details": "Successfully logged in as normal user",
+      "timestamp": "2025-05-29T01:23:08.850Z"
+    },
+    {
+      "test": "Get Companies",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:08.856Z"
+    },
+    {
+      "test": "Create Company",
+      "status": "FAIL",
+      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/companies</pre>\\n</body>\\n</html>\\n\"",
+      "timestamp": "2025-05-29T01:23:08.862Z"
+    },
+    {
+      "test": "Segment Tests",
+      "status": "FAIL",
+      "details": "No company ID available for segment tests",
+      "timestamp": "2025-05-29T01:23:08.863Z"
+    },
+    {
+      "test": "Get Users (Admin)",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:08.869Z"
+    },
+    {
+      "test": "Get Users (User - Should Fail)",
+      "status": "FAIL",
+      "details": "Status: 404 (Expected 403)",
+      "timestamp": "2025-05-29T01:23:08.874Z"
+    },
+    {
+      "test": "Change Password",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:08.878Z"
+    },
+    {
+      "test": "Get Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:08.891Z"
+    },
+    {
+      "test": "Create Master Data",
+      "status": "PASS",
+      "details": "Created master data ID: 7",
+      "timestamp": "2025-05-29T01:23:08.915Z"
+    },
+    {
+      "test": "Update Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:08.929Z"
+    },
+    {
+      "test": "Check Master Data Exists",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:08.933Z"
+    },
+    {
+      "test": "Get Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:08.944Z"
+    },
+    {
+      "test": "Create Person Info",
+      "status": "PASS",
+      "details": "Created person ID: 9",
+      "timestamp": "2025-05-29T01:23:08.973Z"
+    },
+    {
+      "test": "Get Person by ID",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:08.980Z"
+    },
+    {
+      "test": "Update Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:08.993Z"
+    },
+    {
+      "test": "Get Client Services",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:09.005Z"
+    },
+    {
+      "test": "Create Client Service",
+      "status": "FAIL",
+      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/client-services</pre>\\n</body>\\n</html>\\n\"",
+      "timestamp": "2025-05-29T01:23:09.012Z"
+    },
+    {
+      "test": "Get Services by Client",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:09.016Z"
+    },
+    {
+      "test": "Service Case Notes Tests",
+      "status": "FAIL",
+      "details": "Missing client service ID for case notes tests",
+      "timestamp": "2025-05-29T01:23:09.017Z"
+    },
+    {
+      "test": "Get Documents by Client",
+      "status": "FAIL",
+      "details": "Status: 404",
+      "timestamp": "2025-05-29T01:23:09.025Z"
+    },
+    {
+      "test": "Upload Document",
+      "status": "FAIL",
+      "details": "Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/9</pre>\\n</body>\\n</html>\\n\"",
+      "timestamp": "2025-05-29T01:23:09.031Z"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T01:23:09.035Z"
+    },
+    {
+      "test": "API Status",
+      "status": "PASS",
+      "details": "Status: 404 (Endpoint not implemented - this is OK)",
+      "timestamp": "2025-05-29T01:23:09.041Z"
+    }
+  ],
+  "errors": [
+    "Get Companies: Status: 404",
+    "Create Company: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/companies</pre>\\n</body>\\n</html>\\n\"",
+    "Segment Tests: No company ID available for segment tests",
+    "Get Users (Admin): Status: 404",
+    "Get Users (User - Should Fail): Status: 404 (Expected 403)",
+    "Change Password: Status: 404",
+    "Check Master Data Exists: Status: 404",
+    "Get Client Services: Status: 404",
+    "Create Client Service: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/client-services</pre>\\n</body>\\n</html>\\n\"",
+    "Get Services by Client: Status: 404",
+    "Service Case Notes Tests: Missing client service ID for case notes tests",
+    "Get Documents by Client: Status: 404",
+    "Upload Document: Status: 404, Data: \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<title>Error</title>\\n</head>\\n<body>\\n<pre>Cannot POST /api/documents/upload/9</pre>\\n</body>\\n</html>\\n\""
+  ]
+}
