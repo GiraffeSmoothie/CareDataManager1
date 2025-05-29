@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import AppLayout from "@/layouts/app-layout"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import axios from "axios"
+import { apiRequest } from "@/lib/queryClient"
 import { useLocation } from "wouter"
 import { STATUS_CONFIGS } from '@/lib/constants';
 import { useSegment } from "@/contexts/segment-context"
@@ -57,7 +57,6 @@ export default function Homepage() {
   const { selectedSegment, isLoading: segmentLoading } = useSegment();
   const queryClient = useQueryClient();
   const [showAllClients, setShowAllClients] = useState(false);
-
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ["/api/person-info", selectedSegment?.id],
     queryFn: async () => {
@@ -66,16 +65,15 @@ export default function Homepage() {
       }
       
       console.log("Homepage: Fetching members for segment", selectedSegment.id);
-      const response = await axios.get(`/api/person-info?segmentId=${selectedSegment.id}`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await apiRequest("GET", `/api/person-info?segmentId=${selectedSegment.id}`);
       
-      // Filter for active members only
-      const allMembers = response.data as Member[];
-      const activeMembers = allMembers.filter(m => m.status === "Active" || m.status === "Paused" || m.status === "New");
+      if (!response.ok) {
+        throw new Error("Failed to fetch members");
+      }
+      
+      const allMembers = await response.json() as Member[];
+        // Filter for active members only
+      const activeMembers = allMembers.filter((m: Member) => m.status === "Active" || m.status === "Paused" || m.status === "New");
       console.log("Homepage: Fetched", activeMembers.length, "active members");
       return activeMembers;
     },
@@ -96,20 +94,18 @@ export default function Homepage() {
     const memberName = `${member.firstName} ${member.lastName}`;
     setLocation(`/client-assignment?clientId=${member.id}&name=${encodeURIComponent(memberName)}`);
   };
-
   // Sort members by status order from centralized config
-  const sortedMembers = members?.sort((a, b) => {
+  const sortedMembers = members?.sort((a: Member, b: Member) => {
     const getOrder = (status: string) => STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS]?.order ?? 999;
     return getOrder(a.status) - getOrder(b.status);
   });
-
   // Calculate statistics
   const stats = {
     total: members?.length || 0,
-    active: members?.filter(m => m.status === "Active").length || 0,
-    paused: members?.filter(m => m.status === "Paused").length || 0,
-    new: members?.filter(m => m.status === "New").length || 0,
-    withHcp: members?.filter(m => m.hcpLevel && m.hcpLevel !== "-").length || 0
+    active: members?.filter((m: Member) => m.status === "Active").length || 0,
+    paused: members?.filter((m: Member) => m.status === "Paused").length || 0,
+    new: members?.filter((m: Member) => m.status === "New").length || 0,
+    withHcp: members?.filter((m: Member) => m.hcpLevel && m.hcpLevel !== "-").length || 0
   };
 
   const isLoading = segmentLoading || membersLoading;
@@ -241,9 +237,8 @@ export default function Homepage() {
                       View All
                     </Button>
                   </div>
-                </CardHeader>                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {sortedMembers.slice(0, showAllClients ? sortedMembers.length : 6).map((member) => (
+                </CardHeader>                <CardContent>                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sortedMembers.slice(0, showAllClients ? sortedMembers.length : 6).map((member: Member) => (
                       <Card 
                         key={member.id} 
                         className="p-4 cursor-pointer hover:shadow-md transition-all duration-200 border-l-4 hover:border-l-primary"

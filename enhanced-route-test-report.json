@@ -1,21 +1,189 @@
 {
-  "timestamp": "2025-05-29T02:10:31.491Z",
+  "timestamp": "2025-05-29T04:42:22.813Z",
   "summary": {
-    "total": 1,
-    "passed": 0,
-    "failed": 1,
+    "total": 28,
+    "passed": 21,
+    "failed": 7,
     "skipped": 0,
-    "successRate": "0.00%"
+    "successRate": "75.00%"
   },
   "details": [
     {
       "test": "Admin Login",
+      "status": "PASS",
+      "details": "Successfully logged in as admin",
+      "timestamp": "2025-05-29T04:42:22.358Z"
+    },
+    {
+      "test": "User Login",
+      "status": "PASS",
+      "details": "Successfully logged in as normal user",
+      "timestamp": "2025-05-29T04:42:22.428Z"
+    },
+    {
+      "test": "Get Companies",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.435Z"
+    },
+    {
+      "test": "Create Company",
+      "status": "PASS",
+      "details": "Created company ID: 17",
+      "timestamp": "2025-05-29T04:42:22.446Z"
+    },
+    {
+      "test": "Update Company",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.461Z"
+    },
+    {
+      "test": "Get Segments by Company",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.469Z"
+    },
+    {
+      "test": "Create Segment",
+      "status": "PASS",
+      "details": "Created segment ID: 19",
+      "timestamp": "2025-05-29T04:42:22.475Z"
+    },
+    {
+      "test": "Update Segment",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.483Z"
+    },
+    {
+      "test": "Get User Segments",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.489Z"
+    },
+    {
+      "test": "Get Users (Admin)",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.496Z"
+    },
+    {
+      "test": "Get Users (User - Should Fail)",
+      "status": "PASS",
+      "details": "Status: 403 (Expected 403)",
+      "timestamp": "2025-05-29T04:42:22.501Z"
+    },
+    {
+      "test": "Change Password",
+      "status": "FAIL",
+      "details": "Status: 429",
+      "timestamp": "2025-05-29T04:42:22.506Z"
+    },
+    {
+      "test": "Get Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.516Z"
+    },
+    {
+      "test": "Create Master Data",
+      "status": "PASS",
+      "details": "Created master data ID: 18",
+      "timestamp": "2025-05-29T04:42:22.533Z"
+    },
+    {
+      "test": "Update Master Data",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.546Z"
+    },
+    {
+      "test": "Check Master Data Exists",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.552Z"
+    },
+    {
+      "test": "Get Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.561Z"
+    },
+    {
+      "test": "Create Person Info",
+      "status": "PASS",
+      "details": "Created person ID: 20",
+      "timestamp": "2025-05-29T04:42:22.755Z"
+    },
+    {
+      "test": "Get Person by ID",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.760Z"
+    },
+    {
+      "test": "Update Person Info",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.771Z"
+    },
+    {
+      "test": "Get Client Services",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.784Z"
+    },
+    {
+      "test": "Create Client Service",
+      "status": "FAIL",
+      "details": "Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
+      "timestamp": "2025-05-29T04:42:22.793Z"
+    },
+    {
+      "test": "Get Services by Client",
+      "status": "FAIL",
+      "details": "Status: 429",
+      "timestamp": "2025-05-29T04:42:22.797Z"
+    },
+    {
+      "test": "Service Case Notes Tests",
+      "status": "FAIL",
+      "details": "Missing client service ID for case notes tests",
+      "timestamp": "2025-05-29T04:42:22.798Z"
+    },
+    {
+      "test": "Get Documents by Client",
+      "status": "FAIL",
+      "details": "Status: 429",
+      "timestamp": "2025-05-29T04:42:22.801Z"
+    },
+    {
+      "test": "Upload Document",
       "status": "FAIL",
       "details": "Status: 429, Data: \"API rate limit exceeded, please try again later\"",
-      "timestamp": "2025-05-29T02:10:31.491Z"
+      "timestamp": "2025-05-29T04:42:22.806Z"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Status: 200",
+      "timestamp": "2025-05-29T04:42:22.810Z"
+    },
+    {
+      "test": "API Status",
+      "status": "FAIL",
+      "details": "Status: 429",
+      "timestamp": "2025-05-29T04:42:22.812Z"
     }
   ],
   "errors": [
-    "Admin Login: Status: 429, Data: \"API rate limit exceeded, please try again later\""
+    "Change Password: Status: 429",
+    "Create Client Service: Status: 400, Data: {\"message\":\"The selected service combination doesn't exist in the master data. Please use the Master Data page to create it first.\"}",
+    "Get Services by Client: Status: 429",
+    "Service Case Notes Tests: Missing client service ID for case notes tests",
+    "Get Documents by Client: Status: 429",
+    "Upload Document: Status: 429, Data: \"API rate limit exceeded, please try again later\"",
+    "API Status: Status: 429"
   ]
 }

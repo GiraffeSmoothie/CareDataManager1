@@ -14,11 +14,13 @@ interface SegmentContextType {
 
 const SegmentContext = createContext<SegmentContextType | undefined>(undefined);
 
-export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {  const [segments, setSegments] = useState<Segment[]>([]);
+export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [segments, setSegments] = useState<Segment[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  // Query auth status and segments using tanstack query  const { data: authData } = useQuery({
-      const { data: authData } = useQuery({
+  
+  // Query auth status and segments using tanstack query
+  const { data: authData } = useQuery({
     queryKey: ["authStatus"],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/auth/status');
@@ -26,9 +28,9 @@ export const SegmentProvider: React.FC<{ children: ReactNode }> = ({ children })
     },
     staleTime: 30000, // 30 seconds
   });
-
   const { data: segmentsData, error: segmentsError, refetch } = useQuery({
-    queryKey: ["segments", authData?.user?.company_id],    queryFn: async () => {
+    queryKey: ["segments", authData?.user?.company_id],
+    queryFn: async () => {
       console.log("Fetching segments for company_id:", authData?.user?.company_id);
       
       const response = await apiRequest("GET", '/api/user/segments');

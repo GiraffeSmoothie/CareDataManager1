@@ -140,10 +140,10 @@ export default function ManageClient() {
       
       const data = await response.json();
       console.log(`Fetched ${data.length} clients for segment ${selectedSegment.id}`);
-      return data;
-    },
+      return data;    },
     enabled: !!selectedSegment, // Only run query when we have a segment
-    staleTime: 5000, // Shorter stale time
+    staleTime: 1000, // Keep data fresh for 1 second to match homepage
+    refetchOnWindowFocus: true, // Refetch when window gains focus to match homepage
   });
 
   // Refetch when selected segment changes
