@@ -6,7 +6,7 @@ import axios from "axios"
 import { useLocation } from "wouter"
 import { STATUS_CONFIGS } from '@/lib/constants';
 import { useSegment } from "@/contexts/segment-context"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { 
   Loader2, 
   Users, 
@@ -56,6 +56,7 @@ export default function Homepage() {
   const [_, setLocation] = useLocation();
   const { selectedSegment, isLoading: segmentLoading } = useSegment();
   const queryClient = useQueryClient();
+  const [showAllClients, setShowAllClients] = useState(false);
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ["/api/person-info", selectedSegment?.id],
@@ -240,10 +241,9 @@ export default function Homepage() {
                       View All
                     </Button>
                   </div>
-                </CardHeader>
-                <CardContent>
+                </CardHeader>                <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {sortedMembers.slice(0, 6).map((member) => (
+                    {sortedMembers.slice(0, showAllClients ? sortedMembers.length : 6).map((member) => (
                       <Card 
                         key={member.id} 
                         className="p-4 cursor-pointer hover:shadow-md transition-all duration-200 border-l-4 hover:border-l-primary"
@@ -276,12 +276,17 @@ export default function Homepage() {
                       </Card>
                     ))}
                   </div>
-                  
-                  {sortedMembers.length > 6 && (
+                    {sortedMembers.length > 6 && (
                     <div className="mt-4 text-center">
-                      <Button variant="outline" onClick={() => setLocation('/client-assignment')}>
-                        View {sortedMembers.length - 6} More Clients
-                      </Button>
+                      {!showAllClients ? (
+                        <Button variant="outline" onClick={() => setShowAllClients(true)}>
+                          View {sortedMembers.length - 6} More Clients
+                        </Button>
+                      ) : (
+                        <Button variant="outline" onClick={() => setShowAllClients(false)}>
+                          Show Less
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardContent>
