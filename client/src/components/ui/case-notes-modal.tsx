@@ -11,6 +11,7 @@ import { Checkbox } from "./checkbox";
 import { Badge } from "./badge";
 import { Input } from "./input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
+import { useSegment } from "@/contexts/segment-context";
 
 /**
  * Helper function to view documents securely using the new viewing endpoint
@@ -148,7 +149,9 @@ export function CaseNotesModal({
   onClose: () => void;
   service: MemberService | null;
   onSaved?: () => void;
-}) {  const { toast } = useToast();
+}) {
+  const { toast } = useToast();
+  const { selectedSegment } = useSegment();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -264,6 +267,10 @@ export function CaseNotesModal({
       formData.append("documentType", uploadDocumentType);
       formData.append("file", uploadFile);
       
+      // Include segmentId if available from the selected segment context
+      if (selectedSegment?.id) {
+        formData.append("segmentId", selectedSegment.id.toString());
+      }
 
       const response = await apiRequest("POST", "/api/documents", formData, true);
       
