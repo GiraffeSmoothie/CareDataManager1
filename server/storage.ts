@@ -107,16 +107,16 @@ async function createConnectionConfig(): Promise<PoolConfig> {
         host: `${azurePostgreSQLServerName}.postgres.database.azure.com`,
         database: azurePostgreSQLDatabaseName,
         password: token,
-        port: 5432,
-        ssl: {
+        port: 5432,        ssl: {
           rejectUnauthorized: false,
           ca: undefined,
           checkServerIdentity: () => undefined
-        },
-        // Connection pool settings
+        },// Connection pool settings for Azure
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000, // Increased for Azure connectivity
+        query_timeout: 10000,
+        statement_timeout: 10000,
       };
       
       console.log('Azure Managed Identity connection config created:', {
@@ -236,26 +236,47 @@ async function getConnectionPool(): Promise<Pool> {
   return connectionPoolPromise;
 }
 
-// Initialize the connection pool and test it
+// Initialize the connection pool and test it with retry logic
 async function initializeAndTestConnection() {
-  try {
-    connectionPool = await getConnectionPool();
-    const client = await connectionPool.connect();
-    console.log('Database connection test successful');
-    
-    // Log which authentication method is being used
-    if (azurePostgreSQLServerName && azureCredential) {
-      console.log('✅ Successfully connected to PostgreSQL using Azure Managed Identity');
-    } else {
-      console.log('✅ Successfully connected to PostgreSQL using traditional authentication');
-    }
-    
-    client.release();
-  } catch (err) {
-    console.error('Error testing database connection:', err);
-    if (err instanceof Error) {
-      console.error('Error details:', err.message);
-      console.error('Stack trace:', err.stack);
+  const maxRetries = 5;
+  const retryDelay = 2000; // Start with 2 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Database connection attempt ${attempt}/${maxRetries}...`);
+      connectionPool = await getConnectionPool();
+      const client = await connectionPool.connect();
+      console.log('Database connection test successful');
+      
+      // Log which authentication method is being used
+      if (azurePostgreSQLServerName && azureCredential) {
+        console.log('✅ Successfully connected to PostgreSQL using Azure Managed Identity');
+      } else {
+        console.log('✅ Successfully connected to PostgreSQL using traditional authentication');
+      }
+      
+      client.release();
+      return; // Success, exit retry loop
+    } catch (err) {
+      console.error(`Database connection attempt ${attempt}/${maxRetries} failed:`, err);
+      
+      if (attempt === maxRetries) {
+        console.error('❌ All database connection attempts failed. Application may not function properly.');
+        if (err instanceof Error) {
+          console.error('Final error details:', err.message);
+          console.error('Stack trace:', err.stack);
+        }
+        // Don't throw error - let app start and retry later
+        return;
+      }
+      
+      // Exponential backoff: wait longer between retries
+      const delayMs = retryDelay * Math.pow(2, attempt - 1);
+      console.log(`Retrying in ${delayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      
+      // Reset connection pool to force fresh connection
+      connectionPoolPromise = null;
     }
   }
 }

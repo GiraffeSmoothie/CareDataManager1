@@ -68,45 +68,67 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize database and run migrations
+// Initialize database and run migrations with retry logic
 export async function initializeDatabase() {
-  let client;
-  try {
-    console.log('Attempting to connect to database...');
-    // Connect to the database
-    const pool = await getPool();
-    client = await pool.connect();
-    console.log('Database connection established');
-    
-    // Run each migration file in sequence from the migrations folder
-    const migrationsPath = path.resolve(__dirname, 'migrations'); // Fixed the path to avoid appending 'server' twice
-    console.log('Migrations path:', migrationsPath);
-    const migrationFiles = fs.readdirSync(migrationsPath).sort();
-    
-    for (const migrationFile of migrationFiles) {
-      try {
-        console.log(`Running migration: ${migrationFile}`);
-        const migrationSQL = fs.readFileSync(path.join(migrationsPath, migrationFile), 'utf8');
-        await client.query('BEGIN');
-        await client.query(migrationSQL);
-        await client.query('COMMIT');
-        console.log(`Successfully completed migration: ${migrationFile}`);
-      } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(`Error running migration ${migrationFile}:`, err);
-        if (process.env.NODE_ENV !== 'production') {
-          throw err;
+  const maxRetries = 3;
+  const retryDelay = 5000; // 5 seconds between retries
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let client;
+    try {
+      console.log(`Database initialization attempt ${attempt}/${maxRetries}...`);
+      console.log('Attempting to connect to database...');
+      
+      // Connect to the database
+      const pool = await getPool();
+      client = await pool.connect();
+      console.log('Database connection established');
+      
+      // Run each migration file in sequence from the migrations folder
+      const migrationsPath = path.resolve(__dirname, 'migrations'); // Fixed the path to avoid appending 'server' twice
+      console.log('Migrations path:', migrationsPath);
+      const migrationFiles = fs.readdirSync(migrationsPath).sort();
+      
+      for (const migrationFile of migrationFiles) {
+        try {
+          console.log(`Running migration: ${migrationFile}`);
+          const migrationSQL = fs.readFileSync(path.join(migrationsPath, migrationFile), 'utf8');
+          await client.query('BEGIN');
+          await client.query(migrationSQL);
+          await client.query('COMMIT');
+          console.log(`Successfully completed migration: ${migrationFile}`);
+        } catch (err) {
+          await client.query('ROLLBACK');
+          console.error(`Error running migration ${migrationFile}:`, err);
+          if (process.env.NODE_ENV !== 'production') {
+            throw err;
+          }
         }
       }
-    }
-    
-    console.log('Database migrations completed');
-  } catch (err) {
-    console.error('Database connection error:', err);
-    throw err;
-  } finally {
-    if (client) {
-      client.release();
+      
+      console.log('Database migrations completed');
+      return; // Success, exit retry loop
+      
+    } catch (err) {
+      console.error(`Database initialization attempt ${attempt}/${maxRetries} failed:`, err);
+      
+      if (attempt === maxRetries) {
+        console.error('❌ All database initialization attempts failed.');
+        if (process.env.NODE_ENV === 'production') {
+          console.log('🚀 Starting server without database - some features may be limited');
+          return; // In production, continue without database for now
+        } else {
+          throw err; // In development, fail fast
+        }
+      }
+      
+      console.log(`Retrying database initialization in ${retryDelay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 }
