@@ -17,14 +17,9 @@ import './src/middleware/global-error-handler';
 const envFile = process.env.NODE_ENV === 'production' ? 'production.env' : 'development.env';
 dotenv.config({ path: envFile });
 
-// Verify DATABASE_URL is loaded
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL environment variable is not set. Check your configuration.');
-  throw new Error('DATABASE_URL environment variable is not set');
-}
-
 console.log('Environment:', process.env.NODE_ENV);
-console.log('Database connection configured:', process.env.DATABASE_URL ? 'Yes' : 'No');
+// Note: In production, we use Azure Managed Identity for database connections
+console.log('Database connection mode:', process.env.NODE_ENV === 'production' ? 'Azure Managed Identity' : 'DATABASE_URL');
 
 // Import remaining dependencies
 import express, { type Request, Response, NextFunction } from "express";
