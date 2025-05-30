@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { storage } from '../../storage';
+import { getStorage } from '../../storage';
 
 interface PerformanceMetrics {
   startTime: number;
@@ -44,12 +44,11 @@ export function performanceMiddleware(req: Request, res: Response, next: NextFun
   const originalSend = res.send;
   res.send = function(body) {
     // Restore original send method
-    res.send = originalSend;
-    
-    // Log performance metrics asynchronously
-    setImmediate(async () => {
-      try {
-        const endTime = Date.now();
+    res.send = originalSend;        // Log performance metrics asynchronously
+        setImmediate(async () => {
+          try {
+            const storage = await getStorage();
+            const endTime = Date.now();
         const memoryUsageEnd = process.memoryUsage();
         const responseTimeMs = endTime - startTime;
 

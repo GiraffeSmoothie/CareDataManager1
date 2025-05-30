@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolConfig } from 'pg';
 import { parse } from 'pg-connection-string';
 import { User, PersonInfo, MasterData, Document, ClientService, ServiceCaseNote, Company, insertCompanySchema, Segment, NewCompany, NewSegment, NewClientService } from '@shared/schema';
 import fs from 'fs';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import type { z } from 'zod';
+import { DefaultAzureCredential } from '@azure/identity';
 
 // Define __dirname for ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -37,63 +38,218 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
-// DATABASE_URL check
+// Check for Azure Managed Identity configuration
+const azurePostgreSQLServerName = process.env.AZURE_POSTGRESQL_SERVER_NAME;
+const azurePostgreSQLDatabaseName = process.env.AZURE_POSTGRESQL_DATABASE_NAME;
+const azurePostgreSQLUserName = process.env.AZURE_POSTGRESQL_USER_NAME;
+
+console.log('Storage.ts - Azure PostgreSQL config:', {
+  serverName: azurePostgreSQLServerName ? 'configured' : 'not configured',
+  databaseName: azurePostgreSQLDatabaseName ? 'configured' : 'not configured',
+  userName: azurePostgreSQLUserName ? 'configured' : 'not configured'
+});
+
 console.log('Storage.ts - DATABASE_URL configured:', process.env.DATABASE_URL ? 'Yes' : 'No');
 
-// Better error handling when parsing the connection string
-let connectionOptions;
-try {
-  const parsed = parse(process.env.DATABASE_URL || '');
-  
-  // Check if we're connecting to Azure PostgreSQL
-  const isAzurePostgreSQL = parsed.host?.includes('postgres.database.azure.com');
-  
-  connectionOptions = {
-    user: parsed.user,
-    host: parsed.host || '',
-    database: parsed.database || '',
-    password: parsed.password,
-    port: parsed.port ? parseInt(parsed.port) : 5432,
-    // Add SSL configuration for Azure PostgreSQL
-    ssl: isAzurePostgreSQL ? {
-      rejectUnauthorized: false, // Azure PostgreSQL uses self-signed certificates
-      ca: undefined, // Let the system use default CA certificates
-      checkServerIdentity: () => undefined // Disable hostname verification for Azure
-    } : false,
-  };
-    console.log('Parsed connection options:', {
-    user: connectionOptions.user || '',
-    host: connectionOptions.host,
-    database: connectionOptions.database,
-    // Not logging password for security reasons
-    port: connectionOptions.port,
-    ssl: connectionOptions.ssl ? 'enabled' : 'disabled'
-  });
-  
-  if (!connectionOptions.host) {
-    throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
+// Azure managed identity connection pool and token management
+let connectionPool: Pool;
+let azureCredential: DefaultAzureCredential | null = null;
+let accessToken: string | null = null;
+let tokenExpiryTime: Date | null = null;
+
+/**
+ * Get Azure AD access token for PostgreSQL
+ * Handles token acquisition and refresh automatically
+ */
+async function getAzureAccessToken(): Promise<string> {
+  if (!azureCredential) {
+    azureCredential = new DefaultAzureCredential();
   }
-} catch (error) {
-  console.error('Error parsing DATABASE_URL:', error);
-  throw new Error('Invalid DATABASE_URL format. Please check your environment configuration.');
+
+  // Check if we have a valid token that won't expire in the next 5 minutes
+  if (accessToken && tokenExpiryTime && tokenExpiryTime > new Date(Date.now() + 5 * 60 * 1000)) {
+    return accessToken;
+  }
+
+  try {
+    console.log('Acquiring Azure AD access token for PostgreSQL...');
+    const tokenResponse = await azureCredential.getToken('https://ossrdbms-aad.database.windows.net/.default');
+    
+    if (!tokenResponse) {
+      throw new Error('Failed to acquire access token');
+    }
+
+    accessToken = tokenResponse.token;
+    tokenExpiryTime = tokenResponse.expiresOnTimestamp ? new Date(tokenResponse.expiresOnTimestamp) : new Date(Date.now() + 60 * 60 * 1000); // Default 1 hour
+    
+    console.log('Azure AD access token acquired successfully, expires at:', tokenExpiryTime.toISOString());
+    return accessToken;
+  } catch (error) {
+    console.error('Failed to acquire Azure AD access token:', error);
+    throw error;
+  }
 }
 
-export const pool = new Pool(connectionOptions);
+/**
+ * Create database connection configuration
+ * Supports both Azure Managed Identity and traditional connection strings
+ */
+async function createConnectionConfig(): Promise<PoolConfig> {
+  // Try Azure Managed Identity first if configured
+  if (azurePostgreSQLServerName && azurePostgreSQLDatabaseName && azurePostgreSQLUserName) {
+    try {
+      console.log('Using Azure Managed Identity for PostgreSQL authentication');
+      
+      const token = await getAzureAccessToken();
+      
+      const config: PoolConfig = {
+        user: azurePostgreSQLUserName,
+        host: `${azurePostgreSQLServerName}.postgres.database.azure.com`,
+        database: azurePostgreSQLDatabaseName,
+        password: token,
+        port: 5432,
+        ssl: {
+          rejectUnauthorized: false,
+          ca: undefined,
+          checkServerIdentity: () => undefined
+        },
+        // Connection pool settings
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      };
+      
+      console.log('Azure Managed Identity connection config created:', {
+        user: config.user,
+        host: config.host,
+        database: config.database,
+        port: config.port,
+        ssl: 'enabled'
+      });
+      
+      return config;
+    } catch (error) {
+      console.log('Azure Managed Identity failed, falling back to DATABASE_URL:', error instanceof Error ? error.message : String(error));
+      // Fall through to DATABASE_URL fallback
+    }
+  }
 
-// Add error handling for the pool
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-});
+  // Fallback to traditional DATABASE_URL
+  if (!process.env.DATABASE_URL) {
+    throw new Error('Either Azure Managed Identity configuration (AZURE_POSTGRESQL_SERVER_NAME, AZURE_POSTGRESQL_DATABASE_NAME, AZURE_POSTGRESQL_USER_NAME) or DATABASE_URL must be provided');
+  }
 
-pool.on('connect', () => {
-  console.log('Connected to database successfully');
-});
-
-// Test the connection
-(async () => {
+  console.log('Using traditional DATABASE_URL authentication');
+  
   try {
-    const client = await pool.connect();
+    const parsed = parse(process.env.DATABASE_URL);
+    
+    // Check if we're connecting to Azure PostgreSQL
+    const isAzurePostgreSQL = parsed.host?.includes('postgres.database.azure.com');
+    
+    const config: PoolConfig = {
+      user: parsed.user,
+      host: parsed.host || '',
+      database: parsed.database || '',
+      password: parsed.password,
+      port: parsed.port ? parseInt(parsed.port) : 5432,
+      // Add SSL configuration for Azure PostgreSQL
+      ssl: isAzurePostgreSQL ? {
+        rejectUnauthorized: false,
+        ca: undefined,
+        checkServerIdentity: () => undefined
+      } : false,
+    };
+    
+    console.log('Traditional connection config created:', {
+      user: config.user || '',
+      host: config.host,
+      database: config.database,
+      port: config.port,
+      ssl: config.ssl ? 'enabled' : 'disabled'
+    });
+    
+    if (!config.host) {
+      throw new Error('Invalid hostname in DATABASE_URL. Please verify the configuration.');
+    }
+    
+    return config;
+  } catch (error) {
+    console.error('Error parsing DATABASE_URL:', error);
+    throw new Error('Invalid DATABASE_URL format. Please check your environment configuration.');
+  }
+}
+
+/**
+ * Initialize database connection pool with managed identity support
+ */
+async function initializeConnectionPool(): Promise<Pool> {
+  const connectionConfig = await createConnectionConfig();
+  const pool = new Pool(connectionConfig);
+  
+  // Add error handling for the pool
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+    // If it's an authentication error and we're using managed identity, try to refresh the token
+    if (azurePostgreSQLServerName && azureCredential && err.message.includes('authentication')) {
+      console.log('Authentication error detected, will refresh token on next connection');
+      // Reset token to force refresh
+      accessToken = null;
+      tokenExpiryTime = null;
+    }
+  });
+
+  pool.on('connect', () => {
+    console.log('Connected to database successfully');
+  });
+
+  // For Azure Managed Identity, set up token refresh mechanism
+  if (azurePostgreSQLServerName && azureCredential) {
+    // Refresh token every 45 minutes (tokens expire after 1 hour)
+    setInterval(async () => {
+      try {
+        console.log('Refreshing Azure AD access token...');
+        await getAzureAccessToken();
+        
+        // For production, you might want to implement connection pool refresh
+        // when tokens are refreshed to ensure all connections use the new token
+        console.log('Azure AD access token refreshed successfully');
+      } catch (error) {
+        console.error('Failed to refresh Azure AD access token:', error);
+        // Reset token variables to force re-authentication on next request
+        accessToken = null;
+        tokenExpiryTime = null;
+      }
+    }, 45 * 60 * 1000); // 45 minutes
+  }
+
+  return pool;
+}
+
+// Initialize connection pool lazily
+let connectionPoolPromise: Promise<Pool> | null = null;
+
+async function getConnectionPool(): Promise<Pool> {
+  if (!connectionPoolPromise) {
+    connectionPoolPromise = initializeConnectionPool();
+  }
+  return connectionPoolPromise;
+}
+
+// Initialize the connection pool and test it
+async function initializeAndTestConnection() {
+  try {
+    connectionPool = await getConnectionPool();
+    const client = await connectionPool.connect();
     console.log('Database connection test successful');
+    
+    // Log which authentication method is being used
+    if (azurePostgreSQLServerName && azureCredential) {
+      console.log('✅ Successfully connected to PostgreSQL using Azure Managed Identity');
+    } else {
+      console.log('✅ Successfully connected to PostgreSQL using traditional authentication');
+    }
+    
     client.release();
   } catch (err) {
     console.error('Error testing database connection:', err);
@@ -102,7 +258,10 @@ pool.on('connect', () => {
       console.error('Stack trace:', err.stack);
     }
   }
-})();
+}
+
+// Initialize connection pool in background
+initializeAndTestConnection().catch(console.error);
 
 /**
  * Initialize database and run migrations
@@ -117,7 +276,8 @@ export async function initializeDatabase() {
   let client;
   try {
     // Connect to the database
-    client = await pool.connect();
+    const poolInstance = await getConnectionPool();
+    client = await poolInstance.connect();
     
     // Run initial migration if not already applied
     const initialMigrationPath = path.resolve(process.cwd(), '../migrations/01_initial.sql');
@@ -2527,4 +2687,29 @@ export class Storage {
     }
   }
 }
-export const storage = new Storage(pool);
+
+// Storage instance management
+let storageInstance: Storage | null = null;
+
+/**
+ * Get the singleton Storage instance
+ * Lazily initializes the storage instance with the connection pool
+ */
+export async function getStorage(): Promise<Storage> {
+  if (!storageInstance) {
+    const pool = await getConnectionPool();
+    storageInstance = new Storage(pool);
+  }
+  return storageInstance;
+}
+
+// Export a function to get the connection pool
+export async function getPool(): Promise<Pool> {
+  return getConnectionPool();
+}
+
+// Export a query function for backward compatibility
+export async function query(text: string, params?: any[]): Promise<any> {
+  const pool = await getConnectionPool();
+  return pool.query(text, params);
+}

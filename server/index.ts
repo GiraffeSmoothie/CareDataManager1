@@ -30,7 +30,7 @@ console.log('Database connection configured:', process.env.DATABASE_URL ? 'Yes' 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { pool } from './storage';
+import { getPool } from './storage';
 import { performanceMiddleware } from './src/middleware/performance';
 import { errorHandler } from './src/middleware/error';
 
@@ -79,6 +79,7 @@ export async function initializeDatabase() {
   try {
     console.log('Attempting to connect to database...');
     // Connect to the database
+    const pool = await getPool();
     client = await pool.connect();
     console.log('Database connection established');
     

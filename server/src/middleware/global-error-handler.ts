@@ -1,4 +1,4 @@
-import { storage } from '../../storage';
+import { getStorage } from '../../storage';
 
 /**
  * Global error handlers for unhandled errors and promise rejections
@@ -9,6 +9,7 @@ process.on('uncaughtException', async (error: Error) => {
   console.error('🚨 UNCAUGHT EXCEPTION:', error);
   
   try {
+    const storage = await getStorage();
     await storage.logError({
       errorType: 'UNCAUGHT_EXCEPTION',
       errorCode: 'UNCAUGHT_EXCEPTION',
@@ -41,6 +42,7 @@ process.on('unhandledRejection', async (reason: any, promise: Promise<any>) => {
     const errorMessage = reason instanceof Error ? reason.message : String(reason);
     const stackTrace = reason instanceof Error ? reason.stack : undefined;
     
+    const storage = await getStorage();
     await storage.logError({
       errorType: 'UNHANDLED_PROMISE_REJECTION',
       errorCode: 'UNHANDLED_PROMISE_REJECTION',
@@ -67,6 +69,7 @@ process.on('warning', async (warning: Error) => {
   console.warn('⚠️ PROCESS WARNING:', warning);
   
   try {
+    const storage = await getStorage();
     await storage.logError({
       errorType: 'PROCESS_WARNING',
       errorCode: 'PROCESS_WARNING',

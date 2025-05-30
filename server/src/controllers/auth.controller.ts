@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../types/error';
 import { AuthService } from '../services/auth.service';
 import { JWTService } from '../services/jwt.service';
-import { storage as dbStorage } from '../../storage';
+import { getStorage } from '../../storage';
 
 // Helper function to get client IP
 function getClientIP(req: Request): string {
@@ -22,6 +22,7 @@ export class AuthController {
     let username: string | undefined;
     
     try {
+      const dbStorage = await getStorage();
       const { username: reqUsername, password } = req.body;
       username = reqUsername;
         if (!username || !password) {
@@ -80,10 +81,10 @@ export class AuthController {
       });
     } catch (error) {
       console.error("Login error:", error);
-      
-      // Log failed login if not already logged and we have username
+        // Log failed login if not already logged and we have username
       if (username && error instanceof ApiError && error.statusCode !== 400) {
         try {
+          const dbStorage = await getStorage();
           await dbStorage.logLogin({
             username,
             loginType: 'LOGIN_FAILED',
@@ -103,12 +104,12 @@ export class AuthController {
   /**
    * Logout endpoint - for JWT, this is primarily client-side token removal
    * Server can optionally maintain a blacklist of revoked tokens
-   */
-  async logout(req: Request, res: Response, next: NextFunction) {
+   */  async logout(req: Request, res: Response, next: NextFunction) {
     const clientIP = getClientIP(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
     
     try {
+      const dbStorage = await getStorage();
       if (!req.user) {
         throw new ApiError(401, "Not authenticated", null, "NOT_AUTHENTICATED");
       }
@@ -163,12 +164,12 @@ export class AuthController {
   }
   /**
    * Refresh token endpoint - generates new access token using refresh token
-   */
-  async refreshToken(req: Request, res: Response, next: NextFunction) {
+   */  async refreshToken(req: Request, res: Response, next: NextFunction) {
     const clientIP = getClientIP(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
     
     try {
+      const dbStorage = await getStorage();
       const { refreshToken } = req.body;
       
       if (!refreshToken) {

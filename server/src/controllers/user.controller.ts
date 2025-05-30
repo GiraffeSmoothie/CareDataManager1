@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { storage as dbStorage } from '../../storage';
+import { getStorage } from '../../storage';
 import { ApiError } from '../types/error';
 import { z } from 'zod';
 
@@ -22,9 +22,9 @@ const userUpdateSchema = z.object({
   company_id: z.number().optional()
 });
 
-export class UserController {
-  async getUsers(req: Request, res: Response, next: NextFunction) {
+export class UserController {  async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
+      const dbStorage = await getStorage();
       const users = await dbStorage.getAllUsers();
       if (!users) {
         throw new ApiError(404, "No users found", null, "NOT_FOUND");
@@ -34,7 +34,6 @@ export class UserController {
       next(error);
     }
   }
-
   async getUserById(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id);
@@ -42,6 +41,7 @@ export class UserController {
         throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
       }
 
+      const dbStorage = await getStorage();
       const user = await dbStorage.getUserById(id);
       if (!user) {
         throw new ApiError(404, "User not found", null, "USER_NOT_FOUND");
@@ -58,11 +58,10 @@ export class UserController {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
-      }
-
-      // Validate request body against schema
+      }      // Validate request body against schema
       const validatedData = userUpdateSchema.parse(req.body);
 
+      const dbStorage = await getStorage();
       // Check if user exists
       const existingUser = await dbStorage.getUserById(id);
       if (!existingUser) {
@@ -86,10 +85,10 @@ export class UserController {
   async deleteUser(req: Request, res: Response, next: NextFunction) {
     try {
       const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
+      if (isNaN(id)) {        throw new ApiError(400, "Invalid user ID", null, "INVALID_ID");
       }
 
+      const dbStorage = await getStorage();
       // Check if user exists
       const existingUser = await dbStorage.getUserById(id);
       if (!existingUser) {

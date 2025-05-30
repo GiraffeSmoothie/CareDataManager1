@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiError, ErrorResponse } from '../types/error';
 import { ZodError } from 'zod';
-import { storage } from '../../storage';
+import { getStorage } from '../../storage';
 
 declare global {
   namespace Express {
@@ -81,10 +81,10 @@ export function errorHandler(
     user: req.user?.username,
     ip: clientIP
   });
-
   // Log to database asynchronously (don't block response)
   setImmediate(async () => {
     try {
+      const storage = await getStorage();
       await storage.logError({
         errorType,
         errorCode,

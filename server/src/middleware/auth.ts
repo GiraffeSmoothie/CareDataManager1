@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { storage as dbStorage } from "../../storage";
+import { getStorage } from "../../storage";
 import { JWTService } from "../services/jwt.service";
 
 declare module "express" {
@@ -110,9 +110,8 @@ export const validateSegmentAccess = async (req: Request, res: Response, next: N
     // If no segmentId is provided, allow the request (some operations may not require segment)
     if (!segmentId || isNaN(segmentId)) {
       return next();
-    }
-
-    // Validate that the segment belongs to the user's company
+    }    // Validate that the segment belongs to the user's company
+    const dbStorage = await getStorage();
     const segment = await dbStorage.getSegmentById(segmentId);
     
     if (!segment) {
@@ -151,11 +150,10 @@ export const companyDataFilter = async (req: Request, res: Response, next: NextF
       return res.status(403).json({ 
         message: "Access denied: User must be assigned to a company" 
       });
-    }
-
-    // Get all segments for the user's company
+    }    // Get all segments for the user's company
+    const dbStorage = await getStorage();
     const userSegments = await dbStorage.getAllSegmentsByCompany(req.user.company_id);
-    const validSegmentIds = userSegments.map(segment => segment.id);
+    const validSegmentIds = userSegments.map((segment: any) => segment.id);
 
     // Add company segments to request for use by route handlers
     (req as any).userCompanySegments = validSegmentIds;

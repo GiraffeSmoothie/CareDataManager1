@@ -71,4 +71,5 @@ jobs:
           app-name: 'caretrackau-appsrvc-staging'
           slot-name: 'Production'
           package: .
+          clean: true  # This ensures old files are removed before deployment
           

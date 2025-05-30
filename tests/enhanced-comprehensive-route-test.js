@@ -12,9 +12,9 @@ const FormData = require('form-data');
 
 // Configuration
 const BASE_URL = 'http://localhost:5001';
-const ADMIN_USERNAME = 'admin1';
-const ADMIN_PASSWORD = 'Admin@123';
-const USER_USERNAME = 'btbt';
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = 'password';
+const USER_USERNAME = 'btbt2';
 const USER_PASSWORD = 'password';
 
 // Test Results Storage
@@ -512,8 +512,7 @@ async function testDocumentManagement() {
   // Test get documents by client ID
   const getDocuments = await makeRequest(`/api/documents/client/${testPersonId}`, 'GET', null, userToken);
   logTest('Get Documents by Client', getDocuments.status === 200, `Status: ${getDocuments.status}`);
-  
-  // Test document upload (create a test file)
+    // Test document upload (create a test file)
   try {
     const testFileContent = 'This is a test document content';
     const form = new FormData();
@@ -521,8 +520,11 @@ async function testDocumentManagement() {
       filename: 'test-document.txt',
       contentType: 'text/plain'
     });
+    form.append('clientId', testPersonId.toString());
+    form.append('documentName', 'Test Document');
+    form.append('documentType', 'Other');
     
-    const uploadDoc = await makeRequest(`/api/documents/upload/${testPersonId}`, 'POST', form, userToken, true);
+    const uploadDoc = await makeRequest(`/api/documents`, 'POST', form, userToken, true);
     if (uploadDoc.status === 201) {
       logTest('Upload Document', true, `Status: ${uploadDoc.status}`);
       if (uploadDoc.data.filePath) {

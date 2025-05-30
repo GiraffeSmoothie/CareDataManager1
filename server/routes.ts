@@ -5,7 +5,7 @@ import { AuthController } from "./src/controllers/auth.controller";
 
 import { type Express } from "express";
 import { createServer, type Server } from "http";
-import { storage as dbStorage, pool } from "./storage";  // Import pool from storage.ts
+import { getStorage, getPool } from "./storage";  // Import getStorage and getPool from storage.ts
 import { insertUserSchema, insertMasterDataSchema, insertPersonInfoSchema, insertDocumentSchema, insertServiceCaseNoteSchema, insertClientServiceSchema, insertCompanySchema } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -164,7 +164,7 @@ const createHandler = <
  * - Warns about security implications
  * - Supports forced password change on first login
  */
-async function initializeUsers() {
+async function initializeUsers(dbStorage: any) {
   console.log("Checking admin user initialization settings");
   
   // Check if automatic admin creation is enabled
@@ -433,6 +433,8 @@ interface PersonInfo {
  * @returns HTTP server instance
  */
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Get storage instance
+  const dbStorage = await getStorage();
   // Apply enhanced security middleware in proper order
   app.use(securityHeaders);
   app.use(requestSizeLimit);
@@ -446,9 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Configure enhanced CORS
   const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173,http://localhost:5174,http://localhost:3000").split(',');
   app.use(configureCORS(corsOrigins));
-
   // Initialize users
-  await initializeUsers();
+  await initializeUsers(dbStorage);
 
   // Create AuthController instance
   const authController = new AuthController();
@@ -537,11 +538,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       pid: process.pid,
       platform: process.platform,
       nodeVersion: process.version
-    };
-
-    try {
+    };    try {
       // Test database connectivity
       const dbStartTime = Date.now();
+      const pool = await getPool();
       const client = await pool.connect();
       const result = await client.query('SELECT 1 as test');
       client.release();
