@@ -163,7 +163,7 @@ echo "Creating deployment archive..."
 # Final cleanup - ensure no development artifacts remain
 echo "Final cleanup of deployment structure..."
 rm -rf deployment-temp/server 2>/dev/null || true
-rm -rf deployment-temp/node_modules 2>/dev/null || true
+# Keep node_modules - they contain the production dependencies we just installed
 rm -rf deployment-temp/.git* 2>/dev/null || true
 rm -rf deployment-temp/src 2>/dev/null || true
 rm -rf deployment-temp/tests 2>/dev/null || true
