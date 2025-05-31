@@ -176,7 +176,7 @@ find deployment-temp -name "*.env" ! -name "production.env" -type f -delete 2>/d
 
 # Ensure correct Azure App Service structure
 echo "Final deployment structure should contain:"
-echo "- index.js (server entry point)"
+echo "- server.js (server entry point)"
 echo "- package.json (production dependencies)"
 echo "- client/ (React app)"
 echo "- migrations/ (database files)"
@@ -185,8 +185,8 @@ echo "- web.config (Azure config)"
 
 # Validate deployment structure before zipping
 echo "Validating deployment structure..."
-if [ ! -f "deployment-temp/index.js" ]; then
-    echo "Error: index.js not found in deployment directory"
+if [ ! -f "deployment-temp/server.js" ]; then
+    echo "Error: server.js not found in deployment directory"
     exit 1
 fi
 
