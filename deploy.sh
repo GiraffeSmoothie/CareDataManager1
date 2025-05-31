@@ -117,7 +117,7 @@ cp server/package.json deployment-temp/package.json
 echo "Fixing package.json for Azure deployment..."
 cd deployment-temp
 # Fix package.json for Azure deployment using Node.js one-liner
-node -e "const fs=require('fs'); let pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.type; pkg.dependencies=pkg.dependencies||{}; pkg.dependencies['cross-env']='^7.0.3'; pkg.main='server.js'; pkg.scripts.start='cross-env NODE_ENV=production node server.js'; pkg.scripts['start:azure']='NODE_ENV=production node server.js'; fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)); console.log('✓ Fixed package.json for Azure deployment');"
+node -e "const fs=require('fs'); let pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.type; pkg.dependencies=pkg.dependencies||{}; pkg.dependencies['cross-env']='^7.0.3'; if(pkg.devDependencies && pkg.devDependencies['cross-env']) delete pkg.devDependencies['cross-env']; pkg.main='server.js'; pkg.scripts.start='cross-env NODE_ENV=production node server.js'; pkg.scripts['start:azure']='NODE_ENV=production node server.js'; fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)); console.log('✓ Fixed package.json for Azure deployment');"
 cd ..
 
 # Copy environment file
