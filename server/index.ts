@@ -24,7 +24,6 @@ console.log('Database connection mode:', process.env.NODE_ENV === 'production' ?
 // Import remaining dependencies
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import { getPool } from './storage';
 import { performanceMiddleware } from './src/middleware/performance';
 import { errorHandler } from './src/middleware/error';
@@ -141,9 +140,9 @@ export async function initializeDatabase() {
     console.log('Database initialized successfully');    console.log('Registering routes...');
     const server = await registerRoutes(app);
     console.log('Routes registered successfully');    // Add error handling middleware at the end
-    app.use(errorHandler);
-
-    if (app.get("env") === "development") {
+    app.use(errorHandler);    if (app.get("env") === "development") {
+      // Dynamically import vite only in development
+      const { setupVite } = await import("./vite");
       await setupVite(app, server);
     } else {
       // Production static file serving
