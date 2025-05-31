@@ -134,10 +134,8 @@ if [ -f "web.config" ]; then
     cp web.config deployment-temp/web.config
 fi
 
-# Copy server.js if it exists at root level
-if [ -f "server.js" ]; then
-    cp server.js deployment-temp/server.js
-fi
+# Note: We don't copy the root server.js as it's a bootstrap file
+# The actual server.js is already copied from server/dist/index.js above
 
 # Clean up any unnecessary files/directories
 echo "Cleaning up deployment structure..."
