@@ -2152,10 +2152,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username: u.username, 
         role: u.role,
         company_id: u.company_id
-      })));
-    } catch (err) {
+      })));    } catch (err) {
       console.error("Error fetching users:", err);
-      console.log ("[API /api/users] Failed to fetch users")
+      console.error("[API /api/users] Failed to fetch users");
       return res.status(500).json({ message: "[API /api/users] Failed to fetch users", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });

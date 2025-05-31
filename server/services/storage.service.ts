@@ -91,9 +91,14 @@ export class AzureBlobStorageService implements IStorageService {
                 console.error('⚠️ Blob storage initialization failed:', error);
                 this.initializationFailed = true;
                 // Don't re-throw here to prevent unhandled promise rejection
-            });
-        } else {
-            throw new Error('Either AZURE_STORAGE_ACCOUNT_NAME or AZURE_STORAGE_CONNECTION_STRING must be provided');
+            });        } else {
+            console.log('⚠️ No Azure Storage credentials provided - storage service will fail gracefully');
+            console.log('   Set AZURE_STORAGE_ACCOUNT_NAME for managed identity or AZURE_STORAGE_CONNECTION_STRING for connection string auth');
+            this.initializationFailed = true;
+            // Create minimal placeholder clients to prevent crashes
+            this.accountName = 'placeholder';
+            this.containerName = 'placeholder';
+            this.usingManagedIdentity = false;
         }
     }
 
