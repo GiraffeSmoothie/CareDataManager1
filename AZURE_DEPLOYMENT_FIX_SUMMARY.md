@@ -10,24 +10,24 @@ The Care Data Manager application was failing to start on Azure App Service with
 1. **Missing dependency**: `cross-env` was in `devDependencies` but Azure App Service only installs production dependencies
 2. **Wrong entry point**: `web.config` was configured to use `server.js` but the deploy script was creating `index.js`
 3. **Path mismatch**: Start scripts were pointing to `dist/index.js` instead of the deployed `server.js`
+4. **Module dependency issues**: Even when `cross-env` was available, Azure's node_modules extraction caused module resolution errors
 
 ## Solution Applied
 
 ### 1. Deploy Script Updates
 - **File naming**: Changed from copying as `index.js` to `server.js` (web.config compatible)
-- **Package.json fixes**: Added automated fix to move `cross-env` to production dependencies
-- **Script updates**: Updated start scripts to use `server.js` instead of `dist/index.js`
+- **Package.json fixes**: Added automated fix to simplify start scripts and avoid cross-env
+- **Direct Node.js start**: Use `NODE_ENV=production node server.js` instead of cross-env
+- **Preserved node_modules**: Fixed bug where production dependencies were being removed after installation
 
 ### 2. Package.json Modifications
 ```json
 {
   "main": "server.js",
   "scripts": {
-    "start": "cross-env NODE_ENV=production node server.js",
+    "start": "NODE_ENV=production node server.js",
+    "start:original": "cross-env NODE_ENV=production node server.js",
     "start:azure": "NODE_ENV=production node server.js"
-  },
-  "dependencies": {
-    "cross-env": "^7.0.3"
   }
 }
 ```
