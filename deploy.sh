@@ -75,10 +75,10 @@ mkdir -p deployment-temp/migrations
 # Copy built files to deployment directory
 echo "Copying files to deployment structure..."
 
-# Copy server's built index.js to deployment root
+# Copy server's built index.js as server.js (for web.config compatibility)
 if [ -f "server/dist/index.js" ]; then
-    cp server/dist/index.js deployment-temp/index.js
-    echo "Copied server build to deployment-temp/index.js"
+    cp server/dist/index.js deployment-temp/server.js
+    echo "Copied server build to deployment-temp/server.js"
 else
     echo "Error: server/dist/index.js not found"
     exit 1
@@ -112,6 +112,13 @@ echo "Copying configuration files..."
 
 # Copy server package.json for production dependencies
 cp server/package.json deployment-temp/package.json
+
+# Fix package.json for Azure deployment - move cross-env to dependencies
+echo "Fixing package.json for Azure deployment..."
+cd deployment-temp
+# Fix package.json for Azure deployment using Node.js one-liner
+node -e "const fs=require('fs'); let pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.type; pkg.dependencies=pkg.dependencies||{}; pkg.dependencies['cross-env']='^7.0.3'; pkg.main='server.js'; pkg.scripts.start='cross-env NODE_ENV=production node server.js'; pkg.scripts['start:azure']='NODE_ENV=production node server.js'; fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)); console.log('✓ Fixed package.json for Azure deployment');"
+cd ..
 
 # Copy environment file
 if [ -f "server/production.env" ]; then
