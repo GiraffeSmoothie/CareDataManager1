@@ -5,9 +5,9 @@
  * Works on both Linux and Windows environments
  */
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
 
 // Helper function to run a command and log its output
 function runCommand(command, cwd = process.cwd()) {
@@ -77,57 +77,89 @@ async function deploy() {
     
     console.log("Building client...");
     runCommand("npm run build", "./client");
-    
-    // Create deployment structure
+      // Create deployment structure
     console.log("Creating deployment structure...");
     
     // Create required directories
-    ensureDir("./client");
-    ensureDir("./migrations");
+    const deploymentTempDir = "./deployment-temp";
+    ensureDir(deploymentTempDir);
+    ensureDir(path.join(deploymentTempDir, "server"));
+    ensureDir(path.join(deploymentTempDir, "client"));
+    ensureDir(path.join(deploymentTempDir, "migrations"));
+    
+    // Clean up any existing files in deployment-temp
+    const existingFiles = fs.readdirSync(deploymentTempDir, { withFileTypes: true })
+      .filter(entry => !["server", "client", "migrations"].includes(entry.name));
+      
+    for (const entry of existingFiles) {
+      const entryPath = path.join(deploymentTempDir, entry.name);
+      if (entry.isDirectory()) {
+        fs.rmSync(entryPath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(entryPath);
+      }
+    }
     
     // Copy files to appropriate locations
     console.log("Copying files to deployment directory...");
-    
-    // Copy server's index.js to root level
+      // Copy server's index.js to deployment-temp
     copyFile(
       path.join("server", "dist", "index.js"),
-      "index.js"
+      path.join(deploymentTempDir, "index.js")
     );
+      // Create a deployment-client directory for the built client files
+    const deploymentClientDir = path.join("deployment-temp", "client");
+    ensureDir(deploymentClientDir);
     
-    // Copy client files to client directory
+    // Copy client files to deployment-client directory
     copyDir(
       path.join("server", "dist", "client"),
-      "client"
+      deploymentClientDir
     );
-    
-    // Copy migrations
+      // Copy migrations to deployment-temp
     copyDir(
       path.join("server", "dist", "migrations"),
-      "migrations"
+      path.join(deploymentTempDir, "migrations")
     );
-    
-    // Copy configuration files
+      // Copy configuration files
     copyFile(
       path.join("server", "production.env"),
-      "production.env"
+      path.join(deploymentTempDir, "production.env")
     );
     
     copyFile(
       "package.json",
-      "package.json"
+      path.join(deploymentTempDir, "package.json")
     );
     
     copyFile(
       "web.config",
-      "web.config"
+      path.join(deploymentTempDir, "web.config")
     );
     
     // Copy the server.js bootstrap file if it exists
     if (fs.existsSync("server.js")) {
-      copyFile("server.js", "server.js");
+      copyFile("server.js", path.join(deploymentTempDir, "server.js"));
+    }
+      console.log("Deployment build completed with Azure App Service structure");
+    
+    // Create a deployment zip file
+    console.log("Creating deployment zip file...");
+    const deploymentZipPath = "deployment.zip";
+    
+    // Check if we're on Windows
+    const isWindows = process.platform === 'win32';
+    
+    if (isWindows) {
+      // Use PowerShell to create zip on Windows
+      const powershellCommand = `powershell -Command "Compress-Archive -Path '${deploymentTempDir}\\*' -DestinationPath '${deploymentZipPath}' -Force"`;
+      runCommand(powershellCommand);
+    } else {
+      // Use zip command on Linux/macOS
+      runCommand(`cd ${deploymentTempDir} && zip -r ../${deploymentZipPath} .`);
     }
     
-    console.log("Deployment build completed with Azure App Service structure");
+    console.log(`Deployment zip created at: ${deploymentZipPath}`);
     return true;
   } catch (error) {
     console.error("Deployment failed:", error);
