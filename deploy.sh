@@ -5,6 +5,11 @@ set -e
 
 echo "Starting deployment script"
 
+# Check if required tools are available
+command -v node >/dev/null 2>&1 || { echo "Error: node is required but not installed."; exit 1; }
+command -v npm >/dev/null 2>&1 || { echo "Error: npm is required but not installed."; exit 1; }
+command -v zip >/dev/null 2>&1 || { echo "Error: zip is required but not installed."; exit 1; }
+
 # Log Node and NPM versions
 echo "Node version: $(node -v)"
 echo "NPM version: $(npm -v)"
@@ -18,7 +23,17 @@ echo "Server dependencies installed"
 # Build server
 echo "Building server..."
 npm run build
-echo "Server build completed"
+if [ $? -ne 0 ]; then
+    echo "Error: Server build failed"
+    exit 1
+fi
+echo "✓ Server build completed successfully"
+
+# Verify server build output
+if [ ! -f "dist/index.js" ]; then
+    echo "Error: Server build did not produce expected index.js file"
+    exit 1
+fi
 
 # Install dependencies for client (full dependencies needed for build)
 echo "Installing client dependencies..."
@@ -29,7 +44,21 @@ echo "Client dependencies installed"
 # Build client
 echo "Building client..."
 npm run build
-echo "Client build completed"
+if [ $? -ne 0 ]; then
+    echo "Error: Client build failed"
+    exit 1
+fi
+echo "✓ Client build completed successfully"
+
+# Verify client build output (check for the configured output location)
+if [ -d "../server/dist/client" ]; then
+    echo "✓ Client build found in server/dist/client (Vite configured output)"
+elif [ -d "dist" ]; then
+    echo "✓ Client build found in client/dist (default output)"
+else
+    echo "Error: Client build did not produce expected output directory"
+    exit 1
+fi
 
 # Go back to root
 cd ..
@@ -56,11 +85,14 @@ else
 fi
 
 # Copy client built files to client directory
-if [ -d "client/dist" ]; then
-    cp -r client/dist/* deployment-temp/client/
+if [ -d "server/dist/client" ]; then
+    cp -r server/dist/client/* deployment-temp/client/
     echo "Copied client build files to deployment-temp/client/"
+elif [ -d "client/dist" ]; then
+    cp -r client/dist/* deployment-temp/client/
+    echo "Copied client build files from client/dist to deployment-temp/client/"
 else
-    echo "Error: client/dist directory not found"
+    echo "Error: Neither server/dist/client nor client/dist directory found"
     exit 1
 fi
 
@@ -100,6 +132,18 @@ if [ -f "server.js" ]; then
     cp server.js deployment-temp/server.js
 fi
 
+# Clean up any unnecessary files/directories
+echo "Cleaning up deployment structure..."
+rm -rf deployment-temp/server 2>/dev/null || true
+rm -rf deployment-temp/client/dist 2>/dev/null || true
+rm -rf deployment-temp/node_modules 2>/dev/null || true
+
+# Remove any duplicate or development files
+find deployment-temp -name "*.ts" -delete 2>/dev/null || true
+find deployment-temp -name "*.map" -delete 2>/dev/null || true
+find deployment-temp -name ".git*" -delete 2>/dev/null || true
+find deployment-temp -name "README*" -delete 2>/dev/null || true
+
 # Install only production dependencies in deployment directory
 echo "Installing production dependencies..."
 cd deployment-temp
@@ -108,11 +152,70 @@ cd ..
 
 # Create deployment zip file
 echo "Creating deployment archive..."
+
+# Final cleanup - ensure no development artifacts remain
+echo "Final cleanup of deployment structure..."
+rm -rf deployment-temp/server 2>/dev/null || true
+rm -rf deployment-temp/node_modules 2>/dev/null || true
+rm -rf deployment-temp/.git* 2>/dev/null || true
+rm -rf deployment-temp/src 2>/dev/null || true
+rm -rf deployment-temp/tests 2>/dev/null || true
+rm -rf deployment-temp/*.md 2>/dev/null || true
+
+# Remove any TypeScript files or source maps
+find deployment-temp -name "*.ts" -type f -delete 2>/dev/null || true
+find deployment-temp -name "*.map" -type f -delete 2>/dev/null || true
+find deployment-temp -name "*.env" ! -name "production.env" -type f -delete 2>/dev/null || true
+
+# Ensure correct Azure App Service structure
+echo "Final deployment structure should contain:"
+echo "- index.js (server entry point)"
+echo "- package.json (production dependencies)"
+echo "- client/ (React app)"
+echo "- migrations/ (database files)"
+echo "- production.env (environment config)"
+echo "- web.config (Azure config)"
+
+# Validate deployment structure before zipping
+echo "Validating deployment structure..."
+if [ ! -f "deployment-temp/index.js" ]; then
+    echo "Error: index.js not found in deployment directory"
+    exit 1
+fi
+
+if [ ! -f "deployment-temp/package.json" ]; then
+    echo "Error: package.json not found in deployment directory"
+    exit 1
+fi
+
+if [ ! -d "deployment-temp/client" ]; then
+    echo "Error: client directory not found in deployment directory"
+    exit 1
+fi
+
+if [ ! -f "deployment-temp/client/index.html" ]; then
+    echo "Error: client/index.html not found in deployment directory"
+    exit 1
+fi
+
+echo "✓ Deployment structure validation passed"
+
 cd deployment-temp
 zip -r ../deployment.zip ./*
 cd ..
 
+# Verify zip file was created
+if [ ! -f "deployment.zip" ]; then
+    echo "Error: Failed to create deployment.zip"
+    exit 1
+fi
+
+echo "✓ Deployment zip file created successfully"
+
 echo "Deployment build completed successfully!"
 echo "Created deployment.zip with Azure App Service structure"
-echo "Contents:"
+echo "Deployment structure contents:"
 ls -la deployment-temp/
+echo ""
+echo "Deployment zip file created:"
+ls -lh deployment.zip
