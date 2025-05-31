@@ -140,39 +140,41 @@ export async function initializeDatabase() {
     await initializeDatabase();
     console.log('Database initialized successfully');    console.log('Registering routes...');
     const server = await registerRoutes(app);
-    console.log('Routes registered successfully');
-
-    // Add error handling middleware at the end
+    console.log('Routes registered successfully');    // Add error handling middleware at the end
     app.use(errorHandler);
 
     if (app.get("env") === "development") {
       await setupVite(app, server);
     } else {
-      serveStatic(app);
-    }
-
-    // Serve static files in production
-    if (process.env.NODE_ENV === 'production') {
-      // Serve static files from server/dist/client
+      // Production static file serving
       const clientPath = path.resolve(__dirname, 'client');
       console.log('Serving static files from:', clientPath);
+      
+      // Check if client directory exists
+      if (!fs.existsSync(clientPath)) {
+        console.error('Client directory not found at:', clientPath);
+        console.error('Creating empty client directory');
+        fs.mkdirSync(clientPath, { recursive: true });
+      }
 
+      // Serve static files with proper caching
       app.use(express.static(clientPath, {
         maxAge: '1d',
-        setHeaders: (res, path) => {
-          if (path.endsWith('.html')) {
-            res.setHeader('Cache-Control', 'no-cache');
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
           }
         }
       }));
 
-      // SPA fallback
+      // SPA fallback - serve index.html for all non-API routes
       app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api')) {
           return next();
         }
         const indexPath = path.join(clientPath, 'index.html');
         if (fs.existsSync(indexPath)) {
+          console.log(`SPA fallback serving index.html for: ${req.path}`);
           res.sendFile(indexPath, err => {
             if (err) {
               console.error('Error serving index.html:', err);

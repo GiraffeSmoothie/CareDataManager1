@@ -117,7 +117,7 @@ cp server/package.json deployment-temp/package.json
 echo "Fixing package.json for Azure deployment..."
 cd deployment-temp
 # Fix package.json for Azure deployment using Node.js one-liner
-node -e "const fs=require('fs'); let pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.type; pkg.dependencies=pkg.dependencies||{}; pkg.main='server.js'; pkg.scripts.start='NODE_ENV=production node server.js'; pkg.scripts['start:original']='cross-env NODE_ENV=production node server.js'; pkg.scripts['start:azure']='NODE_ENV=production node server.js'; fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)); console.log('✓ Fixed package.json for Azure deployment - using direct node start');"
+node -e "const fs=require('fs'); let pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.type; pkg.dependencies=pkg.dependencies||{}; pkg.main='server.js'; pkg.scripts.start='NODE_ENV=production node server.js'; pkg.scripts['start:original']='cross-env NODE_ENV=production node server.js'; pkg.scripts['start:azure']='NODE_ENV=production node server.js'; delete pkg.dependencies['vite']; Object.keys(pkg.dependencies).forEach(dep=>{if(dep.startsWith('@types/'))delete pkg.dependencies[dep];}); fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)); console.log('✓ Fixed package.json for Azure deployment - using direct node start');"
 cd ..
 
 # Copy environment file

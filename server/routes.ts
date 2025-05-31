@@ -14,7 +14,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import cors from 'cors';
-import { BlobStorageService } from "./services/blob-storage.service";
+import { createStorageService, IStorageService } from "./services/storage.service";
 import { RequestHandler, ParamsDictionary } from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
 import { errorHandler } from './src/middleware/error';
@@ -219,59 +219,31 @@ async function initializeUsers(dbStorage: any) {
   }
 }
 
-// Initialize blob storage service only for production
-let blobStorage: BlobStorageService | null = null;
+// Initialize storage service with proper error handling
+let storageService: IStorageService | null = null;
 
-async function initializeBlobStorage(): Promise<void> {
+function initializeStorageService(): void {
   try {
-    if (process.env.NODE_ENV === 'production') {
-      console.log('Initializing blob storage service for production...');
-      blobStorage = new BlobStorageService();
-      // Give it a moment to initialize
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Blob storage service initialized for production');
-    } else {
-      console.log('Using local file storage for development mode');
-    }
+    console.log('Initializing storage service...');
+    storageService = createStorageService();
+    console.log('Storage service initialized successfully');
   } catch (error) {
-    console.error('Error initializing blob storage service:', error);
-    console.log('Falling back to local file storage');
-    blobStorage = null;
+    console.error('Error initializing storage service:', error);
+    console.log('Storage service initialization failed - operations will fail gracefully');
+    storageService = null;
   }
 }
 
-// Start blob storage initialization (don't await here to avoid blocking startup)
-initializeBlobStorage().catch(error => {
-  console.error('Blob storage initialization failed:', error);
-  blobStorage = null;
-});
+// Initialize storage service immediately (synchronous factory function)
+initializeStorageService();
 
 // Ensure uploads directory exists
 const uploadsDir = process.env.DOCUMENTS_ROOT_PATH || path.join(process.cwd(), "uploads");
 fs.mkdirSync(uploadsDir, { recursive: true });
 console.log(`Document uploads directory: ${uploadsDir}`);
 
-// Configure multer for appropriate storage based on environment
-const storage = process.env.NODE_ENV === 'production' 
-  ? multer.memoryStorage() // Use memory storage for production (for blob storage)
-  : multer.diskStorage({    // Use disk storage for development
-      destination: (req, file, cb) => {
-        // Create client-specific directory structure
-        const clientId = req.body.clientId;
-        if (!clientId) {
-          return cb(new Error('Client ID is required'), '');
-        }
-        
-        // We'll handle directory creation in the upload endpoint since we need client info
-        cb(null, uploadsDir);
-      },
-      filename: (req, file, cb) => {
-        // Use original filename to preserve user-friendly names
-        // Note: Client-specific directories will handle conflicts between different clients
-        // Same client uploading same filename will overwrite (which may be desired behavior)
-        cb(null, file.originalname);
-      }
-    });
+// Configure multer for memory storage (our storage service handles environment detection)
+const storage = multer.memoryStorage();
 
 const upload = multer({ 
   storage: storage,
@@ -1266,7 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * Uploads a document file and creates a document record in the database.
    * Associates the document with a client and optionally a segment.
-   * Handles file storage using either local filesystem or Azure Blob Storage.
+   * Handles file storage using unified storage service.
    * 
    * @route POST /api/documents
    * @param {string} req.body.clientId - ID of the client the document belongs to
@@ -1333,34 +1305,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Document upload debug - fullFilePath:', fullFilePath);
       console.log('Document upload debug - relativeFilePath:', relativeFilePath);
       console.log('Document upload debug - req.file.path:', req.file?.path);
-      console.log('Document upload debug - req.file.filename:', req.file?.filename);
-        let finalFilePath = relativeFilePath;
-        if (process.env.NODE_ENV !== 'production') {
-        // Create client directory
-        await fs.promises.mkdir(clientDir, { recursive: true });
-        console.log('Created client directory:', clientDir);
-        
-        if (req.file.path) {
-          // Move from multer temp location to client-specific directory with original filename
-          await fs.promises.rename(req.file.path, fullFilePath);
-          console.log('Moved file from', req.file.path, 'to', fullFilePath);
-          
-          // Verify file exists at final location
-          const fileExists = await fs.promises.access(fullFilePath).then(() => true).catch(() => false);
-          console.log('File exists at destination:', fileExists);
-          
-          if (!fileExists) {
-            throw new Error('File was not properly moved to destination');
-          }
-        } else {
-          throw new Error('No file path provided by multer');
-        }
-      } else if (blobStorage) {
-        // In production, upload to Azure Blob Storage
-        const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer);
-        await blobStorage.uploadFile(fileBuffer, relativeFilePath, req.file.mimetype);
-        console.log('Uploaded file to Azure Blob Storage:', relativeFilePath);
-      }// Create document record in database
+      console.log('Document upload debug - req.file.filename:', req.file?.filename);      let finalFilePath = relativeFilePath;
+      
+      // Always use memory storage and our storage service for file handling
+      if (!req.file.buffer) {
+        throw new Error('No file buffer provided by multer');
+      }
+      
+      if (!storageService) {
+        throw new Error('Storage service is not available');
+      }
+      
+      const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer);
+      await storageService.uploadFile(fileBuffer, relativeFilePath, req.file.mimetype);
+      console.log('Uploaded file using storage service:', relativeFilePath);// Create document record in database
       // Store the original filename for both display and file access
       const documentRecord = await dbStorage.createDocument({
         clientId: parseInt(clientId),
@@ -1506,8 +1464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @route GET /api/documents/view/:filePath
    * @param {string} req.params.filePath - File path of the document to view   * @param {string} [req.query.token] - JWT token for authentication (alternative to header)
    * @returns {File} Document file for viewing in browser
-   */
-  app.get("/api/documents/view/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
+   */  app.get("/api/documents/view/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
     try {
       const filePath = decodeURIComponent(req.params.filePath);
       console.log(`Document view requested for path: ${filePath}`);
@@ -1520,15 +1477,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Document not found in database" });
       }
 
-      // Different handling for production (blob storage) vs development (file system)
-      if (process.env.NODE_ENV === 'production' && blobStorage) {
+      // Use storage service for both production and development
+      if (storageService) {
         try {
-          // For production, use blob storage
+          // Use unified storage service
           if (!document.filePath) {
             return res.status(404).json({ message: "Document file path is missing" });
           }
           
-          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          const fileBuffer = await storageService.downloadFile(document.filePath);
           
           // Set content type based on file extension for inline viewing
           const ext = path.extname(document.filename).toLowerCase();
@@ -1545,8 +1502,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
           return res.end(fileBuffer);
         } catch (error) {
-          console.error("Error downloading from blob storage:", error);
-          return res.status(404).json({ message: "Document not found in blob storage" });
+          console.error("Error downloading from storage service:", error);
+          return res.status(404).json({ message: "Document not found in storage" });
         }
       } else {
         // For development, find the file on disk
@@ -1617,7 +1574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Document download endpoint
    * 
    * Retrieves and serves a document file for download based on its file path.
-   * Supports both blob storage (production) and file system (development) retrieval.
+   * Supports unified storage service for all environments.
    * Handles various path formats and attempts multiple lookup strategies to find files.
    * Sets appropriate content type and disposition headers for proper download handling.
    * Enhanced with comprehensive security middleware including rate limiting, input validation,
@@ -1630,8 +1587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @security Requires authentication and applies rate limiting, input validation, sanitization, SQL injection prevention
    */  // This is defined AFTER the client documents endpoint to avoid route conflicts
   app.get("/api/documents/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
-    try {
-      const filePath = decodeURIComponent(req.params.filePath);
+    try {      const filePath = decodeURIComponent(req.params.filePath);
       console.log(`Document download requested for path: ${filePath}`);
       
       // Check if path exists in database
@@ -1641,15 +1597,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Document not found in database with path: ${filePath}`);
         return res.status(404).json({ message: "Document not found in database" });
       }
-        // Different handling for production (blob storage) vs development (file system)
-      if (process.env.NODE_ENV === 'production' && blobStorage) {
+        // Use storage service for both production and development
+      if (storageService) {
         try {
-          // For production, use blob storage
+          // Use unified storage service
           if (!document.filePath) {
             return res.status(404).json({ message: "Document file path is missing" });
           }
           
-          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          const fileBuffer = await storageService.downloadFile(document.filePath);
           
           // Set content type based on file extension
           const ext = path.extname(document.filename).toLowerCase();
@@ -1667,8 +1623,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Send buffer directly without attempting to match ApiResponse
           return res.end(fileBuffer);
         } catch (error) {
-          console.error("Error downloading from blob storage:", error);
-          return res.status(404).json({ message: "Document not found in blob storage" });
+          console.error("Error downloading from storage service:", error);
+          return res.status(404).json({ message: "Document not found in storage" });
         }      } else {
         // For development, find the file on disk
         // Try different paths - with or without "uploads" prefix
@@ -1749,8 +1705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * @param {string} req.params.filePath - File path of the document to view
    * @param {string} [req.query.token] - JWT token for authentication (alternative to header)
    * @returns {File} Document file for viewing in browser
-   */
-  /*
+   */  /*
   app.get("/api/documents/view/:filePath(*)", apiRateLimit, sanitizeInput, preventSQLInjection, authMiddleware, createHandler(async (req, res) => {
     try {
       const filePath = req.params.filePath;
@@ -1764,15 +1719,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Document not found in database" });
       }
 
-      // Different handling for production (blob storage) vs development (file system)
-      if (process.env.NODE_ENV === 'production' && blobStorage) {
+      // Use storage service for both production and development
+      if (storageService) {
         try {
-          // For production, use blob storage
+          // Use unified storage service
           if (!document.filePath) {
             return res.status(404).json({ message: "Document file path is missing" });
           }
           
-          const fileBuffer = await blobStorage.downloadFile(document.filePath);
+          const fileBuffer = await storageService.downloadFile(document.filePath);
           
           // Set content type based on file extension for inline viewing
           const ext = path.extname(document.filename).toLowerCase();
@@ -1789,8 +1744,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.setHeader('Content-Disposition', `inline; filename="${document.filename}"`);
           return res.end(fileBuffer);
         } catch (error) {
-          console.error("Error downloading from blob storage:", error);
-          return res.status(404).json({ message: "Document not found in blob storage" });
+          console.error("Error downloading from storage service:", error);
+          return res.status(404).json({ message: "Document not found in storage" });
         }
       } else {
         // For development, find the file on disk

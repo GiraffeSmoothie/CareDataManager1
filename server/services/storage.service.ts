@@ -53,16 +53,17 @@ export class AzureBlobStorageService implements IStorageService {
     private containerClient: ContainerClient;
     private blobServiceClient: BlobServiceClient;
     private accountName: string;
-    private accountKey?: string;
-    private containerName: string;
+    private accountKey?: string;    private containerName: string;
     private usingManagedIdentity: boolean = false;
-
-    constructor() {
+    private fallbackToConnection: boolean = false;
+    private initializationFailed: boolean = false;constructor() {
         const storageAccountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
         const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
+        this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documentsroot';
+
         if (storageAccountName) {
-            // Use DefaultAzureCredential with managed identity
+            // Try DefaultAzureCredential with managed identity first
             console.log('Initializing Azure Blob Storage with DefaultAzureCredential (managed identity)');
             this.accountName = storageAccountName;
             this.usingManagedIdentity = true;
@@ -71,19 +72,29 @@ export class AzureBlobStorageService implements IStorageService {
                 `https://${storageAccountName}.blob.core.windows.net`,
                 credential
             );
+            this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
+            
+            // Try to initialize with managed identity, fallback to connection string if it fails            // Handle this async operation properly to prevent unhandled promise rejections
+            this.initializeContainerWithFallback(connectionString).catch(error => {
+                console.error('⚠️ Blob storage initialization failed completely:', error);
+                this.initializationFailed = true;
+                // Don't re-throw here to prevent unhandled promise rejection
+                // The service will fail gracefully when methods are called
+            });
         } else if (connectionString) {
-            // Fallback to connection string authentication
+            // Direct connection string authentication
             console.log('Initializing Azure Blob Storage with connection string authentication');
             this.accountName = this.extractAccountName(connectionString);
             this.accountKey = this.extractAccountKey(connectionString);
             this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
+            this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);            this.initializeContainer().catch(error => {
+                console.error('⚠️ Blob storage initialization failed:', error);
+                this.initializationFailed = true;
+                // Don't re-throw here to prevent unhandled promise rejection
+            });
         } else {
             throw new Error('Either AZURE_STORAGE_ACCOUNT_NAME or AZURE_STORAGE_CONNECTION_STRING must be provided');
         }
-
-        this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'documents';
-        this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
-        this.initializeContainer();
     }
 
     private extractAccountName(connectionString: string): string {
@@ -112,7 +123,54 @@ export class AzureBlobStorageService implements IStorageService {
         }
     }
 
-    async uploadFile(fileBuffer: Buffer, blobName: string, contentType: string): Promise<string> {
+    private async initializeContainerWithFallback(connectionString?: string): Promise<void> {
+        try {
+            console.log(`Attempting to initialize container ${this.containerName} with managed identity...`);
+            await this.containerClient.createIfNotExists();
+            console.log(`✅ Container ${this.containerName} initialized successfully with managed identity`);
+        } catch (error) {
+            console.error('Error initializing blob container:', error);
+            console.log(`DefaultAzureCredential failed, falling back to connection string: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            
+            if (connectionString) {
+                try {
+                    console.log('Using connection string authentication for Azure Blob Storage');
+                    this.accountName = this.extractAccountName(connectionString);
+                    this.accountKey = this.extractAccountKey(connectionString);
+                    this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
+                    this.containerClient = this.blobServiceClient.getContainerClient(this.containerName);
+                    this.usingManagedIdentity = false;
+                    this.fallbackToConnection = true;
+                    
+                    await this.containerClient.createIfNotExists();
+                    console.log(`✅ Container ${this.containerName} initialized successfully with connection string`);
+                } catch (connectionError) {
+                    console.error('Error initializing blob storage service with connection string:', connectionError);                    // For unhandled promise rejection, we need to handle this gracefully
+                    const rejectionError = new Error(
+                        `Failed to initialize Azure Blob Storage. Both managed identity and connection string authentication failed. ` +
+                        `Managed Identity Error: ${error instanceof Error ? error.message : 'Unknown'}. ` +
+                        `Connection String Error: ${connectionError instanceof Error ? connectionError.message : 'Unknown'}`
+                    );
+                    
+                    // Log as unhandled promise rejection to match the error log format
+                    console.log('🚨 UNHANDLED PROMISE REJECTION:', rejectionError.message, rejectionError);
+                    this.initializationFailed = true;
+                    throw rejectionError;
+                }
+            } else {                const noFallbackError = new Error(
+                    `Failed to initialize Azure Blob Storage with managed identity and no connection string fallback available. ` +
+                    `Error: ${error instanceof Error ? error.message : 'Unknown'}`
+                );
+                console.log('🚨 UNHANDLED PROMISE REJECTION:', noFallbackError.message, noFallbackError);
+                this.initializationFailed = true;
+                throw noFallbackError;
+            }
+        }
+    }    async uploadFile(fileBuffer: Buffer, blobName: string, contentType: string): Promise<string> {
+        if (this.initializationFailed) {
+            throw new Error('Azure Blob Storage service is not available due to initialization failure');
+        }
+        
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
             await blockBlobClient.upload(fileBuffer, fileBuffer.length, {
@@ -128,6 +186,10 @@ export class AzureBlobStorageService implements IStorageService {
     }
 
     async downloadFile(blobName: string): Promise<Buffer> {
+        if (this.initializationFailed) {
+            throw new Error('Azure Blob Storage service is not available due to initialization failure');
+        }
+        
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
             const downloadResponse = await blockBlobClient.download(0);
@@ -143,6 +205,10 @@ export class AzureBlobStorageService implements IStorageService {
     }
 
     async deleteFile(blobName: string): Promise<void> {
+        if (this.initializationFailed) {
+            throw new Error('Azure Blob Storage service is not available due to initialization failure');
+        }
+        
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
             await blockBlobClient.delete();
@@ -153,6 +219,11 @@ export class AzureBlobStorageService implements IStorageService {
     }
 
     async fileExists(blobName: string): Promise<boolean> {
+        if (this.initializationFailed) {
+            console.warn('Azure Blob Storage service is not available due to initialization failure - returning false for fileExists');
+            return false;
+        }
+        
         try {
             const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
             return await blockBlobClient.exists();
@@ -160,7 +231,9 @@ export class AzureBlobStorageService implements IStorageService {
             console.error('Error checking file existence in blob storage:', error);
             throw error;
         }
-    }    private generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
+    }
+
+    private generateSasUrl(blobName: string, expiryMinutes: number = 60): string {
         if (this.usingManagedIdentity || !this.accountKey) {
             // When using managed identity, we can't generate SAS tokens with account keys
             // Return the direct blob URL instead
